@@ -23,3 +23,7 @@ test('text: wrap keeps a long first word instead of dropping it', () => {
   expect(out[0]).toContain('/srv'); expect(out.every(l => textWidth(l, 12) <= 88)).toBe(true)
   expect(wrap('/srv/app/code/project/VeryLongFileName.tsx', 88, 12, 2)[0]).toContain('/srv')
 })
+test('text: wrap carries the words after a long first word to line 2', () => {
+  const out = wrap('/home/dev/code/project/src/VeryLongFileName.tsx is missing', 88, 12, 2)
+  expect(out.length).toBe(2); expect(out[1]).toContain('is'); expect(out.every(l => textWidth(l, 12) <= 88)).toBe(true)
+})

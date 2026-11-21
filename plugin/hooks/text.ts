@@ -24,7 +24,7 @@ export const wrap = (s: string, widthPx: number, sizePx: number, lines: number, 
   for (let i = 0; i < words.length; i++) {
     const next = cur ? `${cur} ${words[i]}` : words[i]
     if (textWidth(next, sizePx, weight) <= widthPx) { cur = next; continue }
-    if (cur && out.length < lines - 1) { out.push(cur); cur = fit(words[i], widthPx, sizePx, weight); continue }
+    if (out.length < lines - 1) { if (cur) out.push(cur); cur = fit(words[i], widthPx, sizePx, weight); continue }
     return [...out, fit(`${cur} ${words.slice(i).join(' ')}`.trim() + '…', widthPx, sizePx, weight)]
   }
   if (cur) out.push(cur)
