@@ -71,6 +71,10 @@ const savvy = {
       await $.state.set(ref, (e as unknown as { runs: never }).runs)
       return { result: {} } as never
     })
+    on('tool.call', { tool: 'savvy-flow' }, async ($, e) => {
+      await $.state.set({ plugin: 'savvy-progress', key: 'flow' }, (e as unknown as { flow: never }).flow)
+      return { result: {} } as never
+    })
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
       if ((await $.state.get({ plugin: 'clawpit', key: 'takeover' })).value === true) return next(e)
       return $.ui.resolve(e).Button({ key: 'savvy-agents', label: '1 agent', onPress: () => {} })
@@ -324,6 +328,25 @@ test('wiring: the needle sweeps on the draw after the context moves, and a redra
   expect(await needle()).toContain('animation:')
   await w.clock.advance(1_000)
   expect(await needle()).not.toContain('animation:')
+  await ui.unmount()
+})
+
+test('wiring: the plan bar grows when the plan first shows, not again when a task changes later', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  const run = (id: string, description: string, o: Record<string, unknown> = {}) =>
+    ({ id, agentId: id, type: 'implementer', description, model: 'claude-opus-5-5', status: 'running', startedAt: T0, contextTokens: 0, contextMax: 1, costUsd: 0, stepDone: 1, stepTotal: 4, ...o })
+  await $.tool.call({ tool: 'savvy-set', runs: [run('w1', 'fix the cache'), run('w2', 'write the docs')] } as never)
+  await $.tool.call({ tool: 'savvy-flow', flow: { title: 'Cache', total: 2, done: 0, phase: 'delegate', isFinished: false, tasks: [{ title: 'fix the cache' }, { title: 'write the docs' }] } } as never)
+  const ui = await band($)
+  // A still Svg carries no key: the plan bar is the image whose alt lists the tasks.
+  const bar = async () => (await all(ui)).map(imageOf).find(p => p?.alt?.startsWith('tasks: '))!.source
+  const grows = async () => /class="[^"]* grow"/.test(await bar())
+  expect(await grows()).toBe(true)
+  await w.clock.advance(1_000)
+  await $.tool.call({ tool: 'savvy-set', runs: [run('w1', 'fix the cache', { stepDone: 3 }), run('w2', 'write the docs')] } as never)
+  expect(await bar()).toContain('fix the cache in progress')
+  expect(await grows()).toBe(false)
   await ui.unmount()
 })
 

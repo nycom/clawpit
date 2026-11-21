@@ -16,6 +16,7 @@ import { paceOf } from './track/pace'
 import { contextOf, pushTurn, type CtxInput } from './track/context'
 import { codeOf } from './track/code'
 import { clip, oneLine } from './text'
+import { MOTION } from './tokens'
 
 // Wiring only: the atoms, the observers that feed the trackers, the render hooks, the Client presses, and `view`.
 
@@ -45,6 +46,7 @@ let ctx: CtxInput = {}
 let ctxHistory: number[] = []
 let limits: SessionRateLimit[] = []
 let settles: Record<string, Settle> = {}
+let planSince: number | null = null            // when the plan bar first showed
 let errors = 0
 let ticker: Timer | null = null
 let period = 0
@@ -61,7 +63,7 @@ const BENCH_MAX = 48
 
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
-  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}
+  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; bench = null
 }
 
@@ -375,9 +377,11 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
   if (s.context) settles.context = settle(settles.context, s.context.pct, now)
   for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct, now) }
+  planSince = crew.plan ? planSince ?? now : null
   const loops = pickLoops(crew, u, busy, armed, animations)
   return {
-    panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations },
+    panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations,
+      planGrow: animations && planSince !== null && now - planSince < MOTION.fillMs },
     pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations },
   }
 }

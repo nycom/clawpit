@@ -13,7 +13,8 @@ import { image, type El } from '../draw'
 
 export { image, type El }
 
-export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle>; still?: boolean }
+export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle>; still?: boolean
+  planGrow?: boolean }  // the plan bar's fills grow: only while the plan is new
 
 // ---------- text ----------
 // shortcut: the kit's width table runs up to ~10% short of SF Pro, so drawn widths add 10%; drop SLACK once the table is measured.
@@ -460,7 +461,7 @@ export const panelTree = (v: PanelView): El => {
   const out: El[] = [{ type: 'Box', props: { key: 'cols', flexDirection: 'row' }, children: [...columns, spacer, toggle(v)] }]
   if (v.ui.size === 'full') {
     const W = v.bodyColumns * CELL_PX
-    if (v.crew.plan) out.push(planLine(v.crew.plan, v.crew, W), planBar(v.crew.plan, W, !v.still))
+    if (v.crew.plan) out.push(planLine(v.crew.plan, v.crew, W), planBar(v.crew.plan, W, !!v.planGrow))
     const chips = chipRows(v, W)
     if (chips) out.push(chips)
   }
