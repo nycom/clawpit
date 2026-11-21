@@ -30,8 +30,9 @@ export const dial = (pct: number, tone: 'accent' | 'warn' | 'er', opts: { ghost?
   const p = Math.min(100, Math.max(0, Number.isFinite(pct) ? pct : 0)), base = opts.base ?? 0
   const ghost = opts.ghost == null ? '' : `<g transform="rotate(${deg(opts.ghost)} ${CX} ${CY})"><line x1="${CX}" y1="${CY}" x2="${CX - R + 3}" y2="${CY}" class="s-muted" stroke-width="1.6" stroke-dasharray="2 1.6"/></g>`
   const s = opts.settle
-  const anim = s ? `;animation:nd${deg(s.from)}-${deg(s.to)} ${MOTION.settleMs}ms ${MOTION.curve}` : ''
-  const kf = s ? `<style>@keyframes nd${deg(s.from)}-${deg(s.to)}{from{transform:rotate(${deg(s.from)}deg)}to{transform:rotate(${deg(s.to)}deg)}}</style>` : ''
+  const kfName = s ? `nd${deg(s.from)}-${deg(s.to)}`.replace(/\./g, 'p') : '' // a dot is not valid in a CSS identifier
+  const anim = s ? `;animation:${kfName} ${MOTION.settleMs}ms ${MOTION.curve}` : ''
+  const kf = s ? `<style>@keyframes ${kfName}{from{transform:rotate(${deg(s.from)}deg)}to{transform:rotate(${deg(s.to)}deg)}}</style>` : ''
   const needle = `<g style="transform-origin:${CX}px ${CY}px;transform:rotate(${deg(p)}deg)${anim}"><line x1="${CX}" y1="${CY}" x2="${CX - R + 4}" y2="${CY}" class="s-fg" stroke-width="1.8" stroke-linecap="round"/></g>`
   const body = `${kf}${arc(0.5, 99.5, 's-track')}${base ? arc(0.5, base, 's-muted', 0.85) : ''}${p > (base || 1) ? arc(base || 0.5, p, `s-${tone}`) : ''}${ghost}${needle}<circle cx="${CX}" cy="${CY}" r="2.4" class="fg"/>`
   return opts.small ? `<g transform="scale(.75)">${body}</g>` : body
@@ -40,7 +41,7 @@ export const dial = (pct: number, tone: 'accent' | 'warn' | 'er', opts: { ghost?
 export type Seg = { state: 'done' | 'live' | 'need' | 'failed' | 'todo'; role?: Role; fill: number }
 // Full tier 8px / radius 3, compact 6px / radius 2, gap 2. `grow` adds the 600 ms fill one-shot.
 export const segBar = (segs: Seg[], widthPx: number, tier: 'full' | 'compact', grow = false): string => {
-  const h = tier === 'full' ? 8 : 6, r = tier === 'full' ? 3 : 2, gap = 2, w = (widthPx - gap * (segs.length - 1)) / (segs.length || 1)
+  const h = tier === 'full' ? 8 : 6, r = tier === 'full' ? 3 : 2, gap = 2, w = Math.max(1, (widthPx - gap * (segs.length - 1)) / (segs.length || 1))
   return segs.map((s, i) => {
     const x = n(i * (w + gap)), box = (c: string, bw: number, extra = '') => `<rect x="${x}" y="0" width="${n(bw)}" height="${h}" rx="${r}" class="${c}${extra}"/>`
     if (s.state === 'done') return box('ok', w)

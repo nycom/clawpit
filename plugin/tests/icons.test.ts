@@ -13,3 +13,10 @@ test('icons: step blocks fill the done ones', () => expect((stepBlocks(2, 4, 'te
 test('icons: the toggle dot appears only when asked', () => {
   expect(toggleIcon('gauges', true)).toContain('class="er"'); expect(toggleIcon('gauges', false)).not.toContain('class="er"')
 })
+test('icons: a fractional settle gets a valid keyframe name', () => {
+  const svg = dial(63, 'accent', { settle: { from: 42, to: 63 } })
+  expect(svg).not.toMatch(/nd\d+\./)
+  expect(svg).toContain('@keyframes nd75p6-113p4')
+})
+test('icons: a crowded bar keeps every segment at least 1px wide', () =>
+  expect(segBar(Array.from({ length: 40 }, () => ({ state: 'done' as const, fill: 1 })), 60, 'compact')).not.toContain('width="-'))

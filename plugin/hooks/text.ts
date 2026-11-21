@@ -24,7 +24,7 @@ export const wrap = (s: string, widthPx: number, sizePx: number, lines: number, 
   for (let i = 0; i < words.length; i++) {
     const next = cur ? `${cur} ${words[i]}` : words[i]
     if (textWidth(next, sizePx, weight) <= widthPx) { cur = next; continue }
-    if (cur && out.length < lines - 1) { out.push(cur); cur = words[i]; continue }
+    if (cur && out.length < lines - 1) { out.push(cur); cur = fit(words[i], widthPx, sizePx, weight); continue }
     return [...out, fit(`${cur} ${words.slice(i + (cur ? 0 : 1)).join(' ')}`.trim() + '…', widthPx, sizePx, weight)]
   }
   if (cur) out.push(cur)
@@ -34,9 +34,9 @@ const pad = (n: number) => String(n).padStart(2, '0')
 export const fmtClock = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${pad(t % 60)}` }
 export const fmtAge = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return t < 60 ? `${t}s` : `${Math.floor(t / 60)}m` }
 export const fmtLeft = (minutes: number): string => (minutes < 1 ? '<1m left' : `~${Math.round(minutes)}m left`)
-export const fmtCost = (usd: number): string => (usd >= 100 ? `$${Math.round(usd)}` : `≈$${usd.toFixed(2)}`)
+export const fmtCost = (usd: number): string => (Math.round(usd * 100) >= 10000 ? `$${Math.round(usd)}` : `≈$${usd.toFixed(2)}`)
 export const fmtTokens = (n: number): string =>
-  n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)}M` : n >= 1e3 ? `${+(n / 1e3).toFixed(n >= 1e5 ? 0 : 1)}k` : String(Math.round(n))
+  n >= 1e6 || Math.round(n / 1e3) >= 1000 ? `${+(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)}M` : n >= 1e3 ? `${+(n / 1e3).toFixed(n >= 1e5 ? 0 : 1)}k` : String(Math.round(n))
 export const fmtDuration = (ms: number): string => {
   const m = Math.floor(ms / 60000), h = Math.floor(m / 60)
   return h ? `${h}h ${m % 60}m` : `${m}m`
