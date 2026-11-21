@@ -19,11 +19,14 @@ export const roleOf = (type: string, description: string): Role => {
 
 const PROP_OF: Partial<Record<ActivityKind, Prop>> = { search: 'search', browse: 'search', read: 'read', edit: 'write', think: 'think' }
 
+// savvy keeps failedAttempts until a step moves done on, so an ended run that still has some ended on a failed step.
+const endedFailed = (r: SavvyRun) => r.status === 'failed' || (r.status === 'done' && (r.failedAttempts ?? 0) > 0)
+
 const stateOf = (r: SavvyRun): CrewState =>
-  r.blocked && r.status === 'running' ? 'need' : r.status === 'failed' && r.heldDone ? 'failed' : r.status === 'running' ? 'running' : 'ended'
+  r.blocked && r.status === 'running' ? 'need' : endedFailed(r) && r.heldDone ? 'failed' : r.status === 'running' ? 'running' : 'ended'
 
 const propOf = (state: CrewState, r: SavvyRun, activity: Activity | null): Prop =>
-  state === 'need' ? 'wait' : r.status === 'failed' ? 'fail' : r.status === 'done' ? 'done' : (activity && PROP_OF[activity.kind]) ?? 'none'
+  state === 'need' ? 'wait' : endedFailed(r) ? 'fail' : r.status === 'done' ? 'done' : (activity && PROP_OF[activity.kind]) ?? 'none'
 
 const agentOf = (i: CrewInput, r: SavvyRun): CrewAgent => {
   const state = stateOf(r)
@@ -98,19 +101,20 @@ const titleOf = (titles: string[], description: string): string | undefined => {
   return titles.filter(t => d === t || d.startsWith(`${t} `)).sort((a, b) => b.length - a.length)[0]
 }
 
-const taskOf = (name: string, agents: CrewAgent[], titles: string[]): PlanTask => {
+// The session's first `accepted` tasks are done; a run only marks its own task live, waiting or failed. A finished run the
+// session has not accepted yet reads as live with a full bar: there is no awaiting-review state to tick.
+const taskOf = (name: string, accepted: boolean, agents: CrewAgent[], titles: string[]): PlanTask => {
+  if (accepted) return { name, state: 'done', fill: 1 }
   const a = agents.filter(x => titleOf(titles, x.title) === norm(name)).sort((x, y) => y.startedAt - x.startedAt)[0]
   if (!a) return { name, state: 'todo', fill: 0 }
-  const state = a.state === 'need' ? 'need' : a.state === 'running' ? 'live' : a.prop === 'fail' ? 'failed' : 'done'
+  const state = a.state === 'need' ? 'need' : a.prop === 'fail' ? 'failed' : 'live'
   const progress = Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0)
-  return { name, state, role: a.role, fill: state === 'live' || state === 'need' ? progress : 1 }
+  return { name, state, role: a.role, fill: a.state === 'running' || a.state === 'need' ? progress : 1 }
 }
 
 export const planOf = (flow: SavvyFlow | null, agents: CrewAgent[]): Plan | null => {
   if (!flow || flow.isFinished) return null
   const titles = flow.tasks.map(t => norm(t.title))
-  const tasks = flow.tasks.map(t => taskOf(t.title, agents, titles))
-  let short = flow.done - tasks.filter(t => t.state === 'done').length
-  for (const t of tasks) if (short > 0 && t.state === 'todo') { t.state = 'done'; t.fill = 1; short-- }
-  return { title: flow.title, phase: flow.phase === 'design' ? 'plan' : flow.phase, done: tasks.filter(t => t.state === 'done').length, total: flow.total, tasks }
+  const tasks = flow.tasks.map((t, i) => taskOf(t.title, i < flow.done, agents, titles))
+  return { title: flow.title, phase: flow.phase === 'design' ? 'plan' : flow.phase, done: flow.done, total: flow.total, tasks }
 }

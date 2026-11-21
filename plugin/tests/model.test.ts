@@ -28,6 +28,15 @@ test('crewOf: a failed run is failed while held, ended after', () => {
   expect(crewOf(input('idle', { runs: [{ ...failedRun, heldDone: false }] })).ended[0].prop).toBe('fail')
 })
 
+test('crewOf: a run whose last step failed ends as failed, even when it ended on its own', () => {
+  const lastFailed = { ...failedRun, status: 'done', failedAttempts: 3, failNote: 'Could not reach Postgres', failLine: 'ECONNREFUSED' } as SavvyRun
+  expect(crewOf(input('idle', { runs: [lastFailed] })).agents[0]).toMatchObject({ state: 'failed', prop: 'fail', reason: 'Could not reach Postgres', errorLine: 'ECONNREFUSED' })
+  expect(crewOf(input('idle', { runs: [{ ...lastFailed, heldDone: false }] })).ended[0]).toMatchObject({ prop: 'fail', reason: 'Could not reach Postgres' })
+  // savvy clears failedAttempts and the reason on a step that moves on
+  const recovered = { ...failedRun, status: 'done' } as SavvyRun
+  expect(crewOf(input('idle', { runs: [recovered] })).ended[0]).toMatchObject({ state: 'ended', prop: 'done' })
+})
+
 test('crewOf: a helper whose parent ended is listed flat', () => {
   const c = crewOf(input('hydra', { runs: patch(STATES.hydra.runs, 'rev', { status: 'done', endedAt: NOW - 5_000 }) }))
   expect(c.agents.map(a => a.id)).toEqual(expect.arrayContaining(['k1', 'k2']))
@@ -76,6 +85,18 @@ test('planOf: task states from the newest matching run; live fill never under 8 
   const rerun = { ...failedRun, id: 'old', description: 'merge', status: 'done', startedAt: NOW - 900_000, heldDone: false } as SavvyRun
   const newer = { ...rerun, id: 'new', status: 'running', startedAt: NOW - 1_000 } as SavvyRun
   expect(crewOf(input('needsYou', { runs: [...STATES.needsYou.runs, rerun, newer] })).plan!.tasks[6].state).toBe('live')
+})
+
+test('planOf: the session accepted count ticks the first tasks; a finished run never ticks its own', () => {
+  const none = crewOf(input('hydra', { runs: [] })).plan!
+  expect(none.tasks.map(t => t.state)).toEqual(['done', 'done', 'todo', 'todo', 'todo', 'todo', 'todo']); expect(none.done).toBe(2)
+  const finished = { ...failedRun, id: 'f', description: 'savvy-progress implement', type: 'implementer', status: 'done', heldDone: false } as SavvyRun
+  const p = crewOf(input('hydra', { runs: [finished] })).plan!
+  expect(p.done).toBe(2); expect(p.tasks.map(t => t.state)).toEqual(['done', 'done', 'live', 'todo', 'todo', 'todo', 'todo'])
+  expect(p.tasks[2]).toEqual({ name: 'savvy-progress implement', state: 'live', role: 'implement', fill: 1 })
+  // a run on an accepted task does not untick it
+  const failedOnApi = { ...finished, id: 'a', description: 'api', status: 'failed' } as SavvyRun
+  expect(crewOf(input('hydra', { runs: [failedOnApi] })).plan!.tasks[1].state).toBe('done')
 })
 
 test('planOf: design phase reads as plan; a finished flow is null', () => {
