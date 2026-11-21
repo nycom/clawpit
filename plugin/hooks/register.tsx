@@ -116,6 +116,8 @@ const loadStore = async ($: EngineInterface) => {
   }
 }
 
+// savvy-progress stands its band down on the desktop surface while this is true and keeps drawing on every other surface.
+// Its panel auto-open stands down session-wide (known limit): a terminal on the same session gets no auto-open either.
 // Written only when not yet true, so the repaint it causes schedules nothing more: no render loop.
 const takeOver = async ($: EngineInterface) => {
   try { if ((await read($, takeover)) !== true) await update($, takeover, () => true) } catch { errors += 1 }
@@ -301,7 +303,7 @@ export const register: Register = (on, options) => {
   })
 
   // clawpit draws its own row only, never what `next(e)` returns; on desktop savvy's band stands down (takeover).
-  // shortcut: vscode and mobile pass through like the terminal (savvy still draws there, takeover is desktop-only).
+  // shortcut: vscode and mobile pass through like the terminal, and savvy draws its band there; draw clawpit there too if asked.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     void benchUp($)
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
