@@ -1,4 +1,4 @@
-# The "≤ 3 loops" animation limit: root cause (Fable research, 2026-11-21)
+# The "≤ 3 loops" animation limit: root cause (research, 2026-11-21)
 
 **Verdict: an unmeasured guess.** The app enforces no animation cap. "Nothing moves when idle" is well-founded; the number 3 is not.
 

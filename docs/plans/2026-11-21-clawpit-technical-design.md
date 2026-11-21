@@ -589,7 +589,7 @@ Why the atom: it cannot drift. With clawpit absent or failing to load the value 
 +  if (await read($, { plugin: 'clawpit', key: 'takeover' } as const)) return next(e)
 ```
 
-The matching brief line, added to every worker brief in the build's Hydra run and proposed for Hydra's own briefs later: *"If an attempt fails, report it with the step tool: `failed: true`, `reason` (one sentence), `error` (the exact error line)."*
+The matching brief line for any worker that reports progress: *"If an attempt fails, report it with the step tool: `failed: true`, `reason` (one sentence), `error` (the exact error line)."*
 
 Without these fields the row and chip can only say "failed after m:ss" and "N failed tries"; with them they show the reason, and the drawer shows the error line.
 

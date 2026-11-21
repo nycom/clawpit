@@ -1,6 +1,6 @@
 # clawpit Implementation Plan
 
-> **For whoever executes this:** work task by task, in order. Tasks 5 to 13 run as parallel workstreams (see "Hydra run"); every other task runs in the build session with the maintainer present. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For whoever executes this:** work task by task, in order. Tasks 5 to 13 run as parallel workstreams; every other task runs in the build session with the maintainer present. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build clawpit, a desktop mod that draws an instrument panel above the prompt and an Agents pane of pixel crabs, as a view on savvy-progress's crew data.
 
@@ -251,7 +251,7 @@ This commit is the base every workstream branches from. After it, `plugin/types/
 
 ---
 
-## Part B: pure modules, as Hydra workstreams
+## Part B: pure modules, as parallel workstreams
 
 Each task below is one workstream. Its brief is the task itself plus the design sections it names. Each visual test follows the same three moves: write the test that creates the baseline, look at the screenshot against the mockup, then commit the baseline with the code.
 
@@ -936,78 +936,6 @@ git commit -m "pane: draw the roster, the drawer, the helpers and the crew bar"
 
 ---
 
-## Hydra run
-
-**Version:** Hydra 0.3.9 (the `feat/0.3.9` line of the Hydra checkout). `decisionLog` exists only from 0.3.9. On the installed 0.3.8, drop `decisionLog` and append the text of `docs/decisions/LOCKED.md` to every brief; every other option below exists in both.
-
-**Before the run** (build session):
-1. The plan and the design are approved and merged to `main`. Cut `feat/build` from `main` in the clawpit checkout, then do Tasks 1 to 4 on it in session.
-2. In the claude-kit checkout cut the local branch `clawpit/step-fields` from `main`.
-3. Set up the `hydra-local` remote in both checkouts as Hydra's local-only mode describes, and push the base and feature branches into it.
-4. Workstream models are explicit: `sonnet` for bounded modules, `opus` where the rules interlock. Reviews run one tier up, except that `fable` reviews only the two `opus` workstreams that draw, named here on purpose: `track-b` and `crew` are reviewed by `opus`, and so is the whole-branch pass. Validators stay on `opus`.
-
-```
-Workflow({
-  scriptPath: "<run dir>/workflow.js",
-  args: {
-    skillDir: "<hydra checkout>/skills/run",
-    cycles: null,                      // converge: no critical or major finding left
-    maxCycles: 4,
-    tokenBudget: 4000000,
-    localOnly: true,                   // nothing reaches a remote; pushing stays the maintainer's
-    wbReviewModel: "opus",             // fable reviews only the two draw workstreams
-    decisionLog: "<clawpit checkout>/docs/decisions/LOCKED.md",
-    docsRepos: [],                     // docs are Task 21, in session
-    workstreams: [
-      { id: "kit",          repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--kit",          model: "sonnet",
-        files: ["plugin/hooks/tokens.ts","plugin/hooks/text.ts","plugin/hooks/icons.ts","plugin/hooks/crab.ts","plugin/tests/tokens.test.ts","plugin/tests/text.test.ts","plugin/tests/icons.test.ts","plugin/tests/crab.test.ts","tests/visual/kit.spec.ts","tests/visual/kit.spec.ts-snapshots/"],
-        brief: BRIEF(5), gate: G },
-      { id: "track-a",      repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--track-a",      model: "sonnet",
-        files: ["plugin/hooks/track/activity.ts","plugin/hooks/track/steplog.ts","plugin/hooks/track/tests.ts","plugin/tests/activity.test.ts","plugin/tests/steplog.test.ts","plugin/tests/tests.test.ts"],
-        brief: BRIEF(6), gate: G },
-      { id: "track-b",      repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--track-b",      model: "opus", reviewModel: "opus",
-        files: ["plugin/hooks/track/eta.ts","plugin/hooks/track/turn.ts","plugin/hooks/track/pace.ts","plugin/hooks/track/context.ts","plugin/hooks/track/code.ts","plugin/tests/eta.test.ts","plugin/tests/turn.test.ts","plugin/tests/pace.test.ts","plugin/tests/context.test.ts","plugin/tests/code.test.ts"],
-        brief: BRIEF(7), gate: G },
-      { id: "loops",        repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--loops",        model: "sonnet",
-        files: ["plugin/hooks/loops.ts","plugin/tests/loops.test.ts"],
-        brief: BRIEF(8), gate: G },
-      { id: "panel-logic",  repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--panel-logic",  model: "sonnet",
-        files: ["plugin/hooks/panel/columns.ts","plugin/hooks/panel/fold.ts","plugin/tests/columns.test.ts","plugin/tests/fold.test.ts"],
-        brief: BRIEF(9), gate: G },
-      { id: "crew",         repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--crew",         model: "opus", reviewModel: "opus",
-        files: ["plugin/hooks/model.ts","plugin/hooks/pane/layout.ts","plugin/tests/model.test.ts","plugin/tests/layout.test.ts"],
-        brief: BRIEF(10), gate: G },
-      { id: "panel-draw",   repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--panel-draw",   model: "opus", reviewModel: "fable",
-        after: ["kit","loops","panel-logic","crew"],
-        files: ["plugin/hooks/panel/draw.ts","plugin/tests/panel-draw.test.ts","tests/visual/panel.spec.ts","plugin/tests/build.ts","tests/visual/panel.spec.ts-snapshots/"],
-        humanCheck: "Run `npx playwright show-report` (or open tests/visual/panel.spec.ts-snapshots/). For hydra, needsYou, failed, both, context90 and the two folded sizes, dark and light, compare with design/mockups-all.html on the four parity points of Task 12 Step 6: layout order, tokens, wording, what shows in each size.",
-        brief: BRIEF(12), gate: G },
-      { id: "pane-draw",    repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--pane-draw",    model: "opus", reviewModel: "fable",
-        after: ["kit","loops","crew"],
-        files: ["plugin/hooks/pane/draw.ts","plugin/tests/pane-draw.test.ts","tests/visual/pane.spec.ts","plugin/tests/build-pane.ts","tests/visual/pane.spec.ts-snapshots/"],
-        humanCheck: "Open tests/visual/pane.spec.ts-snapshots/. For needsYou, failed, both, drawerOpen, helpers and emptyPane, dark and light, compare with design/mockups-all.html on the four parity points of Task 13 Step 6.",
-        brief: BRIEF(13), gate: G },
-      { id: "savvy-step",   repo: "<claude-kit checkout>", featureBranch: "clawpit/step-fields", branch: "clawpit/step-fields--savvy-step", model: "sonnet",
-        files: ["plugins/savvy-progress/hooks/register.tsx","plugins/savvy-progress/types/index.d.ts","plugins/savvy-progress/tests/clawpit.test.ts"],
-        brief: BRIEF(11), gate: "claude plugin validate plugins/savvy-progress && claude plugin test plugins/savvy-progress" }
-    ],
-    repos: [
-      { repo: "<clawpit checkout>", hot: ["**/README*", "docs/**", "design/**", "AGENTS.md", "**/package.json", "**/package-lock.json", "playwright.config.ts", "tests/visual/harness.ts", "tests/visual/harness.spec.ts", "plugin/hooks/register.tsx", "plugin/hooks/hooks.json", "plugin/types/**", "plugin/tests/fixtures/**"] },
-      { repo: "<claude-kit checkout>", copyExcluded: ["plugins/savvy-progress/tests/zz.preview.test.ts"] }
-    ]
-  }
-})
-```
-
-- `G` is the gate from Global Constraints, as one string.
-- `BRIEF(n)` is: *"Implement Task n of `docs/plans/2026-11-21-clawpit-build-plan.md` exactly: its Files, Interfaces and steps, test first. Read the design sections the task names in `docs/plans/2026-11-21-clawpit-technical-design.md`, the Global Constraints of the plan, and `AGENTS.md`, which binds you. Touch only your files. If you need a change in `plugin/types/` or `plugin/tests/fixtures/`, return it as a shared edit. Commit subjects are `area: what changed`, with no trailers. If an attempt fails, report it with the step tool: `failed: true`, `reason` (one sentence), `error` (the exact error line)."* For Task 11 the plan and design are quoted into the brief, because they are not in the claude-kit tree.
-- **Dependencies**: `after` is used only between workstreams of one repo. Six workstreams start at once; the two that draw start when theirs have merged.
-- **Human checks**: two pauses, after `panel-draw` and after `pane-draw` merge. Resume with `resumeFromRunId` and `humanChecks` as Hydra prints them. A problem reported there goes back to its author.
-- **Converge** means no critical or major finding is open on any workstream and on the whole-branch pass; with `decisionLog` set, the drift audit runs after the repos are final and each unlogged change comes back as a question.
-- **After the run**: fetch the branches back from `hydra-local` as local branches, check each feature branch's head equals the run's `finalSha`, run `G` once in the clawpit checkout, and leave both `hydra-local` remotes until the maintainer is done.
-
----
-
 ## Part C: hook-ins, in session, one at a time
 
 ### The app check procedure (used by Tasks 15 to 19)
@@ -1295,7 +1223,7 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 | M4 | Background shells, monitors and crons have no place in the locked pane, and savvy's own pane no longer auto-opens | (a) leave them in savvy's `/agents-info` pane for now. (b) design a Background section for the Agents pane first | (a) for this build; (b) as a follow-up design |
 | M5 | ponytail's reuse and callers-open tiles have no column in the locked panel | (a) drop them. (b) add columns, which changes a locked list | (a) |
 | M6 | Session, tokens and agent-time figures | (a) this session only, from the plugin's load. (b) a running lifetime total in `$.store` | (a). It matches the engine's session cost beside it |
-| M7 | The plan's "Hydra run" section and the model names in it describe how the build is run; `AGENTS.md` says the repo carries no tooling trace | (a) keep the section while building and remove it from the plan before the PR. (b) keep it: Hydra is a product the mod draws, and the section is the run's record. (c) move it to a local file now | (a) |
+| M7 | The plan carried notes on how the build was run, which the repo rules keep out | (a) keep them while building, strip them before the PR | (a) |
 | M8 | Installing savvy's local change: the installed copy is refreshed from the local branch, so a later update of savvy from its public source would undo it | (a) accept and re-apply after each update. (b) pin savvy to the local checkout | (b) |
 
 ### Answers (the maintainer, 2026-11-21)
@@ -1306,9 +1234,9 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 | M2 | (a) Whole minutes: "waiting 3m". |
 | M3 | (a) The flow's title as sent, no forced prefix. |
 | M4 | (a) Background shells, monitors and crons stay in savvy's `/agents-info` for this build. A Background section in clawpit's pane is a later task. |
-| M5 | **(b) Add reuse and callers-open as the two lowest-priority columns.** They show only when the width has room after every other column, and they step aside first. Before the Hydra run, read ponytail's source to find how it computes both figures and whether they can be read with its band off. Then amend Tasks 7 (tracker), 9 (column ranking: `reuse` and `callers` after `tokens` and `agent`), 12 (column drawing), 15 (by-eye list) and 18 Step 4 (both figures are kept, not dropped). |
+| M5 | **(b) Add reuse and callers-open as the two lowest-priority columns.** They show only when the width has room after every other column, and they step aside first. Before building Part B, read ponytail's source to find how it computes both figures and whether they can be read with its band off. Then amend Tasks 7 (tracker), 9 (column ranking: `reuse` and `callers` after `tokens` and `agent`), 12 (column drawing), 15 (by-eye list) and 18 Step 4 (both figures are kept, not dropped). |
 | M6 | (a) This session only. |
-| M7 | (a) Keep the "Hydra run" section and model names while building; strip them before this plan goes into a PR. |
+| M7 | (a) Kept while building; stripped before the PR (done 2026-11-21). |
 | M8 | (a) Pin savvy-progress to the local claude-kit checkout, so an upstream update cannot undo the local change. |
 | M9 | The fixture's flow tasks are titled as the runs they match (`savvy-progress implement`, `e2e tests`, …), as savvy's own contract asks, instead of the mockup's short names `fold`, `fixtures`. Asked during the build, because the plan's match rule could not link the mockup's names to the runs. |
 
@@ -1328,5 +1256,4 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 - The exact output format of `claude plugin test` beyond its `N pass` / `N fail` summary lines, and whether it accepts a single-file filter (the plan never relies on one).
 - `$.ui.mount`'s pointer and find helpers are used as the engine's test kit describes them; their exact names are checked in Task 1 when the first test runs.
 - The pinned package versions were chosen from memory and are confirmed by `npm install` in Task 2.
-- Hydra 0.3.9 is an unreleased line; if its arguments change before the run, the invocation follows its own skill file.
 - Upstream filetree's option names; the fork's archive steps on its remote.

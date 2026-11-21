@@ -150,7 +150,7 @@ It is upstream's and stays that way, so these are observations, not fixes.
 
 ## Detector
 
-`impeccable detect --json` exited 0 with `[]` (no findings) on all three files:
+A design lint run found nothing on all three files:
 
 | File | Findings |
 |---|---|
@@ -239,7 +239,7 @@ Wording: "failed after m:ss" is a stopped clock, so m:ss. Log ages read `<1m` or
 
 ### Detector and screenshots
 
-`impeccable detect --json mockups-all.html` exits 0 with `[]`. No console errors in headless Chrome in the default, failed and both states.
+A design lint run on `mockups-all.html` finds nothing. No console errors in headless Chrome in the default, failed and both states.
 
 Screenshots: run `bash scripts/preview.sh` for the README previews; other states render from the URL params above.
 
