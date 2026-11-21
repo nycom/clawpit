@@ -13,7 +13,7 @@ const BAND = { bodyColumns: 120, hasSurvey: false, maxRows: 5 }
 
 // The engine beneath clawpit: a frozen clock, a store in memory, the answers each event needs,
 // a session id per session.start, the panes up, and a record of every atom write, every pane opened and every pane closed.
-const setup = (on: OnT, o: { store?: Record<string, unknown>; surfaces?: string[]; panes?: string[] } = {}) => {
+const setup = (on: OnT, o: { store?: Record<string, unknown>; surfaces?: string[]; panes?: string[]; usage?: () => unknown } = {}) => {
   const clock = mock.clock(on, { now: T0 })
   const store = new Map<string, unknown>(Object.entries(o.store ?? {}))
   const storeSets: string[] = []
@@ -24,7 +24,7 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; surfaces?: string[
   on('session.start', (_$, e) => { session += 1; return { cwd: e.cwd } })
   on('session.id', () => ({ value: `s${session}` }))
   if (o.surfaces) { const surfaces = o.surfaces; on('session.surfaces', () => ({ value: surfaces as never })) }
-  on('session.usage', () => ({ value: USAGE as never }))
+  on('session.usage', () => ({ value: (o.usage?.() ?? USAGE) as never }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   let agent = 0
@@ -216,7 +216,7 @@ test('pane hook: with no agents the pane draws the empty state', async ($, on) =
   await start($)
   const desk = await pane($)
   expect((await desk.find({ key: 'clawpit-pane' }))?.type).toBe('Box')
-  expect((await svgAlt(desk, /^No agents yet$/))?.alt).toBe('No agents yet')
+  expect((await svgAlt(desk, /^No agents yet/))?.alt).toBe('No agents yet. Agents you start show up here')
   expect(await desk.find({ key: 'beneath' })).toBeUndefined()
   await desk.unmount()
   // The terminal keeps what the engine beneath draws.
@@ -315,5 +315,74 @@ test('image: hover toggles state', { plugins: [savvy, person] }, async ($, on) =
   expect(await wash()).toBe('#80808014')
   await ui.pointer({ type: 'leave', x: 0, y: 0, in: 'row-w1' })
   expect(await wash()).toBeUndefined()
+  await ui.unmount()
+})
+
+// The prompt box beneath clawpit: a draft, and every fill clawpit asks for.
+const promptBox = (on: OnT, draft = '') => {
+  const box = { text: draft, cursor: draft.length }, fills: { text: string; mode: string }[] = []
+  on('prompt.read', () => ({ value: { ...box } }) as never)
+  on('prompt.fill', (_$, e) => {
+    fills.push({ text: e.text, mode: e.mode })
+    box.text = box.text.slice(0, box.cursor) + e.text + box.text.slice(box.cursor); box.cursor += e.text.length
+    return { isFilled: true } as never
+  })
+  return { box, fills }
+}
+
+test('pane hook: pressing a needs-you row puts @ and its title into the prompt once and still opens its drawer', { plugins: [savvy, person] }, async ($, on) => {
+  setup(on)
+  const p = promptBox(on, 'ok, ')
+  await start($)
+  await spawn($, 'fix the cache')
+  await spawn($, 'write the docs')
+  await setRuns($, [run('w1', 'fix the cache', { blocked: 'Keep the old key?' }), run('w2', 'write the docs')])
+  const ui = await pane($)
+  await press(ui, 'row-w1')
+  expect(p.fills).toEqual([{ text: '@fix the cache ', mode: 'insert' }]); expect(p.box.text).toBe('ok, @fix the cache ')
+  expect((await svgAlt(ui, /^fix the cache log$/))?.alt).toBe('fix the cache log')
+  // Pressed again, it folds the drawer and leaves a draft that already names the agent.
+  await press(ui, 'row-w1')
+  expect(p.fills.length).toBe(1); expect(await svgAlt(ui, /^fix the cache log$/)).toBeUndefined()
+  // A running row only opens its drawer.
+  await press(ui, 'row-w2')
+  expect(p.fills.length).toBe(1)
+  await ui.unmount()
+})
+
+test('pane hook: pressing a helper that waits on you puts @ and its title into the prompt', { plugins: [savvy, person] }, async ($, on) => {
+  setup(on)
+  const p = promptBox(on)
+  await start($)
+  await spawn($, 'fix the cache')
+  await spawn($, 'read the tests', 'w1')
+  await setRuns($, [run('w1', 'fix the cache'), run('w2', 'read the tests', { blocked: 'Which suite?' })])
+  const ui = await pane($)
+  await press(ui, 'helper-w2')
+  expect(p.fills).toEqual([{ text: '@read the tests ', mode: 'insert' }])
+  // An id no agent waits under fills nothing.
+  await ui.post({ press: 'ask:nobody' }, { in: 'helper-w2' })
+  await ui.post({ press: 'ask:w1' }, { in: 'helper-w2' })
+  expect(p.fills.length).toBe(1)
+  await ui.unmount()
+})
+
+test('pane hook: the costs press opens the pane on the costs view; the back row returns to the crew', { plugins: [savvy, person] }, async ($, on) => {
+  let usd = 1
+  const w = setup(on, { usage: () => ({ ...USAGE, cost: { usd } }) })
+  await start($)
+  for (const next of [1.5, 1.75]) { await $.turn.start({ text: 'go', turnId: 'm' } as never); usd = next; await $.turn.complete({ reason: 'answer', answer: '', durationMs: 1000, isAborted: false, turnId: 'm' } as never) }
+  await setRuns($, [run('w1', 'fix the cache')])
+  const ui = await pane($)
+  const view = () => (w.mine().filter(x => x.key === 'ui').at(-1)?.value as { view?: string } | undefined)?.view
+  // The panel's session column posts this press; here a row's Client stands in for it.
+  await ui.post({ press: 'costs' }, { in: 'row-w1' })
+  expect(w.opens).toEqual([{ id: PANE, title: 'Agents' }]); expect(view()).toBe('costs')
+  const list = await svgAlt(ui, /^Session cost/)
+  expect(list?.alt).toContain('turn 2 $0.25'); expect(list?.alt).toContain('turn 1 $0.50')
+  expect(list!.alt.indexOf('turn 2')).toBeLessThan(list!.alt.indexOf('turn 1'))
+  await press(ui, 'back')
+  expect(view()).toBe('crew'); expect(await svgAlt(ui, /^Session cost/)).toBeUndefined()
+  expect((await client(ui, 'row-w1'))?.alt).toMatch(/^fix the cache, /)
   await ui.unmount()
 })

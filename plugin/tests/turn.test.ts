@@ -24,3 +24,10 @@ test('turn: armed while busy, for ten minutes of idle, then not', () => {
   const idle = onComplete(onStart(emptyTurn(), 0, 0), { isMain: true, durationMs: 1, tokens: 0 }, 1000, 0)
   expect(isArmed(onStart(emptyTurn(), 0, 0), 5)).toBe(true); expect(isArmed(idle, 1000 + 599_999)).toBe(true); expect(isArmed(idle, 1000 + 600_000)).toBe(false)
 })
+test('turn: turnCosts keeps the last 20 main-turn costs, newest last; an agent turn or no reading adds none', () => {
+  let s = emptyTurn(), usd = 0
+  for (let i = 1; i <= 25; i++) { s = onStart(s, i * 10, usd); usd += i / 100; s = onComplete(s, { isMain: true, durationMs: 1, tokens: 0 }, i * 10 + 5, usd) }
+  expect(s.session.turnCosts!.length).toBe(20); near(s.session.turnCosts![0], 0.06); near(s.session.turnCosts!.at(-1)!, 0.25)
+  expect(onComplete(s, { isMain: false, durationMs: 1, tokens: 1 }, 999, usd + 1).session.turnCosts).toEqual(s.session.turnCosts)
+  expect(onComplete(onStart(emptyTurn(), 0, null), { isMain: true, durationMs: 1, tokens: 0 }, 5, null).session.turnCosts).toEqual([])
+})

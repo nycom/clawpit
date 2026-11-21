@@ -41,12 +41,12 @@ export type LimitStat = { kind: 'five_hour' | 'seven_day'; pct: number; pacePct:
 export type TurnStat = { startedAt: number; added: number; removed: number; costUsd: number | null }
 export type TestStat = { passed: number; failed: number; at: number; failedNames?: string[] }   // failedNames: up to 5, only when the run named any
 export type CodeStat = { reusePct: number | null; reused: number; created: number; callers: string[] }   // from ponytail's band atom
-export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number }
+export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number; turnCosts?: number[] }   // turnCosts: the last 20 main turns, newest last
 export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat; code: CodeStat | null }
 
 export type ColumnKey = 'context' | 'turn' | '5h' | '7d' | 'plan' | 'session' | 'tests' | 'tokens' | 'agent' | 'reuse' | 'callers' | 'agents'
 export type Column = { key: ColumnKey; priority: number }
-export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean }
+export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean; view?: 'crew' | 'costs' }   // view: the pane's; absent is crew
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
 export type Settle = { from: number; to: number }

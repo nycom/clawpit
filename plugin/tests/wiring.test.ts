@@ -73,7 +73,7 @@ test('wiring: turn.start then turn.complete fills the session figures and idleSi
   expect(w.last('idleSince')).toBe(T0 + 90_000)
   const s = w.last('stats') as { turn: unknown; session: { turns: number; tokens: number; agentMs: number; lastTurnUsd: number; costUsd: number } }
   expect(s.turn).toBeNull()
-  expect(s.session).toEqual({ costUsd: 1.25, lastTurnUsd: 0.25, turns: 1, tokens: 126, agentMs: 120_000 })
+  expect(s.session).toEqual({ costUsd: 1.25, lastTurnUsd: 0.25, turns: 1, tokens: 126, agentMs: 120_000, turnCosts: [0.25] })
 })
 
 test('wiring: an answered agent turn records its duration once, a second run of the same agent does not', async ($, on) => {

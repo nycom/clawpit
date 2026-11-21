@@ -15,6 +15,7 @@ import { emptyTurn, IDLE_ARM_MS, isArmed, onComplete, onCost, onLines, onStart }
 import { paceOf } from './track/pace'
 import { contextOf, pushTurn, type CtxInput } from './track/context'
 import { codeOf } from './track/code'
+import { clip, oneLine } from './text'
 
 // Wiring only: the atoms, the observers that feed the trackers, the render hooks, the Client presses, and `view`.
 
@@ -140,6 +141,15 @@ const liveOf = ($: EngineInterface, e: RenderInput, onCompact?: () => void) => {
 }
 
 const openPane = ($: EngineInterface) => $.ui.open({ id: PANE_ID, title: 'Agents' })
+
+// Jump in: an agent that waits on you is named in the prompt, at the cursor, once. The engine gives a plugin no way
+// to focus the prompt box ($.ui.focus reaches only the plugin's own sites), so the person clicks into it.
+const jumpIn = async ($: EngineInterface, id: string) => {
+  const r = (await read($, agents)).find(x => x.id === id)
+  if (!r?.blocked || r.status !== 'running') return
+  const mention = `@${clip(oneLine(r.description), 60)}`
+  if (!(await $.prompt.read()).text.includes(mention)) await $.prompt.fill({ text: `${mention} `, mode: 'insert' })
+}
 
 // Plain Box and Text data, so it cannot fail the way the drawing did.
 const failedLine = (kind: string): RenderElement => ({
@@ -309,7 +319,10 @@ export const register: Register = on => {
       // Queued until the session is idle, so not awaited: the press answers at once.
       else if (press === 'usage' || press === 'context') void $.command.run({ command: press }).catch(() => { errors += 1 })
       else if (press === 'ended') await update($, ui, u => ({ ...u, shut: toggle(u.shut, 'ended') }))
-      else if (press.startsWith('row:') && press.length > 4) { const id = press.slice(4); await update($, ui, u => ({ ...u, open: u.open === id ? null : id })) }
+      else if (press.startsWith('row:') && press.length > 4) { const id = press.slice(4); await update($, ui, u => ({ ...u, open: u.open === id ? null : id })); await jumpIn($, id) }
+      else if (press.startsWith('ask:') && press.length > 4) await jumpIn($, press.slice(4))
+      else if (press === 'costs') { await update($, ui, u => ({ ...u, view: 'costs' })); await openPane($) }
+      else if (press === 'crew') await update($, ui, u => ({ ...u, view: 'crew' }))
       else if (press.startsWith('kids:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, shut: toggle(u.shut, id) })) }
     } catch { errors += 1 }
     return {}
@@ -332,6 +345,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   const loops = pickLoops(crew, u, busy, armed)
   return {
     panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: { ...settles } },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session },
   }
 }
