@@ -4,7 +4,7 @@ import { crab } from '../crab'
 import { dial, icon, segBar, toggleIcon } from '../icons'
 import { CELL_PX, FONT, MOTION, SIZE, SURFACE, svg } from '../tokens'
 import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtDuration, fmtLeft, fmtTokens, oneLine, textWidth, xml } from '../text'
-import { alertsOf } from '../model'
+import { alertsOf, helpersOf } from '../model'
 import { contextText } from '../track/context'
 import { paceText } from '../track/pace'
 import { candidates, fit, lineParts, maxColumns } from './columns'
@@ -134,7 +134,7 @@ const columnImage = (key: ColumnKey, c: Cell, w: number, first: boolean): El => 
 // ---------- the agents crab: who it dresses as, and what it says ----------
 type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean }
 // The top-level agents, then their helpers: a helper that waits on you or failed still dresses the crab.
-const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(a => a.helpers)]
+const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(helpersOf)]
 const nextUp = (agents: CrewAgent[]) => {
   const left = agents.filter(a => a.state === 'running' && a.eta.kind === 'left')
   return left.sort((x, y) => (x.eta.kind === 'left' && y.eta.kind === 'left' ? x.eta.minutes - y.eta.minutes : 0))[0]

@@ -196,6 +196,15 @@ test('panel: a helper that waits on you while the pane is closed dresses the cra
   expect(find(failed, 'chip-k1')).toBeUndefined()
 })
 
+test('panel: a helper of a helper that waits on you gets a chip and dresses the crab', () => {
+  const v = viewOf('hydra'), agents = v.crew.agents.map((a): CrewAgent => (a.id !== 'rev' ? a : {
+    ...a, helpers: a.helpers.map((h): CrewAgent => (h.id !== 'k1' ? h : {
+      ...h, helpers: [{ ...h, id: 'k3', title: 'read the guard', parentId: 'k1', state: 'need', prop: 'wait', question: 'Keep the old key?', waitingSince: NOW - 30_000, helpers: [] }] })) }))
+  const at = (size: 'full' | 'gauges') => panelTree(viewOf('hydra', { crew: { ...v.crew, agents }, ui: { ...v.ui, paneOpen: false, size } }))
+  expect(propsOf(find(at('full'), 'chips-alert')!).alt).toBe('read the guard: Keep the old key?')
+  expect(propsOf(find(at('gauges'), 'mascot')!).alt).toContain('read the guard needs you')
+})
+
 test('panel: a helper that failed dresses the crab and dots the toggle, but gets no chip of its own', () => {
   const v = viewOf('hydra'), agents = v.crew.agents.map((a): CrewAgent => (a.id !== 'rev' ? a : {
     ...a, helpers: a.helpers.map((h): CrewAgent => (h.id === 'k1' ? { ...h, state: 'failed', reason: 'No callers found' } : h)) }))

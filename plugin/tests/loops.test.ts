@@ -104,3 +104,10 @@ test('loops: a helper that needs you beats like a top-level waiter', () => {
   expect(p.mascot).toBe('hop')
   expect(pickLoops(crewOf(agent('running', { helpers: [agent('failed')] })), ui('full', false), true, true).chipPulse).toBe(true)
 })
+
+test('loops: a nested helper walks like a helper; a waiting nested helper beats but never rings', () => {
+  const g = agent('running'), h = agent('running', { helpers: [g] }), top = agent('running', { helpers: [h] })
+  expect(pickLoops(crewOf(top), ui('full', true), true, false).walkers).toEqual([top.id, h.id, g.id])
+  const w = agent('need'), p = pickLoops(crewOf(agent('running', { helpers: [agent('running', { helpers: [w] })] })), ui('full', true), true, false)
+  expect(p.chipPulse).toBe(true); expect(p.ring).toBeNull(); expect(p.walkers.length).toBe(BUDGET.walkersOnBeat)
+})

@@ -1,9 +1,10 @@
 // The Agents pane as a plain RenderElement tree (design §8.2). Pure: no host imports.
 import type { Crew, CrewAgent, ImageProps, LoopPlan, Role, Ui } from '../../types'
-import { CELL_PX, FONT, MONO, MOTION, SIZE, svg } from '../tokens'
+import { CELL_PX, FONT, MONO, MOTION, SIZE, cssOf, svg } from '../tokens'
 import { clip, fit, fmtAge, fmtClock, fmtCost, fmtLeft, oneLine, textWidth, wrap, xml } from '../text'
 import { icon, segBar, stepBlocks, type Seg } from '../icons'
 import { crab } from '../crab'
+import { alertsOf, helpersOf } from '../model'
 import { paneLayout, type PaneItem } from './layout'
 
 export type El = { type: string; props?: Record<string, unknown>; children?: (El | string)[] }
@@ -18,7 +19,7 @@ export const image = (key: string, p: ImageProps, loop: boolean): El => {
 }
 
 // The row's four columns: crab 38, title and activity, the 88px reading column, the chevron.
-const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, HELPER_READ = 72
+const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, HELPER_READ = 72, INDENT = 14
 const n = (v: number) => +v.toFixed(2)
 const clean = (v: unknown, max: number) => clip(oneLine(v), max)
 type Weight = 400 | 600 | 700
@@ -49,7 +50,9 @@ const blocks = (x: number, y: number, done: number, total: number, tone: Role | 
   return k ? `<g transform="translate(${n(x - (k * 8 - 2))} ${y})">${stepBlocks(d, k, tone)}</g>` : ''
 }
 const elapsed = (a: CrewAgent, now: number) => fmtClock((a.endedAt ?? now) - a.startedAt)
-const waiting = (a: CrewAgent, now: number) => { const ms = now - (a.waitingSince ?? a.startedAt); return ms < 60_000 ? '<1m' : fmtAge(ms) }
+// Waiting and log ages read in whole minutes, so the image changes only when one crosses a minute.
+const minutes = (ms: number) => (ms < 60_000 ? '<1m' : fmtAge(ms))
+const waiting = (a: CrewAgent, now: number) => minutes(now - (a.waitingSince ?? a.startedAt))
 const reading = (a: CrewAgent, now: number): Run[] =>
   a.eta.kind === 'left' ? [[fmtLeft(a.eta.minutes).replace(/ left$/, ''), a.eta.slow ? 'warn' : 'fg', 600], [' left', 'muted']]
     : a.eta.kind === 'over' ? [['slower', 'warn', 600]] : [[elapsed(a, now), 'fg', 600]]
@@ -64,7 +67,7 @@ const activityRuns = (a: CrewAgent, now: number): Run[] => {
 }
 
 const head = (crew: Crew, W: number): El => {
-  const title = clean(crew.title, 60), c = crew.counts
+  const title = clean(crew.title, 60), c = { ...crew.counts, need: alertsOf(crew).need }
   const part = (count: number, label: string, cls: string): Run[] => [[String(count), cls, 600], [` ${label}`, cls]]
   const counts: Run[] = [
     ...(c.need ? [...part(c.need, 'needs you', 'er'), [' · ', 'muted'] as Run] : []),
@@ -74,7 +77,9 @@ const head = (crew: Crew, W: number): El => {
   const tail: Run[] = [[` · ${fmtCost(crew.costUsd)}`, 'muted'], ...(crew.leftMin == null ? [] : [[` · ${fmtLeft(crew.leftMin)}`, 'muted'] as Run])]
   const segs: Seg[] = [
     ...crew.ended.map((a): Seg => ({ state: a.prop === 'fail' ? 'failed' : 'done', fill: 1 })),
-    ...crew.agents.map((a): Seg => ({ state: a.state === 'need' ? 'need' : a.state === 'failed' ? 'failed' : 'live', role: a.role, fill: Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0) })),
+    // A waiting helper needs you, so it gets a segment next to the top-level ones that do.
+    ...[...crew.agents.filter(a => a.state === 'need'), ...crew.agents.flatMap(helpersOf).filter(h => h.state === 'need'), ...crew.agents.filter(a => a.state !== 'need')]
+      .map((a): Seg => ({ state: a.state === 'need' ? 'need' : a.state === 'failed' ? 'failed' : 'live', role: a.role, fill: Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0) })),
   ]
   // A narrow pane puts the cost and the time left on a second line.
   const oneRow = runsWidth([...counts, ...tail], 12) <= W
@@ -127,18 +132,22 @@ const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: 
 
 const drawer = (a: CrewAgent, W: number, now: number): El => {
   const x = CRAB + GAP + 12, textW = W - x - GAP - 38 - PAD, failed = a.prop === 'fail'
-  let y = 6, body = ''
+  // A line under a second old plays the one-shot: it fades in from the right while the older lines slide down by its height.
+  const fresh = a.log.length > 0 && now - a.log[0].at < 1000
+  let y = 6, body = '', row = 0
   a.log.slice(0, 30).forEach((l, i) => {
-    const cls = failed && i === 0 ? 'er' : i === 0 ? 'fg' : 'muted', lines = wrap(clean(l.text, 120), textW, 12, 2, cls === 'er' ? 600 : 400)
-    body += lines.map((s, k) => text(x, y + 13 + k * 17, cls, 12, s, cls === 'er' ? { weight: 600 } : {})).join('') + text(W - PAD, y + 13, 'muted', 11, fmtAge(now - l.at), { anchor: 'end' })
+    const top = y, cls = failed && i === 0 ? 'er' : i === 0 ? 'fg' : 'muted', lines = wrap(clean(l.text, 120), textW, 12, 2, cls === 'er' ? 600 : 400)
+    let entry = lines.map((s, k) => text(x, y + 13 + k * 17, cls, 12, s, cls === 'er' ? { weight: 600 } : {})).join('') + text(W - PAD, y + 13, 'muted', 11, minutes(now - l.at), { anchor: 'end' })
     y += lines.length * 17 + 6
     const err = failed && i === 0 ? clean(a.errorLine, 200) : ''
     if (err) {
       const per = Math.max(8, Math.floor((W - x - PAD - 16) / 6.6)), chunks = err.match(new RegExp(`.{1,${per}}`, 'g'))!  // monospace wraps anywhere
-      body += `<rect x="${n(x)}" y="${y}" width="${n(W - x - PAD)}" height="${chunks.length * 15 + 8}" rx="6" class="wash"/>`
+      entry += `<rect x="${n(x)}" y="${y}" width="${n(W - x - PAD)}" height="${chunks.length * 15 + 8}" rx="6" class="wash"/>`
         + chunks.map((c, k) => text(x + 8, y + 15 + k * 15, 'fg', 11, c, { family: MONO })).join('')
       y += chunks.length * 15 + 14
     }
+    if (i === 0) row = y - top
+    body += fresh ? `<g class="${i ? 'old' : 'nw'}">${entry}</g>` : entry
   })
   const foot: [string, string][] = [['steps', `${a.stepDone}/${a.stepTotal}`], ...(a.tries ? [['tries', String(a.tries)] as [string, string]] : []),
     ['context', `${a.contextPct}%`], ['cost', fmtCost(a.costUsd)], ...(failed ? [['ran', elapsed(a, now)] as [string, string]] : []),
@@ -151,32 +160,44 @@ const drawer = (a: CrewAgent, W: number, now: number): El => {
     body += runs(fx, y, 11, rs, W - PAD - fx); fx += w + 12
   }
   const h = y + 8, line = `<rect x="${CRAB + GAP}" y="2" width="1.5" height="${h - 4}" class="track"/>`
-  const reveal = `<style>.rv{animation:rv ${MOTION.revealMs}ms ${MOTION.curve} both}@keyframes rv{from{opacity:0;transform:translateY(-3px)}}</style>`
-  return image(`drawer-${a.id}`, { source: doc(W, h, `${reveal}${line}<g class="rv">${body}</g>`, true), alt: `${clean(a.title, 60)} log`, width: n(W), height: h }, false)
+  const ease = `${MOTION.revealMs}ms ${MOTION.curve}`
+  // The reduced-motion rule comes last, after the one-shot it turns off.
+  const oneShot = fresh ? `<style>.nw{animation:in ${ease} 100ms both}.old{animation:dn ${ease} both}@keyframes in{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}@keyframes dn{from{transform:translateY(-${n(row)}px)}to{transform:none}}</style>${cssOf([], true)}` : ''
+  return image(`drawer-${a.id}`, { source: doc(W, h, `${oneShot}${line}${body}`), alt: `${clean(a.title, 60)} log`, width: n(W), height: h }, false)
 }
 
-const helper = (a: CrewAgent, walk: boolean, W: number, now: number): El => {
-  const h = SIZE.helperRow, failed = a.prop === 'fail', need = a.state === 'need', alert = failed || need, BW = W - HELPER_CRAB, rx = BW - PAD - CHEV - GAP, textW = rx - HELPER_READ - GAP - GAP
+const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: number): El => {
+  const h = SIZE.helperRow, failed = a.prop === 'fail', need = a.state === 'need', alert = failed || need, indent = (depth - 1) * INDENT, cw = HELPER_CRAB + indent
+  const BW = W - cw, rx = BW - PAD - CHEV - GAP, textW = rx - HELPER_READ - GAP - GAP
   // The tint spans both images; each runs 8px past the seam, clipped there, so the band reads as one.
   const tint = (x: number, w: number) => (alert ? `<rect x="${x}" y="0" width="${n(w)}" height="${h}" rx="8" class="needTint"/>` : '')
-  const tree = `${tint(20, HELPER_CRAB - 12)}<rect x="12" y="0" width="1.5" height="${h}" class="track"/><rect x="12" y="15.25" width="9" height="1.5" class="track"/>`
-  const crabSvg = withCrab(svg(HELPER_CRAB, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S' }), 23.25, 5.5)
+  // A nested helper keeps its parent's tree line and reaches its indented crab with a longer branch.
+  const tree = `${tint(20 + indent, HELPER_CRAB - 12)}<rect x="12" y="0" width="1.5" height="${h}" class="track"/><rect x="12" y="15.25" width="${9 + indent}" height="1.5" class="track"/>`
+  const crabSvg = withCrab(svg(cw, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S' }), 23.25 + indent, 5.5)
   const msg = alert ? clean(need ? a.question : a.reason, 160) || (need ? 'needs you' : 'failed') : ''
-  const what: Run[] = alert ? [[msg, 'er', 600]] : activityRuns(a, now).map(([s, k]): Run => [s, k === 'fg' ? 'muted' : k])
-  // The tint and the er question already say "waiting", so the narrow column shows only the age.
-  const read: Run[] = need ? [[waiting(a, now), 'er', 600]] : failed ? [['failed', 'er', 600]] : reading(a, now)
-  // An alert keeps at least half the text width for its question, so a long title cannot push it out.
+  const read: Run[] = need ? [[`waiting ${waiting(a, now)}`, 'er', 600]] : failed ? [['failed', 'er', 600]] : reading(a, now)
+  // An alert keeps at least half the text width for its message, so a long title cannot push it out.
   const title = clean(a.title, 60), titleW = alert ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW
-  const body = tint(-8, BW + 8) + runs(GAP, 20, 12, [[fit(title, titleW, 12, 600), 'fg', 600], [' ', 'muted'], ...what], textW) + runs(rx, 20, 12, read, HELPER_READ, 'end')
-  const alt = `${title}, ${need ? `waiting ${read[0][0]}` : read.map(r => r[0]).join('')}${alert ? `: ${msg}` : ''}`
+  let what: string
+  if (need) {
+    // The question follows the title and wraps to a second line, cut there with an ellipsis.
+    const t = `${fit(title, titleW, 12, 600)} `, [first, second] = wrap(t + msg, textW, 12, 2, 600), y0 = second ? 13 : 20
+    what = `<text x="${GAP}" y="${y0}" font-size="12" font-weight="600"><tspan class="fg">${xml(t)}</tspan><tspan class="er">${xml(first.slice(t.length))}</tspan></text>`
+      + (second ? text(GAP, y0 + 14, 'er', 12, second, { weight: 600 }) : '')
+  } else {
+    const rs: Run[] = failed ? [[msg, 'er', 600]] : activityRuns(a, now).map(([s, k]): Run => [s, k === 'fg' ? 'muted' : k])
+    what = runs(GAP, 20, 12, [[fit(title, titleW, 12, 600), 'fg', 600], [' ', 'muted'], ...rs], textW)
+  }
+  const body = tint(-8, BW + 8) + what + runs(rx, 20, 12, read, need ? READ : HELPER_READ, 'end')  // "waiting 120m" may run into the gap before the column, never into the text
+  const alt = `${title}, ${read.map(r => r[0]).join('')}${alert ? `: ${msg}` : ''}`
   return { type: 'Box', props: { flexDirection: 'row' }, children: [
-    image(`crab-${a.id}`, { source: crabSvg, alt: `${a.role} crab`, width: HELPER_CRAB, height: h }, walk),
+    image(`crab-${a.id}`, { source: crabSvg, alt: `${a.role} crab`, width: cw, height: h }, walk),
     image(`helper-${a.id}`, { source: doc(BW, h, body), alt, width: n(BW), height: h }, false),
   ] }
 }
 
 const kids = (item: Extract<PaneItem, { kind: 'kids' }>, W: number): El => {
-  const rs: Run[] = [[`${item.count} helpers`, 'muted'], ...(item.failed ? [[` · ${item.failed} failed`, 'er'] as Run] : [])]
+  const rs: Run[] = [[`${item.count} helpers`, 'muted'], ...(item.need ? [[` · ${item.need} needs you`, 'er'] as Run] : []), ...(item.failed ? [[` · ${item.failed} failed`, 'er'] as Run] : [])]
   const body = chevron(CRAB + GAP, 6, 10, !item.shut) + runs(CRAB + GAP + 16, 15, 11, rs, W - CRAB - GAP - 16)
   return image(`kids-${item.parentId}`, { source: doc(W, 22, body), alt: rs.map(r => r[0]).join('') + (item.shut ? ', folded' : ', open'), width: n(W), height: 22, press: `kids:${item.parentId}` }, false)
 }
@@ -195,7 +216,7 @@ const drawItem = (item: PaneItem, W: number, now: number): El => {
     case 'section': return section(item, W)
     case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now)
     case 'drawer': return drawer(item.agent, W, now)
-    case 'helper': return helper(item.agent, item.walk, W, now)
+    case 'helper': return helper(item.agent, item.walk, item.depth, W, now)
     case 'kids': return kids(item, W)
     case 'ended': return endedRow(item.agent, W, now)
     case 'more': return image(`more-${item.section}`, { source: doc(W, 22, text(CRAB + GAP, 15, 'muted', 12, `+${item.count} more`)), alt: `${item.count} more agents`, width: n(W), height: 22 }, false)
