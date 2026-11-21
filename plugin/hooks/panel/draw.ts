@@ -222,40 +222,48 @@ const planBar = (plan: Plan, W: number): El => {
 const CHIP_PAD = 3, CHIP_H = SIZE.chip, CHIP_GAP = 6, TITLE_MAX = 180, READ_MAX = 300, ALERT_MIN = 160
 const PULSE = `<style>.pulse{animation:pulse ${MOTION.beat} infinite}@keyframes pulse{50%{opacity:1}}</style>`
 const isAlert = (a: CrewAgent) => a.state === 'need' || a.state === 'failed'
+// A cut chip's full text, as a tooltip; it shows only when its image is interactive.
+const TIP_MAX = 300
+const withTip = (tip: string | undefined, g: string) => (tip === undefined ? g : `<g><title>${xml(clean(tip, TIP_MAX))}</title>${g}</g>`)
+type ChipArt = { w: number; body: string; alt: string; tip?: string }
 
-const reading = (a: CrewAgent): Run => {
-  if (a.state === 'need') return [clean(a.question, 160), '#fff']
-  if (a.state === 'failed') return [a.reason ? `failed · ${clean(a.reason, 160)}` : a.endedAt ? `failed after ${fmtClock(a.endedAt - a.startedAt)}` : 'failed', '#fff']
+const reading = (a: CrewAgent, max = 160): Run => {
+  if (a.state === 'need') return [clean(a.question, max), '#fff']
+  if (a.state === 'failed') return [a.reason ? `failed · ${clean(a.reason, max)}` : a.endedAt ? `failed after ${fmtClock(a.endedAt - a.startedAt)}` : 'failed', '#fff']
   // A chip may loop, so it shows no clock finer than a minute: an agent with no estimate shows its steps only.
   const parts = [a.stepTotal ? `${a.stepDone}/${a.stepTotal}` : '', a.eta.kind === 'left' ? fmtLeft(a.eta.minutes) : a.eta.kind === 'over' ? 'slower' : '']
   const note = a.struggling ? `${a.tries} failed tries` : a.eta.kind === 'left' && a.eta.slow ? 'slower' : ''
   return [[...parts, note].filter(Boolean).join(' · '), a.struggling || (a.eta.kind !== 'none' && (a.eta.kind === 'over' || a.eta.slow)) ? 'warn' : 'muted']
 }
 // One chip at the origin, 26 tall: crab S, the name, the reading. `room` caps the whole chip.
-const chipArt = (a: CrewAgent, walk: boolean, pulse: boolean, room: number) => {
+const chipArt = (a: CrewAgent, walk: boolean, pulse: boolean, room: number): ChipArt => {
   const alert = isAlert(a), title = clean(a.title, 60), [say, tone] = reading(a)
   const tw = Math.min(TITLE_MAX, widthOf(title, 12, 600), Math.max(24, room / 3)), fixed = 35.5 + tw + 6 + 10
   const rw = Math.max(0, Math.min(alert ? READ_MAX : Infinity, widthOf(say, 12), room - fixed)), w = +(fixed + rw).toFixed(2)
+  const shownTitle = fitTo(title, tw, 12, 600), shownSay = rw ? fitTo(say, rw, 12) : ''
+  const fullTitle = oneLine(a.title), fullSay = reading(a, Infinity)[0]
+  const tip = shownTitle !== fullTitle || shownSay !== fullSay ? [fullTitle, fullSay].filter(Boolean).join(': ') : undefined
   const body = (pulse ? `<rect class="s-halo35 pulse" x="-1.5" y="-1.5" width="${w + 3}" height="${CHIP_H + 3}" rx="9.5" fill="none" stroke-width="3" opacity="0"/>` : '')
     + `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="${alert ? 'red' : 'wash'}"/>`
     + at(4, 2.5, crab({ role: a.role, prop: a.prop, walk: walk && !alert, size: 'S', onRed: alert }))
-    + text(35.5, 17, title, 12, alert ? '#fff' : 'fg', { w: 600, max: tw })
-    + (rw ? text(35.5 + tw + 6, 17, say, 12, tone, { max: rw }) : '')
-  return { w, body, alt: `${title}: ${say}` }
+    + text(35.5, 17, shownTitle, 12, alert ? '#fff' : 'fg', { w: 600 })
+    + (rw ? text(35.5 + tw + 6, 17, shownSay, 12, tone) : '')
+  return { w, body, alt: `${title}: ${say}`, tip }
 }
-const chipImage = (key: string, arts: { w: number; body: string; alt: string }[], animated: boolean, loop: boolean, style = ''): El => {
+const chipImage = (key: string, arts: ChipArt[], animated: boolean, loop: boolean, style = ''): El => {
   let x = CHIP_PAD
-  const body = arts.map(c => { const g = at(x, CHIP_PAD, c.body); x += c.w + CHIP_GAP; return g }).join('')
+  const body = arts.map(c => { const g = withTip(c.tip, at(x, CHIP_PAD, c.body)); x += c.w + CHIP_GAP; return g }).join('')
   const w = +(x - CHIP_GAP + CHIP_PAD).toFixed(2), h = CHIP_H + 2 * CHIP_PAD
-  return image(key, { source: doc(w, h, body + style, animated), alt: arts.map(c => c.alt).join('; '), width: w, height: h }, loop)
+  const interactive = arts.some(c => c.tip !== undefined) ? { interactive: true } : {}
+  return image(key, { source: doc(w, h, body + style, animated), alt: arts.map(c => c.alt).join('; '), width: w, height: h, ...interactive }, loop)
 }
 // The alerts past one row: a red chip of their own, never the muted '+N more'.
-const alertMoreArt = (over: CrewAgent[], pulse: boolean) => {
+const alertMoreArt = (over: CrewAgent[], pulse: boolean): ChipArt => {
   const need = over.filter(a => a.state === 'need').length, failed = over.length - need
   const say = `+${over.length} ${need ? 'need you' : 'failed'}`, w = +(widthOf(say, 12, 600) + 20).toFixed(2)
   const body = (pulse ? `<rect class="s-halo35 pulse" x="-1.5" y="-1.5" width="${w + 3}" height="${CHIP_H + 3}" rx="9.5" fill="none" stroke-width="3" opacity="0"/>` : '')
     + `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="red"/>` + text(10, 17, say, 12, '#fff', { w: 600 })
-  return { w, body, alt: need ? `${need} more need you${failed ? `, ${failed} failed` : ''}` : `${failed} more failed` }
+  return { w, body, alt: need ? `${need} more need you${failed ? `, ${failed} failed` : ''}` : `${failed} more failed`, tip: over.map(a => oneLine(a.title)).join(', ') }
 }
 const moreChip = (n: number): El => {
   const say = `+${n} more`, w = widthOf(say, 12) + 20

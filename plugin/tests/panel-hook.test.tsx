@@ -300,3 +300,17 @@ test('image: a left press posts its press; no press prop posts nothing', async (
   expect([w.mine(), w.storeSets.length]).toEqual([writes, sets])
   await ui.unmount()
 })
+
+test('panel hook: interactive reaches the engine Svg as isInteractive', { plugins: [savvy] }, async ($, on) => {
+  setup(on)
+  await start($)
+  // Three walkers are Clients; the fourth chip and the rest are plain Svgs.
+  for (const d of ['one', 'two', 'three', 'fix']) await spawn($, d)
+  await spawn($, 'rewrite the whole release pipeline so that every channel ships from one tagged build')
+  const ui = await band($)
+  const svgs = (await all(ui)).filter(n => n.type === 'Svg'), chip = (title: string) => svgs.find(n => String(n.props.alt).startsWith(title))!
+  expect(chip('rewrite the whole').props.isInteractive).toBe(true)
+  expect('isInteractive' in chip('fix:').props).toBe(false)
+  expect(svgs.some(n => 'interactive' in n.props)).toBe(false)
+  await ui.unmount()
+})

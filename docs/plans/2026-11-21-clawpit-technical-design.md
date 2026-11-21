@@ -190,7 +190,7 @@ export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: bo
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
 export type Settle = { from: number; to: number }
-export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean }
+export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; interactive?: boolean }
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
   id: string; agentId?: string; type: string; description: string; model: string
@@ -418,12 +418,12 @@ One module serves every Client in both surfaces.
 
 ```ts
 // props: ImageProps
-{ source: string; alt: string; width: number; height: number; press?: string; hover?: boolean }
+{ source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; interactive?: boolean }
 ```
 
 | Behaviour | Rule |
 |---|---|
-| Draws | `h('Svg', { source, alt, width, height })`, wrapped in a Box when `hover` |
+| Draws | `h('Svg', { source, alt, width, height })`, with `isInteractive: true` when `interactive` (a cut chip's `<title>` tooltip shows only then), wrapped in a Box when `hover` |
 | Pointer | on a left `down`, when `press` is set, `surface.post({ press })` (`d.ts:1655`, `d.ts:1662-1671`); on `enter`/`leave` with `hover`, `setState({ isHover })` |
 | Keys | Enter or Space while focused posts the same press |
 | Timers | none; `surface.every` is never called |

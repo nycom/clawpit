@@ -46,3 +46,9 @@ test('image: a left press posts its press; hover toggles state; no press prop po
   expect(quiet.s.posts).toEqual([])
   expect(quiet.s.state).toBeUndefined()
 })
+
+test('image: interactive draws the Svg with isInteractive; absent, it stays an image', () => {
+  const { draw } = surfaceFor()
+  expect(draw({ ...P, interactive: true }).props).toEqual({ source: P.source, alt: P.alt, width: 24, height: 24, isInteractive: true })
+  expect('isInteractive' in draw(P).props).toBe(false)
+})

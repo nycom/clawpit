@@ -283,3 +283,55 @@ test('panel: the red overflow chip pulses inside the alert chips client, and the
   expect(p.source.match(/class="s-halo35 pulse"/g)!.length).toBe(alertRow(t).alts.length)
   expect(panelLoopCount(v)).toBe(images(t).filter(e => propsOf(e).source.includes('infinite')).length)
 })
+
+// A chip's tooltips: the `<title>` texts in its drawing, in order.
+const tips = (src: string) => [...src.matchAll(/<g><title>([^<]*)<\/title>/g)].map(m => m[1])
+const withAgent = (v: ReturnType<typeof viewOf>, id: string, over: Partial<CrewAgent>) =>
+  ({ ...v, crew: { ...v.crew, agents: v.crew.agents.map(a => (a.id === id ? { ...a, ...over } : a)) } })
+
+test('panel: a cut chip carries its full text as a tooltip and is interactive', () => {
+  const v = viewOf('hydra'), still = v.crew.agents.find(a => a.state === 'running' && !v.loops.walkers.includes(a.id))!
+  const long = 'rewrite the whole release pipeline so that every channel ships from one tagged build'
+  const chip = find(panelTree(withAgent(v, still.id, { title: long })), `chip-${still.id}`)!, p = propsOf(chip) as ReturnType<typeof propsOf> & { interactive?: boolean }
+  expect(chip.type).toBe('Svg')
+  expect(words(p.source)).toContain('…')
+  expect(tips(p.source)).toHaveLength(1)
+  expect(tips(p.source)[0].startsWith(`${long}: `)).toBe(true)
+  expect(p.interactive).toBe(true)
+  // Capped at 300 characters, and the same one second later.
+  const huge = 'x'.repeat(400), q = propsOf(find(panelTree(withAgent(v, still.id, { title: huge })), `chip-${still.id}`)!)
+  expect(tips(q.source)[0].length).toBe(300); expect(tips(q.source)[0].endsWith('…')).toBe(true)
+  expect(propsOf(find(panelTree(withAgent({ ...v, now: v.now + 1000 }, still.id, { title: long })), `chip-${still.id}`)!)).toEqual(p)
+})
+
+test('panel: an uncut chip has no tooltip and stays a plain image', () => {
+  const v = viewOf('hydra'), still = v.crew.agents.find(a => a.state === 'running' && !v.loops.walkers.includes(a.id))!
+  const chip = find(panelTree(withAgent(v, still.id, { title: 'docs' })), `chip-${still.id}`)!, p = chip.props!
+  expect(chip.type).toBe('Svg')
+  expect(words(p.source as string)).not.toContain('…')
+  expect(p.source).not.toContain('<title>')
+  expect('interactive' in p).toBe(false)
+})
+
+test('panel: in the shared alert image each cut chip has its own tooltip', () => {
+  const v = viewOf('both'), [need, failed] = [v.crew.agents.find(a => a.state === 'need')!, v.crew.agents.find(a => a.state === 'failed')!]
+  const one = withAgent(withAgent(v, need.id, { title: 'ask', question: 'Ok?' }), failed.id, { title: 'db', reason: 'the database refused every connection the migration opened, all forty of them, for an hour' })
+  const p = propsOf(find(panelTree(one), 'chips-alert')!) as ReturnType<typeof propsOf> & { interactive?: boolean }
+  expect(tips(p.source)).toEqual(['db: failed · the database refused every connection the migration opened, all forty of them, for an hour'])
+  expect(p.interactive).toBe(true)
+  const none = propsOf(find(panelTree(withAgent(one, failed.id, { reason: 'no db' })), 'chips-alert')!)
+  expect(none.source).not.toContain('<title>'); expect('interactive' in none).toBe(false)
+  // The red overflow chip lists the names it hides.
+  const crowd = alertCrowd(6, 0), r = alertRow(panelTree(crowd)), hidden = crowd.crew.agents.slice(r.shown, 6).map(a => a.title).join(', ')
+  expect(tips(r.p.source).at(-1)).toBe(hidden)
+  expect((r.p as { interactive?: boolean }).interactive).toBe(true)
+})
+
+test('panel: a hostile title in a tooltip stays well-formed', () => {
+  const v = viewOf('both'), need = v.crew.agents.find(a => a.state === 'need')!
+  const hostile = `<b>&"\u0000 ${'y'.repeat(80)}`
+  const p = propsOf(find(panelTree(withAgent(v, need.id, { title: hostile })), 'chips-alert')!)
+  expect(wellFormed(p.source)).toBe(true)
+  expect(tips(p.source)[0].startsWith(`&lt;b&gt;&amp;&quot; ${'y'.repeat(80)}: `)).toBe(true)
+  expect(p.source).not.toContain('\u0000')
+})

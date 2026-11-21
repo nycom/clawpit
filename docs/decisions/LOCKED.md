@@ -84,3 +84,4 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Step blocks:** at most 11 in the reading column; more steps fill them in proportion.
 - **Pane summary:** when it does not fit one line, the cost and the time left move to a second line.
 - **Context so-what:** "learning your pace" only under 3 recorded turns. After that, with no growth to estimate from, it shows only the msgs share ("34% msgs"), or nothing.
+- **Chip tooltips:** a chip whose text is cut with "…" shows its full text as a tooltip. Only cut chips carry it (the image is then drawn in the app's sandboxed frame, which costs more than a plain image); in the shared alert-chip image each chip has its own. This replaces ALIGNMENT "Not buildable" 4 for chips.

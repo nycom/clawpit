@@ -258,7 +258,9 @@ export const register: Register = on => {
       const p = n.props ?? {}
       if (n.type === 'Client') return <Client key={String(p.key)} module="./client/image.tsx" props={p.props} />
       const tag = (table as unknown as Record<string, (props: never) => RenderNode>)[n.type]
-      return h(tag, n.type === 'Button' && p.key === COMPACT_KEY ? { ...p, onPress: compact } : p, ...(n.children ?? []).map(live)) as RenderNode
+      const { interactive, ...rest } = p
+      const props = n.type === 'Button' && p.key === COMPACT_KEY ? { ...rest, onPress: compact } : interactive ? { ...rest, isInteractive: true } : rest
+      return h(tag, props, ...(n.children ?? []).map(live)) as RenderNode
     }
     return live(panelTree((await view($, e.props.bodyColumns)).panel))
   }).catch((_$, _e, next) => { errors += 1; return failedLine(next.error.kind) })

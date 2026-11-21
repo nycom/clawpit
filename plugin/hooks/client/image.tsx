@@ -14,7 +14,8 @@ const Image: ClientModule<ImageProps, Local> = (p, surface) => {
     if (p.hover && isOver !== (surface.state?.isHover ?? false)) surface.setState({ isHover: isOver })
   })
   surface.onKey(e => { if (e.key === 'return' || e.key === ' ') press() })
-  const svg = h('Svg', { source: p.source, alt: p.alt, width: p.width, height: p.height }) as RenderElement
+  // Interactive draws in the sandboxed frame, where a cut chip's <title> tooltip shows.
+  const svg = h('Svg', { source: p.source, alt: p.alt, width: p.width, height: p.height, ...(p.interactive ? { isInteractive: true } : {}) }) as RenderElement
   if (!p.hover) return svg
   const { Box } = surface.elements
   return <Box backgroundColor={surface.state?.isHover ? '#80808014' : undefined}>{svg}</Box>
