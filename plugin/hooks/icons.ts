@@ -2,7 +2,8 @@
 import type { Role, Settle, Size } from '../types'
 import { MOTION } from './tokens'
 
-const PATHS = { chev: 'M4.5 2.5 8 6l-3.5 3.5', check: 'M2.5 6.3 5 8.8l4.5-5.3', cross: 'M3 3l6 6M9 3 3 9' } as const
+const PATHS = { chev: 'M4.5 2.5 8 6l-3.5 3.5', check: 'M2.5 6.3 5 8.8l4.5-5.3', cross: 'M3 3l6 6M9 3 3 9',
+  squeeze: 'M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5M2 6h8' } as const
 const n = (v: number) => +v.toFixed(2)
 
 // `cls` is a stroke class, for example "s-muted".

@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { CrewAgent, PlanTask } from '../types'
-import { COMPACT_KEY, image, panelTree, type El } from '../hooks/panel/draw'
+import { image, panelTree, type El } from '../hooks/panel/draw'
+import { contrast, SURFACE, TOKENS } from '../hooks/tokens'
 import { NOW, type StateName } from './fixtures/states'
 import { panelLoopCount, viewOf } from './build'
 
@@ -64,31 +65,72 @@ test('panel: no plan and line size shows the session cost', () => {
 test('panel: the column count follows the cells', () => {
   expect(cols(panelTree(viewOf('hydra', { bodyColumns: 46 }))).length).toBe(3)
   expect(cols(panelTree(viewOf('hydra', { bodyColumns: 88 }))).length).toBe(6)
-  // Below 50% context, so no Compact button widens the context column: it takes the one cell its whole so-what needs over the share.
+  // Below 50% context, so no compact chip widens the context column: it takes the one cell its whole so-what needs over the share.
   const v = viewOf('hydra'), box = find(panelTree(viewOf('hydra', { bodyColumns: 88, stats: { ...v.stats, context: { ...v.stats.context!, pct: 40 } } })), 'col-context')!
   expect(box.props!.width).toBe(15); expect(propsOf(imgOf(box, 'col-context')!).width).toBe(15 * 8.5)
 })
 
-const atContext = (pct: number, alarm = false) => { const v = viewOf('hydra'); return panelTree(viewOf('hydra', { stats: { ...v.stats, context: { ...v.stats.context!, pct, alarm } } })) }
-test('panel: from 50% context a Compact button sits in the context column; in alarm it reads Compact now; never dim', () => {
-  expect(find(atContext(49), COMPACT_KEY)).toBeUndefined()
-  for (const [t, label] of [[atContext(50), 'Compact'], [panelTree(viewOf('hydra')), 'Compact'], [panelTree(viewOf('context90')), 'Compact now']] as const) {
-    const col = find(t, 'col-context')!, b = find(col, COMPACT_KEY)!
-    expect(b.type).toBe('Button'); expect(b.props!.label).toBe(label); expect('dimColor' in b.props!).toBe(false)
-    // No extra row; the image fills the column and the Button is placed over its free right part, on the value's line.
+const atContext = (pct: number, alarm = false, bodyColumns = 96) => { const v = viewOf('hydra'); return panelTree(viewOf('hydra', { bodyColumns, stats: { ...v.stats, context: { ...v.stats.context!, pct, alarm } } })) }
+const chipOf = (t: El) => { const c = find(find(t, 'col-context')!, 'compact'); return c ? (c.props!.props as { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean }) : undefined }
+const chipFits = (t: El) => {
+  const box = find(t, 'col-context')!, at = find(box, 'compact-at')!.props!.left as number
+  return at + Math.ceil(chipOf(t)!.width / 8.5) <= (box.props!.width as number)
+}
+test('panel: from 50% context a compact chip sits in the context column, its own pressable Client, inside the divider', () => {
+  expect(find(atContext(49), 'compact')).toBeUndefined()
+  for (const t of [atContext(50), panelTree(viewOf('hydra')), panelTree(viewOf('context90'))]) {
+    const col = find(t, 'col-context')!, chip = find(col, 'compact')!
+    expect(chip.type).toBe('Client'); expect(chipOf(t)).toMatchObject({ press: 'compact', hover: true, height: 18 })
+    // No extra row; the image fills the column and keeps its one press, with no zone that could run /compact.
     expect(keys(t)).not.toContain('compact')
-    expect(propsOf(imgOf(col, 'col-context')!).width).toBe((col.props!.width as number) * 8.5)
+    const img = propsOf(imgOf(col, 'col-context')!) as { width: number; press?: string; zones?: unknown }
+    expect(img.width).toBe((col.props!.width as number) * 8.5); expect(img.press).toBe('context'); expect(img.zones).toBeUndefined()
     expect(find(col, 'compact-at')!.props).toMatchObject({ position: 'absolute', top: 1 })
   }
-  // The context column widens only by what the Button needs; the columns still fit the body beside the toggle.
-  for (const bodyColumns of [46, 60, 88, 96, 140]) for (const s of ['hydra', 'context90'] as const) {
-    const t = panelTree(viewOf(s, { bodyColumns })), ws = keys(find(t, 'cols')).filter(k => k.startsWith('col-')).map(k => find(t, k)!.props!.width as number)
-    const at = find(find(t, 'col-context')!, 'compact-at')!.props!.left as number, label = find(t, COMPACT_KEY)!.props!.label as string
-    expect(ws[0]).toBeGreaterThanOrEqual(at + label.length + 1)
+  // The chip's cells fit inside the context column; the columns still fit the body beside the toggle.
+  for (const bodyColumns of [46, 60, 88, 96, 140]) for (const [pct, alarm] of [[60, false], [88, false], [96, true]] as const) {
+    const t = atContext(pct, alarm, bodyColumns), ws = cols(t).map(k => find(t, k)!.props!.width as number)
+    expect([bodyColumns, pct, chipFits(t)]).toEqual([bodyColumns, pct, true])
     expect(ws.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(bodyColumns - 4)
   }
   const ctx = sourceOf(panelTree(viewOf('context90')), 'col-context')
   expect(words(ctx)).toContain('auto-compacts at 97%'); expect(ctx).toMatch(/class="er"[^>]*>92%</)
+})
+
+test('panel: the chip icon takes the context dial\'s tone; the word stays "compact" at one width', () => {
+  const widths = new Set<number>()
+  for (const [pct, alarm, tone] of [[55, false, 'accent'], [75, false, 'warn'], [92, true, 'er']] as const) {
+    const t = atContext(pct, alarm), chip = chipOf(t)!
+    expect(chip.source).toContain(`<path class="s-${tone}"`)
+    expect(sourceOf(t, 'col-context')).toContain(`class="s-${tone}"`)
+    expect(words(chip.source)).toBe('compact')
+    widths.add(chip.width)
+  }
+  expect(widths.size).toBe(1)
+})
+
+test('panel: at rest the chip word is muted 400 on the wash; in alarm er 600 on needTint', () => {
+  const rest = chipOf(atContext(60))!, alarm = chipOf(atContext(92, true))!
+  expect(rest.source).toContain('class="wash"'); expect(rest.source).toMatch(/<text class="muted"[^>]*font-size="11">compact</)
+  expect(alarm.source).toContain('class="needTint"'); expect(alarm.source).toMatch(/<text class="er"[^>]*font-size="11" font-weight="600">compact</)
+  expect(rest.alt).toBe('Compact context: runs /compact')
+  expect(alarm.alt).toBe('Compact context now: auto-compacts at 97%')
+  // needTint laid over the surface, then er on it: at least 4.5:1 in both modes.
+  const over = (rgba: string, bg: string) => {
+    const [r, g, b, a] = rgba.match(/[\d.]+/g)!.map(Number), n = parseInt(bg.slice(1), 16)
+    return '#' + [r, g, b].map((c, i) => Math.round(c * a + ((n >> (16 - 8 * i)) & 255) * (1 - a)).toString(16).padStart(2, '0')).join('')
+  }
+  for (const m of ['dark', 'light'] as const) expect(contrast(TOKENS.er[m], over(TOKENS.needTint[m], SURFACE[m]))).toBeGreaterThanOrEqual(4.5)
+})
+
+test('panel: where the column cannot give the chip its cells, the chip is the icon alone', () => {
+  const t = atContext(60, false, 30), chip = chipOf(t)!
+  expect(chip.width).toBe(20); expect(words(chip.source)).toBe(''); expect(chip.source).toContain('<path class="s-accent"')
+  expect(chipFits(t)).toBe(true)
+  expect(chip.alt).toBe('Compact context: runs /compact')
+  // Nor does the whole chip take a warning's first clause: there the chip is its icon and the 7d warning stays.
+  const code = panelTree(viewOf('codeColumns', { bodyColumns: 60 }))
+  expect(chipOf(code)!.width).toBe(20); expect(lastText(sourceOf(code, 'col-7d'))).toBe('on pace for 131%')
 })
 
 test('panel: a looping client has the same props one second later', () => {
@@ -207,7 +249,7 @@ test('panel: a two-clause so-what drops whole clauses right to left, never cutti
   // Past those cells the long clause cannot claim, so it goes whole.
   const ctxWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789_012 } } }))
   expect(soOf(ctxWide, 'col-context')).toBe('~123456789012 turns')
-  const ses = panelTree(viewOf('hydra', { bodyColumns: 74, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
+  const ses = panelTree(viewOf('hydra', { bodyColumns: 76, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
   expect(soOf(ses, 'col-session')).toBe('last turn $123456789')
   // One clause that does not fit goes whole: never 'last turn $12…' nor 'last turn…'.
   const sesWide = panelTree(viewOf('hydra', { bodyColumns: 74, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789_012_345 } } }))
@@ -477,10 +519,10 @@ test('panel: a hostile title in a tooltip stays well-formed', () => {
 })
 
 const colWidth = (t: El, k: string) => find(t, k)!.props!.width as number
-test('panel: at 60 cells the 7d warning so-what survives beside Compact', () => {
+test('panel: at 60 cells the 7d warning so-what survives beside the compact chip', () => {
   for (const s of ['hydra', 'failed'] as const) {
     const t = panelTree(viewOf(s, { bodyColumns: 60 }))
-    expect(find(find(t, 'col-context')!, COMPACT_KEY)!.props!.label).toBe('Compact')
+    expect(words(chipOf(t)!.source)).toBe('compact')
     expect(lastText(sourceOf(t, 'col-7d'))).toBe('on pace for 131%')
     expect(cols(t).reduce((a, k) => a + colWidth(t, k), 0)).toBeLessThanOrEqual(60 - 4)
   }
@@ -489,22 +531,23 @@ test('panel: at 60 cells the 7d warning so-what survives beside Compact', () => 
 test('panel: spare width goes to the column whose clauses would drop, warn first', () => {
   const v = viewOf('hydra'), at = (stats: typeof v.stats) => panelTree(viewOf('hydra', { bodyColumns: 60, stats }))
   const sum = (t: El) => cols(t).reduce((a, k) => a + colWidth(t, k), 0)
-  // Below 50%, no Button: the even share (14) is one cell short for the context so-what, and the tokens column has cells over.
+  // Below 50%, no chip: the even share (14) is one cell short for the context so-what, and the tokens column has cells over.
   const roomy = at({ ...v.stats, context: { ...v.stats.context!, pct: 40 } })
   expect(colWidth(roomy, 'col-context')).toBe(15); expect(lastText(sourceOf(roomy, 'col-context'))).toBe('~7 turns · 34% msgs')
   expect(colWidth(roomy, 'col-tokens')).toBe(13); expect(lastText(sourceOf(roomy, 'col-tokens'))).toBe('44 turns')
   expect(lastText(sourceOf(roomy, 'col-7d'))).toBe('on pace for 131%')
   expect(sum(roomy)).toBe(60 - 4)
-  // With the Button the tokens column gives its slack and the amber warning keeps its cells.
+  // With the chip the tokens column gives its slack and the amber warning keeps its cells.
   const calm = { ...v.stats, limits: v.stats.limits.map(l => (l.kind === 'seven_day' ? { ...l, ahead: false } : l)) }
   const hot = at(v.stats)
-  expect(colWidth(hot, 'col-tokens')).toBe(11); expect(lastText(sourceOf(hot, 'col-tokens'))).toBe('44 turns'); expect(sum(hot)).toBe(60 - 4)
+  expect(colWidth(hot, 'col-tokens')).toBe(9); expect(lastText(sourceOf(hot, 'col-tokens'))).toBe('44 turns'); expect(sum(hot)).toBe(60 - 4)
   expect(lastText(sourceOf(hot, 'col-7d'))).toBe('on pace for 131%')
-  // Folded at 74 cells no column has slack left for the Button: the amber warning is the last to give.
-  const folded = (stats: typeof v.stats) => panelTree(viewOf('hydra', { bodyColumns: 74, stats, ui: { ...v.ui, size: 'gauges' } }))
+  // Folded at 78 cells no column has slack left for the chip: the amber warning is the last to give, so the whole chip
+  // would cost another column its value and the chip is its icon alone.
+  const folded = (stats: typeof v.stats) => panelTree(viewOf('hydra', { bodyColumns: 78, stats, ui: { ...v.ui, size: 'gauges' } }))
   const warm = folded(v.stats), still = folded(calm)
-  for (const t of [warm, still]) expect(sum(t)).toBe(74 - 4)
-  expect(lastText(sourceOf(warm, 'col-7d'))).toBe('on pace for 131%')
-  // With the limit calm, the lowest priority column gives instead: the 7d limit.
-  expect(colWidth(still, 'col-7d')).toBe(13); expect(lastText(sourceOf(still, 'col-7d'))).toBe('')
+  expect(sum(still)).toBe(78 - 4); expect(sum(warm)).toBeLessThanOrEqual(78 - 4)
+  expect(lastText(sourceOf(warm, 'col-7d'))).toBe('on pace for 131%'); expect(chipOf(warm)!.width).toBe(20)
+  // With the limit calm, the lowest priority column gives instead: the 7d limit, and the chip is whole.
+  expect(colWidth(still, 'col-7d')).toBe(13); expect(lastText(sourceOf(still, 'col-7d'))).toBe(''); expect(words(chipOf(still)!.source)).toBe('compact')
 })

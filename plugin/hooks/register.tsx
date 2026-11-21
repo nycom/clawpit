@@ -4,7 +4,7 @@ import type { SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
 import { crewOf } from './model'
 import { pickLoops } from './loops'
 import { nextSize, parseSize, settle } from './panel/fold'
-import { COMPACT_KEY, panelTree, type PanelView } from './panel/draw'
+import { panelTree, type PanelView } from './panel/draw'
 import type { El } from './draw'
 import { paneTree, type PaneView } from './pane/draw'
 import { emptyFacts, isEdit, linesOf, onThink, onTool } from './track/activity'
@@ -127,15 +127,14 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
 
 // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
 // loads a surface module only from a <Client> written here with a literal path.
-const liveOf = ($: EngineInterface, e: RenderInput, onCompact?: () => void) => {
+const liveOf = ($: EngineInterface, e: RenderInput) => {
   const table = $.ui.resolve(e), { Client } = table
   const live = (n: El | string): RenderNode => {
     if (typeof n === 'string') return n
     const p = n.props ?? {}
     if (n.type === 'Client') return <Client key={String(p.key)} module="./client/image.tsx" props={p.props} />
     const tag = (table as unknown as Record<string, (props: never) => RenderNode>)[n.type]
-    const props = n.type === 'Button' && p.key === COMPACT_KEY ? { ...p, onPress: onCompact } : p
-    return h(tag, props, ...(n.children ?? []).map(live)) as RenderNode
+    return h(tag, p, ...(n.children ?? []).map(live)) as RenderNode
   }
   return live
 }
@@ -286,8 +285,7 @@ export const register: Register = on => {
   // shortcut: vscode and mobile pass through like the terminal (savvy still draws there, takeover is desktop-only).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
-    const compact = () => { void $.command.run({ command: 'compact' }).catch(() => { errors += 1 }) }
-    return liveOf($, e, compact)(panelTree((await view($, e.props.bodyColumns)).panel))
+    return liveOf($, e)(panelTree((await view($, e.props.bodyColumns)).panel))
   }).catch((_$, _e, next) => { errors += 1; return failedLine(next.error.kind) })
 
   // shortcut: vscode and mobile pass through like the terminal, as the panel does.
@@ -316,8 +314,8 @@ export const register: Register = on => {
       if (press === 'size') await $.store.set('size', (await update($, ui, u => ({ ...u, size: nextSize(u.size) }))).size)
       else if (press === 'open') await openPane($)
       else if (press.startsWith('open:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, open: id, view: 'crew' })); await openPane($) }
-      // Queued until the session is idle, so not awaited: the press answers at once.
-      else if (press === 'usage' || press === 'context') void $.command.run({ command: press }).catch(() => { errors += 1 })
+      // Queued until the session is idle, so not awaited: the press answers at once, one command per press.
+      else if (press === 'usage' || press === 'context' || press === 'compact') void $.command.run({ command: press }).catch(() => { errors += 1 })
       else if (press === 'ended') await update($, ui, u => ({ ...u, shut: toggle(u.shut, 'ended') }))
       else if (press.startsWith('row:') && press.length > 4) { const id = press.slice(4); await update($, ui, u => ({ ...u, open: u.open === id ? null : id })); await jumpIn($, id) }
       else if (press.startsWith('ask:') && press.length > 4) await jumpIn($, press.slice(4))

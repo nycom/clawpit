@@ -1,6 +1,5 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
-import { COMPACT_KEY } from '../hooks/panel/draw'
 
 type $T = Parameters<TestBody>[0]
 type OnT = Parameters<TestBody>[1]
@@ -107,37 +106,36 @@ test('panel hook: bodyColumns sets the column count', async ($, on) => {
   await ui.unmount()
 })
 
-test('panel hook: Compact now runs /compact once per press', async ($, on) => {
+const pressAt = (ui: Band, key: string) => ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: key })
+
+test('panel hook: in alarm the compact chip runs /compact once per press; the context column still runs /context', async ($, on) => {
   const w = setup(on, { usage: { ...USAGE, context: { window: 200_000, percent: 92 } } })
   await start($)
   const ui = await band($)
-  const button = (await ui.find({ key: COMPACT_KEY })) as unknown as Node
-  expect(button.type).toBe('Button')
-  expect(button.text).toBe('Compact now')
-  expect(button.props.dimColor).toBeUndefined()
-  await ui.press({ key: COMPACT_KEY })
+  expect(((await ui.find({ key: 'compact' })) as unknown as Node).type).toBe('Client')
+  await pressAt(ui, 'compact')
   expect(w.commands).toEqual(['compact'])
-  await ui.press({ key: COMPACT_KEY })
+  await pressAt(ui, 'compact')
   expect(w.commands).toEqual(['compact', 'compact'])
+  await pressAt(ui, 'col-context')
+  expect(w.commands).toEqual(['compact', 'compact', 'context'])
   await ui.unmount()
 })
 
-test('panel hook: from 50% context a Compact button runs /compact once per press; below 50 there is none', async ($, on) => {
+test('panel hook: from 50% context the compact chip runs /compact once per press', async ($, on) => {
   const w = setup(on, { usage: { ...USAGE, context: { window: 200_000, percent: 60 } } })
   await start($)
   const ui = await band($)
-  const button = (await ui.find({ key: COMPACT_KEY })) as unknown as Node
-  expect(button.type).toBe('Button'); expect(button.text).toBe('Compact'); expect('dimColor' in button.props).toBe(false)
-  await ui.press({ key: COMPACT_KEY })
+  await pressAt(ui, 'compact')
   expect(w.commands).toEqual(['compact'])
   await ui.unmount()
 })
 
-test('panel hook: below 50% context there is no Compact button', async ($, on) => {
+test('panel hook: below 50% context there is no compact chip', async ($, on) => {
   setup(on, { usage: { ...USAGE, context: { window: 200_000, percent: 49 } } })
   await start($)
   const ui = await band($)
-  expect(await ui.find({ key: COMPACT_KEY })).toBeUndefined()
+  expect(await ui.find({ key: 'compact' })).toBeUndefined()
   await ui.unmount()
 })
 

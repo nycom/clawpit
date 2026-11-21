@@ -14,7 +14,6 @@ import { image, type El } from '../draw'
 export { image, type El }
 
 export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle> }
-export const COMPACT_KEY = 'clawpit-compact'
 
 // ---------- text ----------
 // shortcut: the kit's width table runs up to ~10% short of SF Pro, so drawn widths add 10%; drop SLACK once the table is measured.
@@ -136,14 +135,25 @@ const columnImage = (key: ColumnKey, c: Cell, w: number, first: boolean): El => 
     + runs(x0, 54, 11, c.so, max, false, c.whole ? fitWhole : fitTo)
   return image(`col-${key}`, { source: doc(w, COL_H, c.tip ? withTip(c.tip, body, Infinity) : body), alt: c.alt ?? altOf(c), width: w, height: COL_H, ...(c.press ? { press: c.press } : {}) }, !!c.art?.client)
 }
-// From 50% context, a Button right of the value on the value's line, placed over the column's free part so
-// the image and its baseline stay as they are. In alarm it reads "Compact now". Never dimColor.
-// `cells`: how wide the column must be to hold it. shortcut: the Button is guessed at its label plus one cell; tune it with the app check.
-const compactOf = (v: PanelView, c: Cell): { el: El; cells: number } | null => {
+// From 50% context, a drawn chip right of the value on the value's line: its own pressable Client, placed over the
+// column's free part so the image and its baseline stay as they are (a zone in the image would take the so-what's clicks).
+// The word never changes and the width is budgeted at the alarm's weight, so the chip never reflows the columns.
+// `cells` / `iconCells`: how wide the column must be to hold it whole, or its icon alone.
+const COMPACT_H = 18, COMPACT_W = 6 + 12 + 4 + widthOf('compact', 11, 600) + 6, COMPACT_ICON_W = 20
+const compactOf = (v: PanelView, c: Cell): { el: (iconOnly: boolean) => El; cells: number; iconCells: number } | null => {
   const ctx = v.stats.context
   if (!ctx || ctx.pct < 50) return null
-  const label = ctx.alarm ? 'Compact now' : 'Compact', left = Math.ceil(((c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + 2) / CELL_PX)
-  return { cells: left + label.length + 1, el: { type: 'Box', props: { key: 'compact-at', position: 'absolute', left, top: 1 }, children: [{ type: 'Button', props: { key: COMPACT_KEY, label } }] } }
+  const left = Math.ceil(((c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + 4) / CELL_PX)
+  const alt = ctx.alarm ? `Compact context now: ${contextText(ctx, v.stats.session.turns)}` : 'Compact context: runs /compact'
+  const el = (iconOnly: boolean): El => {
+    const w = +(iconOnly ? COMPACT_ICON_W : COMPACT_W).toFixed(2)
+    const body = `<rect x="0" y="0" width="${w}" height="${COMPACT_H}" rx="6" class="${ctx.alarm ? 'needTint' : 'wash'}"/>`
+      + at(iconOnly ? 4 : 6, 3, icon('squeeze', 12, `s-${contextTone(v.stats)}`))
+      + (iconOnly ? '' : text(22, 12.5, 'compact', 11, ctx.alarm ? 'er' : 'muted', ctx.alarm ? { w: 600 } : {}))
+    return { type: 'Box', props: { key: 'compact-at', position: 'absolute', left, top: 1 },
+      children: [image('compact', { source: doc(w, COMPACT_H, body), alt, width: w, height: COMPACT_H, press: 'compact', hover: true }, false)] }
+  }
+  return { el, cells: left + Math.ceil(COMPACT_W / CELL_PX), iconCells: left + Math.ceil(COMPACT_ICON_W / CELL_PX) }
 }
 
 // ---------- the agents crab: who it dresses as, and what it says ----------
@@ -193,7 +203,7 @@ const agentsColumn = (v: PanelView, w: number): El => {
   return image('mascot', { source: doc(w, COL_H, body, m.animated), alt: `Agents: show them all. ${n} agents, ${m.f.say}`, width: w, height: COL_H, press: 'open' }, true)
 }
 
-// ---------- the toggle and Compact now ----------
+// ---------- the toggle ----------
 const SIZE_ALT = { full: 'Panel: everything. Fold the agents', gauges: 'Panel: agents folded. Show one line', line: 'Panel: one line. Show everything' } as const
 const toggle = (v: PanelView): El => {
   const dot = hasDot(v.ui.size, v.crew)
@@ -383,18 +393,19 @@ const oneLineRow = (v: PanelView): El => {
 // What a column needs to show its label, value and whole so-what, in cells. `claims`: its so-what drops whole clauses, so it
 // may claim spare cells (a cut so-what and the agents column only give theirs away); `warn`: that so-what is a warning.
 // `floor`: the cells for its label, value and first clause, all a column keeps once its whole so-what cannot fit.
-type Need = { cells: number; floor: number; claims: boolean; warn: boolean; priority: number }
+// `head`: the cells for its label and value alone.
+type Need = { cells: number; floor: number; head: number; claims: boolean; warn: boolean; priority: number }
 const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
-  if (!c) return { cells: Infinity, floor: Infinity, claims: false, warn: false, priority }
+  if (!c) return { cells: Infinity, floor: Infinity, head: 0, claims: false, warn: false, priority }
   const x0 = first ? 0 : 12, head = (c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + (c.small ? 4 + widthOf(c.small, 12) : 0)
   const cellsFor = (so: Run[]) => Math.ceil((x0 + 4 + Math.max(widthOf(c.label, 11), head, runsWidth(so, 11))) / CELL_PX)
   const [s, p, wt] = c.so.at(-1)!, cells = cellsFor(c.so)
   const floor = c.whole ? cellsFor([...c.so.slice(0, -1), [s.split(' · ')[0], p, wt]]) : cells
-  return { cells, floor, claims: !!c.whole, warn: c.so.some(([, p]) => p === 'warn' || p === 'er'), priority }
+  return { cells, floor, head: cellsFor([]), claims: !!c.whole, warn: c.so.some(([, p]) => p === 'warn' || p === 'er'), priority }
 }
-// An even share each; then the Compact button's cells, taken even when no column has slack; then the warnings, then the
+// An even share each; then the compact chip's cells, taken even when no column has slack; then the warnings, then the
 // other clause columns left to right, each met whole from spare cells and the most slack, or not at all. With no slack
-// anywhere, the Compact button's cells come from the widest column, one without a warning first, the lowest priority first.
+// anywhere, the compact chip's cells come from the widest column, one without a warning first, the lowest priority first.
 const shareCells = (needs: Need[], avail: number, ctxMin: number) => {
   const w = needs.map(() => Math.floor(avail / needs.length))
   let spare = avail - w.reduce((a, b) => a + b, 0)
@@ -424,16 +435,20 @@ export const panelTree = (v: PanelView): El => {
   const root = (children: El[]): El => ({ type: 'Box', props: { key: 'clawpit-panel', flexDirection: 'column', gap: 1 }, children })
   if (v.ui.size === 'line') return root([oneLineRow(v)])
   const cands = candidates(v.stats, v.crew, v.ui.size, v.busy), keys = fit(cands, maxColumns(v.bodyColumns))
-  // Columns share the row by need; the context column (always first) holds the Compact button when there is one.
+  // Columns share the row by need; the context column (always first) holds the compact chip when there is one,
+  // its icon alone where the whole chip would cost another column its label and value, or a warning its first clause.
   const cells = keys.map(k => (k === 'agents' ? null : cellOf(k, v))), compact = compactOf(v, cells[0]!)
   const needs = keys.map((k, i) => needOf(cells[i], i === 0, cands.find(c => c.key === k)!.priority))
-  if (compact) needs[0].cells = Math.max(needs[0].cells, compact.cells)
-  const widths = shareCells(needs, v.bodyColumns - TOGGLE_CELLS, compact && keys.length > 1 ? compact.cells : 0)
+  const share = (chip: number) => shareCells(needs.map((n, i) => (i ? n : { ...n, cells: Math.max(n.cells, chip) })), v.bodyColumns - TOGGLE_CELLS, keys.length > 1 ? chip : 0)
+  const keeps = (ws: number[]) => ws.map((n, i) => i === 0 || n >= (needs[i].warn ? needs[i].floor : needs[i].head))
+  const whole = share(compact?.cells ?? 0), small = compact ? share(compact.iconCells) : whole
+  const iconOnly = !!compact && keeps(whole).some((kept, i) => !kept && keeps(small)[i])
+  const widths = iconOnly ? small : whole
   const columns = keys.flatMap((k, i): El[] => {
     const n = widths[i], w = n * CELL_PX
     if (k === 'agents') return [{ type: 'Box', props: { key: 'col-agents', width: n }, children: [agentsColumn(v, w)] }]
     const c = cells[i]
-    return c ? [{ type: 'Box', props: { key: `col-${k}`, width: n }, children: [columnImage(k, c, w, i === 0), ...(k === 'context' && compact ? [compact.el] : [])] }] : []
+    return c ? [{ type: 'Box', props: { key: `col-${k}`, width: n }, children: [columnImage(k, c, w, i === 0), ...(k === 'context' && compact ? [compact.el(iconOnly)] : [])] }] : []
   })
   const out: El[] = [{ type: 'Box', props: { key: 'cols', flexDirection: 'row' }, children: [...columns, spacer, toggle(v)] }]
   if (v.ui.size === 'full') {
