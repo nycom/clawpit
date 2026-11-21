@@ -55,7 +55,7 @@ const TIP_MAX = 300
 const withTip = (tip: string, cut: boolean, g: string) => (cut ? `<g><title>${xml(clean(tip, TIP_MAX))}</title>${g}</g>` : g)
 const textOf = (rs: Run[]) => rs.map(r => r[0]).join('')
 const doc = (w: number, h: number, body: string, animated = false) =>
-  svg(n(w), h, `<g style="font-family:${FONT};font-variant-numeric:tabular-nums">${body}</g>`, animated)
+  svg(n(w), h, `<g style="font-family:${xml(FONT)};font-variant-numeric:tabular-nums">${body}</g>`, animated)
 // A crab is a whole <svg> with its own style, nested after the outer style so its classes are not emitted twice.
 const withCrab = (outer: string, crabSvg: string, x: number, y: number) => `${outer.slice(0, -6)}<g transform="translate(${n(x)} ${n(y)})">${crabSvg}</g></svg>`
 const chevron = (x: number, y: number, size: 10 | 12, open: boolean) =>

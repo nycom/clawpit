@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { CrewAgent, PlanTask } from '../types'
 import { image, panelTree, type El } from '../hooks/panel/draw'
-import { contrast, SURFACE, TOKENS } from '../hooks/tokens'
+import { contrast, FONT, SURFACE, TOKENS } from '../hooks/tokens'
 import { NOW, type StateName } from './fixtures/states'
 import { panelLoopCount, viewOf } from './build'
 
@@ -317,6 +317,13 @@ test('panel: every image has an alt and every client is under the size cap', () 
       expect(images(t).every(e => !/NaN|Infinity|undefined/.test(propsOf(e).source + propsOf(e).alt))).toBe(true)
     }
   expect(() => image('big', { source: 'x'.repeat(60_001), alt: 'a', width: 1, height: 1 }, true)).toThrow()
+})
+
+test('panel: every image names the whole font list, its quotes escaped in the attribute', () => {
+  const unescape = (s: string) => s.replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+  const fonts = SHOTS.flatMap(s => images(panelTree(viewOf(s))).flatMap(e => [...propsOf(e).source.matchAll(/<g font-family="([^"]*)"/g)].map(m => unescape(m[1]))))
+  expect(fonts.length).toBeGreaterThan(0)
+  expect(fonts.every(f => f === FONT)).toBe(true)
 })
 
 test('panel: forty agents collapse into a +N more chip on the two chip rows (CHIP_ROWS)', () => {

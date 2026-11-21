@@ -49,7 +49,7 @@ const fitWhole = (s: string, max: number, size: number, w?: Weight) => {
 const runsWidth = (parts: Run[], size: number) => parts.reduce((w, [s, , wt]) => w + widthOf(s, size, wt), 0)
 // A dial's needle settle is an inline animation, so any animated body gets the reduced-motion rule.
 const doc = (w: number, h: number, body: string, animated = false) =>
-  svg(w, h, `<g font-family="${FONT}" style="font-variant-numeric:tabular-nums">${body}</g>`, animated || body.includes('animation:'))
+  svg(w, h, `<g font-family="${xml(FONT)}" style="font-variant-numeric:tabular-nums">${body}</g>`, animated || body.includes('animation:'))
 const at = (x: number, y: number, body: string) => `<g transform="translate(${x} ${y})">${body}</g>`
 
 // ---------- the columns ----------

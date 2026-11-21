@@ -4,7 +4,7 @@ import { paneTree, type El } from '../hooks/pane/draw'
 import { ENGINE_MAX, HOST_MAX } from '../hooks/pane/layout'
 import { pickLoops } from '../hooks/loops'
 import { textWidth } from '../hooks/text'
-import { MONO } from '../hooks/tokens'
+import { FONT, MONO } from '../hooks/tokens'
 import { NOW } from './fixtures/states'
 import { paneLoopCount, paneViewOf } from './build-pane'
 
@@ -506,4 +506,11 @@ test('pane: one smooth reading edge: titles never shrink as the pane widens, hel
   const t = paneTree({ ...v, ui: { ...v.ui, shut: [] } })
   const end = (key: string, x0: number, size: number) => x0 + textWidth(pieces(find(t, key)!).find(([cls]) => cls === 'fg')![1], size, 600)
   expect(Math.abs(end('row-imp', 38 + 10, 13) - end('helper-k2', 50 + 10, 12))).toBeLessThan(12)
+})
+
+test('pane: every image names the whole font list, its quotes escaped in the style attribute', () => {
+  const fonts = (['hydra', 'both', 'manyAgents'] as const).flatMap(s => all(paneTree(paneViewOf(s))).filter(e => e.type === 'Svg' || e.type === 'Client')
+    .flatMap(e => [...src(e).matchAll(/style="font-family:([^"]*?);font-variant/g)].map(m => unescape(m[1]))))
+  expect(fonts.length).toBeGreaterThan(0)
+  expect(fonts.every(f => f === FONT)).toBe(true)
 })
