@@ -1,12 +1,12 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderNode, SessionRateLimit, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
 import type { SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
 import { crewOf } from './model'
 import { pickLoops } from './loops'
 import { nextSize, parseSize, settle } from './panel/fold'
 import { COMPACT_KEY, panelTree, type PanelView } from './panel/draw'
 import type { El } from './draw'
-import type { PaneView } from './pane/draw'
+import { paneTree, type PaneView } from './pane/draw'
 import { emptyFacts, isEdit, linesOf, onThink, onTool } from './track/activity'
 import { diff, type Logs } from './track/steplog'
 import { parseTests } from './track/tests'
@@ -49,11 +49,12 @@ let ticker: Timer | null = null
 let period = 0
 let wake: Timer | null = null
 let booted: Promise<void> | null = null
+let paneAsked = false                           // the pane opened by itself this session
 
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}
-  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null
+  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -121,6 +122,22 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { await retick($) } catch { errors += 1 }
 })())
 
+// The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
+// loads a surface module only from a <Client> written here with a literal path.
+const liveOf = ($: EngineInterface, e: RenderInput, onCompact?: () => void) => {
+  const table = $.ui.resolve(e), { Client } = table
+  const live = (n: El | string): RenderNode => {
+    if (typeof n === 'string') return n
+    const p = n.props ?? {}
+    if (n.type === 'Client') return <Client key={String(p.key)} module="./client/image.tsx" props={p.props} />
+    const tag = (table as unknown as Record<string, (props: never) => RenderNode>)[n.type]
+    return h(tag, n.type === 'Button' && p.key === COMPACT_KEY ? { ...p, onPress: onCompact } : p, ...(n.children ?? []).map(live)) as RenderNode
+  }
+  return live
+}
+
+const openPane = ($: EngineInterface) => $.ui.open({ id: PANE_ID, title: 'Agents' })
+
 // Plain Box and Text data, so it cannot fail the way the drawing did.
 const failedLine = (kind: string): RenderElement => ({
   type: 'Box', props: { key: 'clawpit-failed', flexDirection: 'column' },
@@ -171,6 +188,8 @@ export const register: Register = on => {
         if (e.parentAgentId) parents = { ...parents, [id]: e.parentAgentId }
         spawns[id] = { type: e.subagentType, model: out.model, description: e.description }
         if (e.resume) recorded.add(id)
+        // Once per session, on its first agent, and only where clawpit draws the pane; after that only the open press.
+        if (!paneAsked && (await read($, takeover)) === true) { paneAsked = true; await openPane($) }
       }
     } catch { errors += 1 }
     return out
@@ -249,26 +268,35 @@ export const register: Register = on => {
   // shortcut: vscode and mobile pass through like the terminal (savvy still draws there, takeover is desktop-only).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
-    const table = $.ui.resolve(e), { Client } = table
     const compact = () => { void $.command.run({ command: 'compact' }).catch(() => { errors += 1 }) }
-    // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
-    // loads a surface module only from a <Client> written here with a literal path.
-    const live = (n: El | string): RenderNode => {
-      if (typeof n === 'string') return n
-      const p = n.props ?? {}
-      if (n.type === 'Client') return <Client key={String(p.key)} module="./client/image.tsx" props={p.props} />
-      const tag = (table as unknown as Record<string, (props: never) => RenderNode>)[n.type]
-      return h(tag, n.type === 'Button' && p.key === COMPACT_KEY ? { ...p, onPress: compact } : p, ...(n.children ?? []).map(live)) as RenderNode
-    }
-    return live(panelTree((await view($, e.props.bodyColumns)).panel))
+    return liveOf($, e, compact)(panelTree((await view($, e.props.bodyColumns)).panel))
   }).catch((_$, _e, next) => { errors += 1; return failedLine(next.error.kind) })
+
+  // shortcut: vscode and mobile pass through like the terminal, as the panel does.
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
+    if (e.surface !== 'desktop') return next(e)
+    return liveOf($, e)(paneTree((await view($, e.props.bodyColumns)).pane))
+  }).catch((_$, _e, next) => { errors += 1; return failedLine(next.error.kind) })
+
+  // paneOpen follows the pane itself. clawpit never closes it: the desktop leaves an emptied tile as a tab no one can close.
+  on('ui.open', { id: PANE_ID }, async ($, e, next) => {
+    const out = await next(e)
+    try { if (out.value) await update($, ui, u => ({ ...u, paneOpen: true })) } catch { errors += 1 }
+    return out
+  })
+
+  on('ui.close', { id: PANE_ID }, async ($, e, next) => {
+    const out = await next(e)
+    try { await update($, ui, u => ({ ...u, paneOpen: false })) } catch { errors += 1 }
+    return out
+  })
 
   on('ui.message', async ($, e) => {
     try {
       const press = (e.data as { press?: unknown } | null)?.press
       if (typeof press !== 'string') return {}
       if (press === 'size') await $.store.set('size', (await update($, ui, u => ({ ...u, size: nextSize(u.size) }))).size)
-      else if (press === 'open') await $.ui.open({ id: PANE_ID, title: 'Agents' })
+      else if (press === 'open') await openPane($)
       else if (press === 'ended') await update($, ui, u => ({ ...u, shut: toggle(u.shut, 'ended') }))
       else if (press.startsWith('row:') && press.length > 4) { const id = press.slice(4); await update($, ui, u => ({ ...u, open: u.open === id ? null : id })) }
       else if (press.startsWith('kids:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, shut: toggle(u.shut, id) })) }
