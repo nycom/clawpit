@@ -133,7 +133,7 @@ const columnImage = (key: ColumnKey, c: Cell, w: number, first: boolean): El => 
 
 // ---------- the agents crab: who it dresses as, and what it says ----------
 type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean }
-// The top-level agents, then their helpers: a helper that waits on you or failed is an alert too.
+// The top-level agents, then their helpers: a helper that waits on you or failed still dresses the crab.
 const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(a => a.helpers)]
 const nextUp = (agents: CrewAgent[]) => {
   const left = agents.filter(a => a.state === 'running' && a.eta.kind === 'left')
@@ -269,7 +269,8 @@ const chipRows = (v: PanelView, W: number): El | null => {
   if (!crew.agents.length) return null
   // The alert chips share one row: as many as keep ALERT_MIN px each; the rest count into '+N more'.
   const fitAlerts = Math.max(1, Math.floor((W - 2 * CHIP_PAD + CHIP_GAP) / (ALERT_MIN + CHIP_GAP)))
-  const pool = withHelpers(crew.agents), allAlerts = [...pool.filter(a => a.state === 'need'), ...pool.filter(a => a.state === 'failed')], alerts = allAlerts.slice(0, fitAlerts), rest = crew.agents.filter(a => !isAlert(a))
+  // Need first, a helper that waits on you included; a failed helper gets no chip, only the crab and the dot.
+  const allAlerts = [...withHelpers(crew.agents).filter(a => a.state === 'need'), ...crew.agents.filter(a => a.state === 'failed')], alerts = allAlerts.slice(0, fitAlerts), rest = crew.agents.filter(a => !isAlert(a))
   const pulses = (a: CrewAgent) => loops.chipPulse && (a.state === 'need' || v.armed)
   const items: { el: El; agents: number }[] = []
   if (alerts.length) {
