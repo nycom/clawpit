@@ -382,12 +382,15 @@ const oneLineRow = (v: PanelView): El => {
 // ---------- the column widths ----------
 // What a column needs to show its label, value and whole so-what, in cells. `claims`: its so-what drops whole clauses, so it
 // may claim spare cells (a cut so-what and the agents column only give theirs away); `warn`: that so-what is a warning.
-type Need = { cells: number; claims: boolean; warn: boolean; priority: number }
+// `floor`: the cells for its label, value and first clause, all a column keeps once its whole so-what cannot fit.
+type Need = { cells: number; floor: number; claims: boolean; warn: boolean; priority: number }
 const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
-  if (!c) return { cells: Infinity, claims: false, warn: false, priority }
+  if (!c) return { cells: Infinity, floor: Infinity, claims: false, warn: false, priority }
   const x0 = first ? 0 : 12, head = (c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + (c.small ? 4 + widthOf(c.small, 12) : 0)
-  const px = Math.max(widthOf(c.label, 11), head, runsWidth(c.so, 11))
-  return { cells: Math.ceil((x0 + 4 + px) / CELL_PX), claims: !!c.whole, warn: c.so.some(([, p]) => p === 'warn' || p === 'er'), priority }
+  const cellsFor = (so: Run[]) => Math.ceil((x0 + 4 + Math.max(widthOf(c.label, 11), head, runsWidth(so, 11))) / CELL_PX)
+  const [s, p, wt] = c.so.at(-1)!, cells = cellsFor(c.so)
+  const floor = c.whole ? cellsFor([...c.so.slice(0, -1), [s.split(' · ')[0], p, wt]]) : cells
+  return { cells, floor, claims: !!c.whole, warn: c.so.some(([, p]) => p === 'warn' || p === 'er'), priority }
 }
 // An even share each; then the Compact button's cells, taken even when no column has slack; then the warnings, then the
 // other clause columns left to right, each met whole from spare cells and the most slack, or not at all. With no slack
@@ -395,7 +398,8 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
 const shareCells = (needs: Need[], avail: number, ctxMin: number) => {
   const w = needs.map(() => Math.floor(avail / needs.length))
   let spare = avail - w.reduce((a, b) => a + b, 0)
-  const slack = (j: number) => Math.max(0, w[j] - needs[j].cells)
+  // A column short of its whole need drops a clause anyway, so all above its floor is slack.
+  const slack = (j: number) => Math.max(0, w[j] - (w[j] >= needs[j].cells ? needs[j].cells : needs[j].floor))
   const take = (i: number, n: number) => {
     for (; n > 0; n--) {
       const j = spare ? -1 : needs.map((_, j) => j).filter(j => j !== i)

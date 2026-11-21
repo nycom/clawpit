@@ -200,12 +200,18 @@ test('panel: the folded alert line keeps " needs you" and " failed" whole and cu
 
 test('panel: a two-clause so-what drops whole clauses right to left, never cutting a number', () => {
   const v = viewOf('hydra'), soOf = (t: El, key: string) => lastText(sourceOf(t, key))
-  // At 60 cells no column has a cell to spare, so the long clause cannot claim one.
+  // At 60 cells the turn column drops its cost clause anyway, so the long clause claims the cells above the turn's floor.
   const ctx = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789 } } }))
-  expect(soOf(ctx, 'col-context')).toBe('~123456789 turns')
+  expect(soOf(ctx, 'col-context')).toBe('~123456789 turns · 34% msgs')
+  expect(soOf(ctx, 'col-turn')).toBe('+38 −6')
+  // Past those cells the long clause cannot claim, so it goes whole.
+  const ctxWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789_012 } } }))
+  expect(soOf(ctxWide, 'col-context')).toBe('~123456789012 turns')
   const ses = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
+  expect(soOf(ses, 'col-session')).toBe('last turn $123456789')
   // One clause that does not fit goes whole: never 'last turn $12…' nor 'last turn…'.
-  expect(soOf(ses, 'col-session')).toBe('')
+  const sesWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789_012_345 } } }))
+  expect(soOf(sesWide, 'col-session')).toBe('')
   const turn = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, turn: { ...v.stats.turn!, costUsd: 123_456.78 } } }))
   expect(soOf(turn, 'col-turn')).toBe('+38 −6')
   const whole = ['~7 turns · 34% msgs', '~7 turns', 'auto-compacts at 97%', 'last turn $2.46', 'on pace for 58%', 'on pace for 131%', '+38 −6 · ≈$0.42', '+38 −6', '']
@@ -213,6 +219,13 @@ test('panel: a two-clause so-what drops whole clauses right to left, never cutti
     const t = panelTree(viewOf(s, { bodyColumns }))
     for (const k of ['col-context', 'col-turn', 'col-session', 'col-5h', 'col-7d']) if (find(t, k)) expect([k, whole.includes(soOf(t, k))]).toEqual([k, true])
   }
+})
+
+test('panel: a column that drops a clause anyway gives up the cells above its floor', () => {
+  const t = panelTree(viewOf('context90', { bodyColumns: 60 })), soOf = (key: string) => lastText(sourceOf(t, key))
+  expect(soOf('col-7d')).toBe('on pace for 131%')
+  expect(soOf('col-session')).toBe('last turn $2.46')
+  expect(cols(t).map(k => find(t, k)!.props!.width as number).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(56)
 })
 
 test('panel: the failed chip pulses only while armed', () => {
