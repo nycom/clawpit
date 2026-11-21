@@ -133,8 +133,7 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 .drawer>div{overflow:hidden}
 .drawer.on{grid-template-rows:1fr}
 .log{margin:6px 0 12px 48px;padding:2px 0 2px 12px;border-left:1.5px solid var(--tr)}
-.li{display:grid;grid-template-columns:minmax(0,1fr) 38px;column-gap:10px;font-size:12px;line-height:17px;padding:3px 0;opacity:0;transform:translateY(-3px)}
-.on .li{animation:in .3s cubic-bezier(.2,.8,.2,1) forwards}
+.li{display:grid;grid-template-columns:minmax(0,1fr) 38px;column-gap:10px;font-size:12px;line-height:17px;padding:3px 0}
 .li .ago{text-align:right;font-size:11px;color:var(--mu);font-variant-numeric:tabular-nums}
 .li.hot span:first-child{color:var(--fg)}
 .li.old span:first-child{color:var(--mu)}
@@ -247,8 +246,8 @@ function icon(mode,dot,c){const line=mode==='line',full=mode==='full';
 
 /* ---------- ALIGN D1: ONE dataset feeds the panel and the pane (the two mockups disagreed on agents, names, counts and time left) ---------- */
 const seed=()=>[
- {id:'e2e',t:'e2e tests',role:'test',m:'Haiku 5.5',prop:'wait',q:'Postgres or SQLite for the fixture?',wait:'0:42',n:2,N:4,ctx:62,cost:'0.07',us:'4m',task:4,log:[['Asked: Postgres or SQLite for the fixture?','42s'],['Seeded the fixture data.','2m'],['Wrote the login flow test.','3m']]},
- {id:'imp',t:'savvy-progress implement',role:'implement',m:'Sonnet 5.5',prop:'write',act:'Editing',tgt:'hooks/register.tsx',eta:2,n:3,N:5,ctx:38,cost:'0.31',us:'6m',walk:1,task:3,log:[['Wired the fold to isWorking. Writing the test next.','12s'],['Read band render and the mainTurn atom.','2m'],['Started on the twinkle gate.','4m']]},
+ {id:'e2e',t:'e2e tests',role:'test',m:'Haiku 5.5',prop:'wait',q:'Postgres or SQLite for the fixture?',wait:'0:42',n:2,N:4,ctx:62,cost:'0.07',us:'4m',task:4,log:[['Asked: Postgres or SQLite for the fixture?','<1m'],['Seeded the fixture data.','2m'],['Wrote the login flow test.','3m']]},
+ {id:'imp',t:'savvy-progress implement',role:'implement',m:'Sonnet 5.5',prop:'write',act:'Editing',tgt:'hooks/register.tsx',eta:2,n:3,N:5,ctx:38,cost:'0.31',us:'6m',walk:1,task:3,log:[['Wired the fold to isWorking. Writing the test next.','<1m'],['Read band render and the mainTurn atom.','2m'],['Started on the twinkle gate.','4m']]},
  {id:'rev',t:'cache-tax review c1',role:'review',m:'Opus 5.5',prop:'search',act:'Searching',tgt:'"UNATTENDED" in hooks/',eta:4,slow:1,n:1,N:4,ctx:21,cost:'0.18',us:'7m',walk:1,task:5,log:[['Searching for UNATTENDED across hooks/.','1m'],['Opened the cache-tax diff.','3m']],kids:[
   {id:'k1',t:'find callers of guard',role:'explore',prop:'read',act:'Reading',tgt:'types/index.d.ts',eta:0,n:2,N:3,walk:1},
   {id:'k2',t:'map the cache keys',role:'explore',prop:'search',act:'Searching',tgt:'"cacheKey" in src/',eta:1,n:1,N:3}]},
@@ -258,7 +257,7 @@ const A=seed(),ENDED=[{t:'docs pass',role:'explore',took:'1:05'}];
    ended failed = status 'failed' (prop 'fail', held until the next prompt); struggling = still running with failedAttempts >= 3 (tries). */
 const STATE=new URLSearchParams(location.search).get('state')||'',FAILED=STATE==='failed'||STATE==='both';
 if(FAILED){
- Object.assign(A[0],{prop:'fail',q:'',took:'2:10',tries:3,why:'Could not reach Postgres on :5432',err:'connect ECONNREFUSED 127.0.0.1:5432',log:[['Failed at step 3 of 4: run the login flow test','40s'],['Try 3 failed: still refused.','40s'],['Try 2 failed: restarted the container.','1m'],['Try 1 failed: connection refused.','1m'],['Seeded the fixture data.','2m']]});
+ Object.assign(A[0],{prop:'fail',q:'',took:'2:10',tries:3,why:'Could not reach Postgres on :5432',err:'connect ECONNREFUSED 127.0.0.1:5432',log:[['Failed at step 3 of 4: run the login flow test','<1m'],['Try 3 failed: still refused.','<1m'],['Try 2 failed: restarted the container.','1m'],['Try 1 failed: connection refused.','1m'],['Seeded the fixture data.','2m']]});
  Object.assign(A[2],{tries:3,slow:0,act:'Retrying',tgt:'the diff against main',log:[['Try 3 failed: 2 hunks still rejected.','20s'],['Helper "map the cache keys" failed after 0:48: no "cacheKey" in src/.','50s'],['Try 2 failed: rebased, same hunks.','1m'],['Try 1 failed: the diff does not apply.','2m'],['Opened the cache-tax diff.','3m']]});
  Object.assign(A[2].kids[1],{prop:'fail',walk:0,why:'no "cacheKey" in src/'});
  if(STATE==='both')Object.assign(A[3],{prop:'wait',q:'Ship the release notes in this PR, or after it?',wait:'0:18'})}
@@ -325,7 +324,7 @@ function row(a,c,w,kid){const wait=a.prop==='wait',fail=a.prop==='fail',al=wait|
  /* ALIGN A1: "slower" is now a word in the row, as on the chip; amber alone carried it before */
  const note=hard(a)?`<span style="color:${c.wa}">${a.tries} failed tries · </span>`:a.slow?`<span style="color:${c.wa}">slower · </span>`:'';
  return `<div style="position:relative">${wait||(fail&&w.beat)?'<span class="ring"></span>':''}<div class="row${al?' need':''}" role="button" tabindex="0" aria-expanded="${!!w.open[a.id]}" data-act="row" data-id="${a.id}"><div>${crab(a.role,a.prop,a.walk,c,M)}</div><div style="min-width:0"><div class="b el">${a.t}</div><div class="sub ${al?'ask':'el'}"><span class="role" style="color:${tc}">${a.role.toUpperCase()}</span> ${al?`<span style="color:${c.er};font-weight:600">${wait?a.q:a.why}</span>`:`${note}<b>${a.act}</b> <span class="m">${a.tgt}</span>`}</div></div><div class="rd">${rd}${blocks(a,col)}</div>${ICON.chev}</div></div>`}
-function drawer(a,w){const n=a.log.length;return `<div class="drawer${w.open[a.id]?' on':''}"><div><div class="log">${a.log.map((l,i)=>`<div class="li ${i===0?'hot':'old'}${a.err&&i===0?' bad':''}" style="animation-delay:${i*55}ms"><span>${l[0]}${a.err&&i===0?`<code class="errl">${a.err}</code>`:''}</span><span class="ago">${l[1]}</span></div>`).join('')}<div class="li" style="animation-delay:${n*55}ms;grid-template-columns:1fr"><div class="foot"><span>steps <b class="tn">${a.n}/${a.N}</b></span>${a.tries?`<span>tries <b class="tn">${a.tries}</b></span>`:''}<span>context <b class="tn">${a.ctx}%</b></span><span>cost <b class="tn">≈$${a.cost}</b></span>${a.prop==='fail'?`<span>ran <b class="tn">${a.took}</b></span>`:''}<span>usually <b>${a.us}</b></span></div></div></div></div></div>`}
+function drawer(a,w){const n=a.log.length;return `<div class="drawer${w.open[a.id]?' on':''}"><div><div class="log">${a.log.map((l,i)=>`<div class="li ${i===0?'hot':'old'}${a.err&&i===0?' bad':''}"><span>${l[0]}${a.err&&i===0?`<code class="errl">${a.err}</code>`:''}</span><span class="ago">${l[1]}</span></div>`).join('')}<div class="li" style="grid-template-columns:1fr"><div class="foot"><span>steps <b class="tn">${a.n}/${a.N}</b></span>${a.tries?`<span>tries <b class="tn">${a.tries}</b></span>`:''}<span>context <b class="tn">${a.ctx}%</b></span><span>cost <b class="tn">≈$${a.cost}</b></span>${a.prop==='fail'?`<span>ran <b class="tn">${a.took}</b></span>`:''}<span>usually <b>${a.us}</b></span></div></div></div></div></div>`}
 const ended=(e,c)=>`<div class="end">${crab(e.role,e.fail?'fail':'done',0,c,S)}<span class="el">${e.t}</span>${e.fail?`<span class="no tn">${ICON.cross}failed after ${e.took}</span>`:`<span class="ok tn">${ICON.check}${e.took}</span>`}</div>`;
 /* ALIGN F11: sections follow the costume order: Needs you, Failed, Running, Ended. Struggling agents lead Running. */
 function pane(c,w){const need=A.filter(a=>a.prop==='wait'),bad=A.filter(a=>a.prop==='fail'),run=A.filter(a=>!alertOf(a)).sort((x,y)=>hard(y)-hard(x)),order=[...need,...bad,...run];

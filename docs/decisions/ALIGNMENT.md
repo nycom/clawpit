@@ -216,7 +216,7 @@ Red stays reserved for "it is over" and "it is blocked on you". A struggling age
 | Folded agents column, one-line size | Dizzy crab (M in the column, S on the line), red count badge, "e2e tests failed" in `er` 600. The toggle carries its red dot. While armed the crab staggers 2px sideways on the beat | Costume order gains one step: needs you, failed, **struggling**, finishing next. The crab keeps its tool and walks; the line reads "cache-tax review c1 · 3 failed tries" in `warn` |
 | Ended row (after the next prompt) | 30px row: dizzy crab S, name, then the cross icon and "failed after 2:10" in `er` | n/a |
 
-Wording: "failed after m:ss" is a stopped clock, so m:ss. Log ages stay Ns or Nm. Every failed mark carries the word "failed", or the cross icon next to a name; none is colour alone. Bar segments get it from their `aria-label` and from the summary line under them.
+Wording: "failed after m:ss" is a stopped clock, so m:ss. Log ages read `<1m` or `Nm`, per LOCKED "Build decisions: decided 2026-11-21". Every failed mark carries the word "failed", or the cross icon next to a name; none is colour alone. Bar segments get it from their `aria-label` and from the summary line under them.
 
 ### Pulse and timer
 

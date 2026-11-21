@@ -20,7 +20,7 @@
 - One needs-you beat: 1.2 s `steps(2)`. Walk: 0.5 s `steps(1)`. One-shots: 150 ms hover, 300 ms reveal, 600 ms bar fill, 900 ms needle settle, curve `cubic-bezier(.2,.8,.2,1)`.
 - Every animated image ends its style with `@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}`.
 - SVG icons, no glyphs as icons. Weights 400 and 600 only; 700 for 10px micro labels. Numbers tabular.
-- Wording: an estimate is `~Nm left` or `<1m left`; a running clock is `m:ss`; an age is `Ns` or `Nm`; a stopped clock is `after m:ss`.
+- Wording: an estimate is `~Nm left` or `<1m left`; a running clock is `m:ss`; an age is `<1m` or `Nm`; a stopped clock is `after m:ss`.
 - "Compact now" is a Button and is never `dimColor`.
 - Every module under `plugin/hooks/` except `register.tsx` and `client/image.tsx` is pure: no `$`, no `h`, no value import from `claude-code`; drawings are plain `{ type, props, children }` objects.
 - Every outside string passes `oneLine` before it is stored and `clip` and `xml` when drawn.
