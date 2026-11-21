@@ -5,7 +5,7 @@
 **Design:** "Roster with a log", polished. The mockup is `agents-pane-roster.html`. Rules:
 
 - **Sections:** Needs you, then Failed, then Running, then Ended (folds away). See "Failed state" below.
-- **Rows:** every row uses the same four columns: crab (38px), title plus role tag and activity, a fixed 88px reading column (time left over step blocks), then a chevron.
+- **Rows:** every row uses the same four columns: crab (38px), title plus role tag and activity, an 88px reading column (time left over step blocks; narrower in a narrow pane, updated 2026-11-21 by "Narrow pane"), then a chevron.
 - **Needs-you row:** 62px tall, so the question wraps to two lines and is never cut off. It carries a soft red ring pulse.
 - **Log drawer:** a click opens it. Entries are newest first and stagger in; a footer shows steps, context, cost, and the usual time.
 - **Helpers:** nested under their parent on a tree line, with a "N helpers" toggle.
@@ -74,7 +74,7 @@ Design: `ALIGNMENT.md`, "Failed state"; mockup `mockups-all.html?state=failed`.
 ## Build decisions: decided 2026-11-21
 Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Log drawer:** one image holds the lines and their ages; ages read in whole minutes ("<1m", "3m"), as the waiting age does. The drawer opens still. When a line arrives, only that line fades in from the right (300 ms, 100 ms late) while the lines below slide down one row; nothing else moves. The image changes only when a line arrives or an age crosses a minute, so nothing replays on the clock. Reduced motion: no movement. This replaces the drawer's open reveal and "entries stagger in" above.
-- **A helper that waits on you** needs you: it counts in "N needs you", its row is tinted and reads "waiting Nm" with its question, and a folded helpers toggle reads "N helpers · M needs you" in `er`, so an alert always points at something visible. It stays under its parent; the ring stays on top-level rows.
+- **A helper that waits on you** needs you: it counts in "N needs you", its row is tinted and reads "waiting Nm" (only the age where its title would not fit beside it, narrowed 2026-11-21 by "Narrow pane") with its question, and a folded helpers toggle reads "N helpers · M needs you" in `er`, so an alert always points at something visible. It stays under its parent; the ring stays on top-level rows.
 - **A helper that failed** gets no chip of its own in the panel's chip row: only a helper that waits on you does. A failed helper still dresses the folded crab, lights the toggle's red dot and is named in its alt text, and shows in the pane under its parent.
 - **Crew bar:** a helper that waits on you gets a red segment of its own, after the top-level needs-you ones, so the bar adds up to the summary's counts.
 - **Ages, everywhere:** whole minutes, "<1m" or "Nm" (the drawer, the waiting age, the tests column's "<1m ago"). This replaces ALIGNMENT W2's "Ns".
@@ -112,3 +112,4 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Stable column order:** context, 5h, 7d, tokens, session, then this turn, tests, agent, reuse, callers, with the folded plan and agents last. The core five keep their slots over every extra and drop from the right when narrow; extras fill what is left. Decided 2026-11-21.
 - **Compact chip:** from 50% context a drawn chip right of the value: a squeeze icon and the word "compact", 10 cells (measured), on the wash; the icon takes the dial's tone, and in alarm the word turns er 600 on needTint. Its own press runs /compact once. Icon only where the column is narrow. Replaces the native Button, which the desktop draws too large. Decided 2026-11-21.
 - **First column inset:** the first column draws 4 units in from the band's left edge, so the context dial does not touch it. Decided 2026-11-21.
+- **Narrow pane:** running rows share one reading edge sized to the widest reading text in view (88 at most), alert rows size their own; where an alert row's title would not fit beside "waiting Nm" it shows only the age ("<1m"), the alt keeps the words. A run never shows as a lone "…", it drops instead. Decided 2026-11-21.

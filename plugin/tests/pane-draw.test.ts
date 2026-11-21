@@ -267,8 +267,8 @@ test('pane: a cut fragment under 8 characters is dropped, never a bare ellipsis;
     if (s === 'failed') expect(words(find(t, 'row-rev'))).toMatch(/3 failed tr/)
   }
   expect(short).toEqual([])
-  // At 40 columns only a few letters of the verb fit after the note: they go, with the separator before them.
-  expect(src(find(paneTree(paneViewOf('failed', { columns: 40 })), 'row-rev'))).toMatch(/<tspan class="warn">3 failed tries<\/tspan><\/text>/)
+  // At 41 columns only a few letters of the verb fit after the note: they go, with the separator before them.
+  expect(src(find(paneTree(paneViewOf('failed', { columns: 41 })), 'row-rev'))).toMatch(/<tspan class="warn">3 failed tries<\/tspan><\/text>/)
 })
 
 test('pane: a reading column with no estimate reads the clock and a muted so far', () => {
@@ -388,4 +388,48 @@ test('pane: the cost list says how many turns it shows', () => {
   expect(src(list)).toMatch(/class="muted" font-size="12" font-weight="600">Last 20 turns</)
   expect(w.indexOf('44 turns')).toBeLessThan(w.indexOf('Last 20 turns')); expect(w.indexOf('Last 20 turns')).toBeLessThan(w.indexOf('turn 44'))
   expect(words(costList([0.42, 12.40], 10))).toContain('Last 2 turns'); expect(words(costList([0.42], 1))).toContain('Last 1 turn turn 1')
+})
+
+// The pane width the app gives, measured in the app.
+const APP_COLUMNS = 29
+const titled = (s: Parameters<typeof paneViewOf>[0], id: string, title: string, columns = APP_COLUMNS) =>
+  withAgents(paneViewOf(s, { columns }), a => a.map(x => (x.id === id ? { ...x, title } : x)))
+const texts = (e: El) => pieces(e).map(([, p]) => p)
+
+test('pane: at the width the app gives, row titles keep their words', () => {
+  expect(texts(find(paneTree(titled('hydra', 'imp', 'Fixture runner')), 'row-imp')!)).toContain('Fixture runner')
+  // Alert rows size their own reading column, so a needs-you row does not narrow the running rows.
+  expect(texts(find(paneTree(titled('needsYou', 'imp', 'Fixture runner')), 'row-imp')!)).toContain('Fixture runner')
+  const need = find(paneTree(titled('needsYou', 'e2e', 'Fixture needs you')), 'row-e2e')!
+  expect(texts(need)).toContain('Fixture needs you'); expect(texts(need)).toContain('<1m'); expect(words(need)).not.toContain('waiting')
+  expect(String(inner(need).alt)).toContain('waiting <1m')
+  const failed = find(paneTree(titled('failed', 'e2e', 'Fixture that failed')), 'row-e2e')!
+  expect(texts(failed)).toContain('Fixture that failed'); expect(texts(failed)).toContain('failed'); expect(words(failed)).not.toContain('after 2:10')
+  expect(String(inner(failed).alt)).toContain('failed after 2:10')
+  // Where the title fits, the row keeps its words.
+  expect(words(find(paneTree(titled('needsYou', 'e2e', 'Fixture needs you', 52)), 'row-e2e')!)).toContain('waiting <1m')
+  expect(words(find(paneTree(titled('failed', 'e2e', 'Fixture that failed', 52)), 'row-e2e')!)).toContain('after 2:10')
+})
+
+test('pane: running rows share one reading-column edge, sized to the widest reading in view', () => {
+  const long = 'Fixture runner for the login flow'
+  const v = withAgents(paneViewOf('hydra', { columns: APP_COLUMNS }), a => a.map(x => (x.id === 'imp' ? { ...x, title: long }
+    : x.id === 'e2e' ? { ...x, title: long, eta: { kind: 'none' as const } } : x)))
+  const t = paneTree(v), title = (id: string) => texts(find(t, `row-${id}`)!)[0]
+  // e2e's "3:30 so far" is the widest reading: imp's title gets no more room than e2e's.
+  expect(title('imp')).toBe(title('e2e')); expect(title('imp').startsWith('Fixture run')).toBe(true)
+})
+
+test('pane: no text is ever a lone ellipsis, at 28 to 64 cells', () => {
+  const bare: string[] = []
+  for (const s of [...VIEWS, 'helpers', 'helperNeedsYou', 'nestedHelper'] as const) for (let columns = 28; columns <= 64; columns++) {
+    for (const v of [paneViewOf(s, { columns }), titled(s, 'e2e', 'Fixture needs you', columns)]) {
+      const t = paneTree({ ...v, ui: { ...v.ui, shut: [] } })
+      for (const e of all(t).filter(x => x.type === 'Svg' || x.type === 'Client')) for (const [, p] of pieces(e))
+        if (p.endsWith('…') && [...p.slice(0, -1).trim()].length < 8) bare.push(`${s} ${columns}: ${JSON.stringify(p)}`)
+    }
+  }
+  expect(bare).toEqual([])
+  // A dropped second line hands its ellipsis back: a cut reason never reads as one whole word.
+  expect(texts(find(paneTree(paneViewOf('failed', { columns: APP_COLUMNS })), 'row-e2e')!)).not.toContain('Could')
 })
