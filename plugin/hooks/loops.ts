@@ -1,7 +1,7 @@
 import type { Crew, CrewAgent, LoopPlan, Mascot, Ui } from '../types'
 import { alertsOf, helpersOf } from './model'
 
-export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 8 }
+export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 12 }
 
 const newestFirst = (a: CrewAgent, b: CrewAgent) => b.startedAt - a.startedAt
 const waited = (a: CrewAgent) => a.waitingSince ?? a.startedAt
