@@ -4,7 +4,7 @@
 
 **Design:** "Roster with a log", polished. The mockup is `agents-pane-roster.html`. Rules:
 
-- **Sections:** Needs you, then Running, then Ended (folds away).
+- **Sections:** Needs you, then Failed, then Running, then Ended (folds away). See "Failed state" below.
 - **Rows:** every row uses the same four columns: crab (38px), title plus role tag and activity, a fixed 88px reading column (time left over step blocks), then a chevron.
 - **Needs-you row:** 62px tall, so the question wraps to two lines and is never cut off. It carries a soft red ring pulse.
 - **Log drawer:** a click opens it. Entries are newest first and stagger in; a footer shows steps, context, cost, and the usual time.
@@ -62,3 +62,10 @@ The maintainer chose **upstream + skins patch**. See `FILETREE-DECISION.md` for 
 - The panel and the Agents pane use **fixed app colours**: the mockups' contrast-checked tokens, final values in `ALIGNMENT.md`. They do not follow the active skin.
 - skins keeps styling the transcript rows only. **No new app-wide skin.**
 - The filetree skins theme-sync patch is **skipped for now**. Upstream filetree uses the app's own colours.
+
+## Failed state: decided 2026-11-21
+Design: `ALIGNMENT.md`, "Failed state"; mockup `mockups-all.html?state=failed`.
+- **Pane row stays still** (option A). Only the panel chip and the folded crab pulse, under the 10-minute idle cap.
+- **Struggling** (still running, 3+ failed tries) is amber words, "N failed tries", in the "slower" slot. Red is kept for failed or needs you. Costume order: needs you, then failed, then struggling, then finishing next.
+- **Sections:** Needs you, then Failed, then Running, then Ended. A failed run moves to Ended after the next prompt.
+- **Failure reason:** workers send a reason and an error line through savvy's step tool. The build plan adds the fields and the brief line. Re-arming stays as the data allows (a turn that starts without a prompt).
