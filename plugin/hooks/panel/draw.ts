@@ -64,10 +64,10 @@ const contextTone = (stats: Stats) => { const c = stats.context; return !c ? 'ac
 const pctOf = (n: number) => `${Math.round(n)}%`
 const contextDial = (v: PanelView, small = false) => {
   const c = v.stats.context
-  return dial(c?.pct ?? 0, contextTone(v.stats), { small, settle: v.settles.context, base: c && c.msgsPct !== null ? Math.max(0, c.pct - c.msgsPct) : 0 })
+  return dial(c?.pct ?? 0, contextTone(v.stats), { small, settle: v.settles.context, now: v.now, base: c && c.msgsPct !== null ? Math.max(0, c.pct - c.msgsPct) : 0 })
 }
 const limitDial = (v: PanelView, key: '5h' | '7d', l: LimitStat, small = false) =>
-  dial(l.pct, limitTone(l), { small, settle: v.settles[key], ghost: l.pacePct ?? undefined })
+  dial(l.pct, limitTone(l), { small, settle: v.settles[key], now: v.now, ghost: l.pacePct ?? undefined })
 const planSegs = (plan: Plan) => plan.tasks.map(({ state, role, fill }) => ({ state, role, fill }))
 // Finished figures are exact, as in the mockup ('$267', 'last turn $2.46'); only the running turn's cost is '≈'.
 const usd = (n: number | null) => (n === null ? '—' : fmtCost(n).replace('≈', ''))

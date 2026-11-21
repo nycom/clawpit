@@ -28,14 +28,16 @@ const arc = (p0: number, p1: number, cls: string, op = 1) =>
 const deg = (p: number) => n((180 * p) / 100)
 
 // A 34x22 half dial (x.75 when small). `base` is the grey base arc of the context dial, up to that percent.
-export const dial = (pct: number, tone: 'accent' | 'warn' | 'er', opts: { ghost?: number; small?: boolean; settle?: Settle; base?: number } = {}): string => {
+// `now` lets a redraw mid-sweep continue the sweep rather than restart it.
+export const dial = (pct: number, tone: 'accent' | 'warn' | 'er', opts: { ghost?: number; small?: boolean; settle?: Settle; base?: number; now?: number } = {}): string => {
   const p = Math.min(100, Math.max(0, Number.isFinite(pct) ? pct : 0)), base = opts.base ?? 0
   // The ghost is rounded to half a percent and a still settle draws no animation, so the image only changes when
   // something moved: a source that differs every tick remounts an animated image in the app (2026-11-21).
   const ghost = opts.ghost == null ? '' : `<g transform="rotate(${deg(Math.round(opts.ghost * 2) / 2)} ${CX} ${CY})"><line x1="${CX}" y1="${CY}" x2="${CX - R + 3}" y2="${CY}" class="s-muted" stroke-width="1.6" stroke-dasharray="2 1.6"/></g>`
   const s = opts.settle && deg(opts.settle.from) !== deg(opts.settle.to) ? opts.settle : undefined
   const kfName = s ? `nd${deg(s.from)}-${deg(s.to)}`.replace(/\./g, 'p') : '' // a dot is not valid in a CSS identifier
-  const anim = s ? `;animation:${kfName} ${MOTION.settleMs}ms ${MOTION.curve}` : ''
+  const elapsed = s && opts.now != null ? Math.max(0, Math.round(opts.now - s.at)) : 0
+  const anim = s ? `;animation:${kfName} ${MOTION.settleMs}ms ${MOTION.curve}${elapsed ? ` -${elapsed}ms` : ''}` : ''
   const kf = s ? `<style>@keyframes ${kfName}{from{transform:rotate(${deg(s.from)}deg)}to{transform:rotate(${deg(s.to)}deg)}}</style>` : ''
   const needle = `<g style="transform-origin:${CX}px ${CY}px;transform:rotate(${deg(p)}deg)${anim}"><line x1="${CX}" y1="${CY}" x2="${CX - R + 4}" y2="${CY}" class="s-fg" stroke-width="1.8" stroke-linecap="round"/></g>`
   const body = `${kf}${arc(0.5, 99.5, 's-track')}${base ? arc(0.5, base, 's-muted', 0.85) : ''}${p > (base || 1) ? arc(base || 0.5, p, `s-${tone}`) : ''}${ghost}${needle}<circle cx="${CX}" cy="${CY}" r="2.4" class="fg"/>`
