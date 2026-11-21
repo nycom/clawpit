@@ -85,7 +85,7 @@ test('pane: the drawer lists the log newest first, the error line, and the foote
   const d = find(paneTree({ ...v, ui, loops: pickLoops(v.crew, ui, true, true) }), 'drawer-e2e')!
   expect(d.type).toBe('Svg')
   const w = words(d)
-  expect(w.startsWith('Failed at step 3 of 4: run the login flow test 40s')).toBe(true)
+  expect(w.startsWith('Failed at step 3 of 4: run the login flow test <1m')).toBe(true)
   expect(w.indexOf('Try 3 failed')).toBeLessThan(w.indexOf('Try 1 failed'))
   expect(src(d)).toContain(`font-family="${MONO}"`); expect(src(d)).toMatch(/font-family="[^"]*monospace"[^>]*>connect ECONNREFUSED 127\.0\.0\.1:5432</)
   for (const f of ['steps 2/4', 'tries 3', 'context 62%', 'cost ≈$0.07', 'ran 2:10', 'usually 4m']) expect(w).toContain(f)
@@ -192,6 +192,12 @@ test('pane: a waiting helper counts in the summary, reads waiting Nm, and cuts i
   expect(String(inner(row).alt)).toContain('waiting 2m: Should the guard')
 })
 
+test('pane: a waiting helper\'s segment in the crew bar is er, like a top-level needs-you agent', () => {
+  const reds = (v: ReturnType<typeof paneViewOf>) => src(find(paneTree(v), 'head')).match(/class="tint28-er"/g)?.length ?? 0
+  expect(reds(waitingHelper())).toBe(reds(paneViewOf('hydra')) + 1)
+  expect(reds(waitingHelper({}, 'Keep the old cache key?', true))).toBe(reds(paneViewOf('hydra')) + 1)
+})
+
 test('pane: a folded toggle names the helpers that need you in er', () => {
   const v = waitingHelper(), kids = (shut: string[]) => find(paneTree({ ...v, ui: { ...v.ui, shut } }), 'kids-rev')!
   expect(words(kids(['rev']))).toBe('2 helpers · 1 needs you'); expect(src(kids(['rev']))).toMatch(/class="er"[^>]*> · 1 needs you</)
@@ -231,13 +237,16 @@ test('pane: the drawer opens still; only a line under a second old fades in whil
   // minute-aligned ages: no age crosses a minute between now and now+59 s
   const settled = imp.log.map((l, i) => ({ ...l, at: NOW - (i + 1) * 60_000 }))
   expect(at(NOW + 59_000, settled)).toBe(at(NOW, settled)); expect(at(NOW, settled)).not.toContain('animation')
+  // lines under a minute old read <1m, so they hold still too until one crosses the minute
+  const young = imp.log.map((l, i) => ({ ...l, at: NOW - 2_000 - i * 10_000 }))
+  expect(at(NOW + 30_000, young)).toBe(at(NOW, young)); expect(at(NOW, young)).toContain('&lt;1m'); expect(at(NOW, young)).not.toContain('animation')
   const fresh = [{ kind: 'step' as const, text: 'Ran the fold test.', at: NOW - 400 }, ...settled]
   const s = at(NOW, fresh)
   expect(s).toContain('.nw{animation:in 300ms cubic-bezier(.2,.8,.2,1) 100ms both}')
   expect(s).toContain('@keyframes in{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}')
   expect(s).toContain('.old{animation:dn 300ms cubic-bezier(.2,.8,.2,1) both}'); expect(s).toContain('@keyframes dn{from{transform:translateY(-23px)}to{transform:none}}')
   expect(s.match(/<g class="nw">/g)!.length).toBe(1); expect(s.match(/<g class="old">/g)!.length).toBe(settled.length)
-  expect(s).toMatch(/<g class="nw"><text[^>]*>Ran the fold test\.<\/text><text[^>]*>0s<\/text><\/g>/)
+  expect(s).toMatch(/<g class="nw"><text[^>]*>Ran the fold test\.<\/text><text[^>]*>&lt;1m<\/text><\/g>/)
   expect(s).toMatch(/@media \(prefers-reduced-motion: reduce\)\{\*\{animation:none!important;transition:none!important\}\}<\/style>(?!.*<style>)/)
   expect(at(NOW + 1_000, fresh)).not.toContain('animation'); expect(s).not.toContain('.rv')
 })

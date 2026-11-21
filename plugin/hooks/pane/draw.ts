@@ -4,7 +4,7 @@ import { CELL_PX, FONT, MONO, MOTION, SIZE, cssOf, svg } from '../tokens'
 import { clip, fit, fmtAge, fmtClock, fmtCost, fmtLeft, oneLine, textWidth, wrap, xml } from '../text'
 import { icon, segBar, stepBlocks, type Seg } from '../icons'
 import { crab } from '../crab'
-import { alertsOf } from '../model'
+import { alertsOf, helpersOf } from '../model'
 import { paneLayout, type PaneItem } from './layout'
 
 export type El = { type: string; props?: Record<string, unknown>; children?: (El | string)[] }
@@ -50,7 +50,9 @@ const blocks = (x: number, y: number, done: number, total: number, tone: Role | 
   return k ? `<g transform="translate(${n(x - (k * 8 - 2))} ${y})">${stepBlocks(d, k, tone)}</g>` : ''
 }
 const elapsed = (a: CrewAgent, now: number) => fmtClock((a.endedAt ?? now) - a.startedAt)
-const waiting = (a: CrewAgent, now: number) => { const ms = now - (a.waitingSince ?? a.startedAt); return ms < 60_000 ? '<1m' : fmtAge(ms) }
+// Waiting and log ages read in whole minutes, so the image changes only when one crosses a minute.
+const minutes = (ms: number) => (ms < 60_000 ? '<1m' : fmtAge(ms))
+const waiting = (a: CrewAgent, now: number) => minutes(now - (a.waitingSince ?? a.startedAt))
 const reading = (a: CrewAgent, now: number): Run[] =>
   a.eta.kind === 'left' ? [[fmtLeft(a.eta.minutes).replace(/ left$/, ''), a.eta.slow ? 'warn' : 'fg', 600], [' left', 'muted']]
     : a.eta.kind === 'over' ? [['slower', 'warn', 600]] : [[elapsed(a, now), 'fg', 600]]
@@ -75,7 +77,9 @@ const head = (crew: Crew, W: number): El => {
   const tail: Run[] = [[` · ${fmtCost(crew.costUsd)}`, 'muted'], ...(crew.leftMin == null ? [] : [[` · ${fmtLeft(crew.leftMin)}`, 'muted'] as Run])]
   const segs: Seg[] = [
     ...crew.ended.map((a): Seg => ({ state: a.prop === 'fail' ? 'failed' : 'done', fill: 1 })),
-    ...crew.agents.map((a): Seg => ({ state: a.state === 'need' ? 'need' : a.state === 'failed' ? 'failed' : 'live', role: a.role, fill: Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0) })),
+    // A waiting helper needs you, so it gets a segment next to the top-level ones that do.
+    ...[...crew.agents.filter(a => a.state === 'need'), ...crew.agents.flatMap(helpersOf).filter(h => h.state === 'need'), ...crew.agents.filter(a => a.state !== 'need')]
+      .map((a): Seg => ({ state: a.state === 'need' ? 'need' : a.state === 'failed' ? 'failed' : 'live', role: a.role, fill: Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0) })),
   ]
   // A narrow pane puts the cost and the time left on a second line.
   const oneRow = runsWidth([...counts, ...tail], 12) <= W
@@ -133,7 +137,7 @@ const drawer = (a: CrewAgent, W: number, now: number): El => {
   let y = 6, body = '', row = 0
   a.log.slice(0, 30).forEach((l, i) => {
     const top = y, cls = failed && i === 0 ? 'er' : i === 0 ? 'fg' : 'muted', lines = wrap(clean(l.text, 120), textW, 12, 2, cls === 'er' ? 600 : 400)
-    let entry = lines.map((s, k) => text(x, y + 13 + k * 17, cls, 12, s, cls === 'er' ? { weight: 600 } : {})).join('') + text(W - PAD, y + 13, 'muted', 11, fmtAge(now - l.at), { anchor: 'end' })
+    let entry = lines.map((s, k) => text(x, y + 13 + k * 17, cls, 12, s, cls === 'er' ? { weight: 600 } : {})).join('') + text(W - PAD, y + 13, 'muted', 11, minutes(now - l.at), { anchor: 'end' })
     y += lines.length * 17 + 6
     const err = failed && i === 0 ? clean(a.errorLine, 200) : ''
     if (err) {
