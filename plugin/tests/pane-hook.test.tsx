@@ -12,15 +12,18 @@ const PANE_PROPS = { title: 'Agents', isFocused: false, bodyColumns: 64, placeme
 const BAND = { bodyColumns: 120, hasSurvey: false, maxRows: 5 }
 
 // The engine beneath clawpit: a frozen clock, a store in memory, the answers each event needs,
-// and a record of every atom write, every pane opened and every pane closed.
-const setup = (on: OnT, o: { store?: Record<string, unknown> } = {}) => {
+// a session id per session.start, the panes up, and a record of every atom write, every pane opened and every pane closed.
+const setup = (on: OnT, o: { store?: Record<string, unknown>; surfaces?: string[]; panes?: string[] } = {}) => {
   const clock = mock.clock(on, { now: T0 })
   const store = new Map<string, unknown>(Object.entries(o.store ?? {}))
   const storeSets: string[] = []
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
   on('store.set', (_$, e) => { storeSets.push(e.key); store.set(e.key, e.value); return { value: undefined } })
   on('store.keys', () => ({ value: [...store.keys()] }))
-  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  let session = 0
+  on('session.start', (_$, e) => { session += 1; return { cwd: e.cwd } })
+  on('session.id', () => ({ value: `s${session}` }))
+  if (o.surfaces) { const surfaces = o.surfaces; on('session.surfaces', () => ({ value: surfaces as never })) }
   on('session.usage', () => ({ value: USAGE as never }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -28,8 +31,10 @@ const setup = (on: OnT, o: { store?: Record<string, unknown> } = {}) => {
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `w${++agent}` }))
   const opens: { id: string; title?: string }[] = []
   const closes: { id: string; by: string }[] = []
-  on('ui.open', (_$, e) => { opens.push({ id: e.id, title: e.title }); return { value: { isPlaced: true } } })
-  on('ui.close', (_$, e, next) => { closes.push({ id: e.id, by: next.origin.plugin }); return { value: undefined } as never })
+  const up = new Set(o.panes ?? [])
+  on('ui.open', (_$, e) => { opens.push({ id: e.id, title: e.title }); up.add(e.id); return { value: { isPlaced: true } } })
+  on('ui.close', (_$, e, next) => { closes.push({ id: e.id, by: next.origin.plugin }); up.delete(e.id); return { value: undefined } as never })
+  on('ui.panes', () => ({ value: [...up].map(id => ({ id, title: 'Agents', isShown: true, isFocused: false, isPlaced: true })) }) as never)
   const writes: { plugin: string; key: string; value: unknown }[] = []
   on('state.set', (_$, e, next) => { writes.push({ plugin: e.plugin, key: e.key, value: e.value }); return next(e) })
   const mine = () => writes.filter(w => w.plugin === 'clawpit')
@@ -93,6 +98,7 @@ test('pane hook: the first spawn of the session opens the pane once; no later sp
   await spawn($, 'fix the cache')
   expect(w.opens).toEqual([{ id: PANE, title: 'Agents' }])
   expect(w.paneOpen()).toBe(true)
+  expect(w.store.get('paneAutoOpenedFor')).toBe('s1')
   await spawn($, 'write the docs')
   expect(w.opens.length).toBe(1)
   await closeByHand($)
@@ -113,6 +119,38 @@ test('pane hook: the first spawn of the session opens the pane once; no later sp
   await spawn($, 'next session')
   await spawn($, 'next session again')
   expect(w.opens.length).toBe(3)
+  expect(w.store.get('paneAutoOpenedFor')).toBe('s2')
+})
+
+// A reload inside a running session fires no session.start; each test is a fresh load, here over the store the last load wrote.
+test('pane hook: after a reload in the same session, a closed pane is not reopened by itself', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on, { store: { paneAutoOpenedFor: 's0' }, surfaces: ['desktop'] })
+  await spawn($, 'after the reload')
+  await spawn($, 'and again')
+  expect(w.mine().some(x => x.key === 'takeover' && x.value === true)).toBe(true)
+  expect(w.opens).toEqual([])
+})
+
+test('pane hook: after a reload in a new session, the first spawn opens the pane', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on, { store: { paneAutoOpenedFor: 'an older session' }, surfaces: ['desktop'] })
+  await spawn($, 'after the reload')
+  expect(w.opens).toEqual([{ id: PANE, title: 'Agents' }])
+  expect(w.store.get('paneAutoOpenedFor')).toBe('s0')
+})
+
+test('pane hook: after a reload with the pane still up, the first observer sets paneOpen', async ($, on) => {
+  const w = setup(on, { store: { size: 'gauges' }, surfaces: ['desktop'], panes: [PANE] })
+  const ui = await pane($)
+  expect(w.paneOpen()).toBeUndefined()
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)
+  expect(w.paneOpen()).toBe(true)
+  await ui.unmount()
+})
+
+test('pane hook: after a reload with no pane up, paneOpen stays false', async ($, on) => {
+  const w = setup(on, { surfaces: ['desktop'], panes: ['another'] })
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)
+  expect(w.paneOpen()).toBe(false)
 })
 
 test('pane hook: pressing a row opens its drawer; pressing it again closes it; another row moves it', { plugins: [savvy, person] }, async ($, on) => {

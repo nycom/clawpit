@@ -117,6 +117,8 @@ const takeOver = async ($: EngineInterface) => {
 const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { if ((await $.session.surfaces()).includes('desktop')) await takeOver($) } catch { errors += 1 }
   try { await loadStore($) } catch { errors += 1 }
+  // The engine's record of panes outlives a reload; module memory and the ui atom's paneOpen do not.
+  try { if ((await $.ui.panes()).some(p => p.id === PANE_ID)) await update($, ui, u => ({ ...u, paneOpen: true })) } catch { errors += 1 }
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
@@ -191,7 +193,12 @@ export const register: Register = on => {
         spawns[id] = { type: e.subagentType, model: out.model, description: e.description }
         if (e.resume) recorded.add(id)
         // Once per session, on its first agent, and only where clawpit draws the pane; after that only the open press.
-        if (!paneAsked && (await read($, takeover)) === true) { paneAsked = true; await openPane($) }
+        // The store keeps the session it opened for, so a reload mid-session does not open it again.
+        if (!paneAsked && (await read($, takeover)) === true) {
+          paneAsked = true
+          const sid = await $.session.id()
+          if ((await $.store.get('paneAutoOpenedFor')) !== sid) { await openPane($); await $.store.set('paneAutoOpenedFor', sid) }
+        }
       }
     } catch { errors += 1 }
     return out

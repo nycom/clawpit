@@ -132,6 +132,7 @@ scripts/leak-check.sh, preview.sh    existing
 |---|---|---|
 | `size` | `Size` | written only by a toggle press |
 | `eta:<key>` | `number[]`, the last 20 durations in ms | written on a recorded run; loaded into memory at `session.start`, never read during render |
+| `paneAutoOpenedFor` | the session id (`$.session.id()`) | written when the pane opens by itself; that session never opens it by itself again, a reload included |
 
 Drawer and helper-fold state is in the `ui` atom only and is never persisted.
 
