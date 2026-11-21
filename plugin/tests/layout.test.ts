@@ -9,6 +9,7 @@ const input = (s: keyof typeof STATES, over: Partial<CrewInput> = {}): CrewInput
 const noLoops: LoopPlan = { walkers: [], chipPulse: false, ring: null, mascot: 'still', count: 0 }
 const unit = () => ({ host: 1, engine: 1 })
 const idOf = (i: PaneItem) => ('agent' in i ? i.agent.id : 'parentId' in i ? i.parentId : '')
+const patch = (runs: SavvyRun[], id: string, o: Partial<SavvyRun>) => runs.map(r => (r.id === id ? { ...r, ...o } : r))
 const line = (i: PaneItem) => `${i.kind}${i.kind === 'section' ? `:${i.name}` : ''}${idOf(i) ? `:${idOf(i)}` : ''}`
 
 test('paneLayout: the section order and the default-shut Ended', () => {
@@ -50,4 +51,15 @@ test('paneLayout: 80 agents and an open drawer stay under both bounds', () => {
   const more = items.find(i => i.kind === 'more')
   expect(items.filter(i => i.kind === 'row').length + (more?.kind === 'more' ? more.count : 0)).toBe(80)
   expect(more).toMatchObject({ section: 'running' }); expect(items.at(-1)).toBe(more)
+})
+
+test('paneLayout: a helper of a helper follows it one level deeper; the toggle counts what it folds, needs you only when shut', () => {
+  const runs = patch(STATES.hydra.runs.concat({ ...STATES.hydra.runs.find(r => r.id === 'k1')!, id: 'k3', description: 'read the guard', blocked: 'Keep the old key?' }), 'k2', { status: 'failed', heldDone: true, endedAt: NOW })
+  const crew = crewOf(input('hydra', { runs, parents: { ...STATES.hydra.parents, k3: 'k1' } }))
+  const open = paneLayout(crew, STATES.hydra.ui, noLoops, unit)
+  expect(open.map(line).filter(l => l.startsWith('helper') || l.startsWith('kids'))).toEqual(['helper:k2', 'helper:k1', 'helper:k3', 'kids:rev'])
+  expect(open.filter(i => i.kind === 'helper').map(i => i.kind === 'helper' && i.depth)).toEqual([1, 1, 2])
+  expect(open.find(i => i.kind === 'kids')).toEqual({ kind: 'kids', parentId: 'rev', count: 3, failed: 1, shut: false })
+  const shut = paneLayout(crew, { ...STATES.hydra.ui, shut: ['ended', 'rev'] }, noLoops, unit)
+  expect(shut.find(i => i.kind === 'kids')).toEqual({ kind: 'kids', parentId: 'rev', count: 3, failed: 1, need: 1, shut: true })
 })

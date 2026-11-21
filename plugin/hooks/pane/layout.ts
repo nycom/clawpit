@@ -1,5 +1,6 @@
 // What the Agents pane draws, top to bottom, cut to the host's and the engine's size bounds.
 import type { Crew, CrewAgent, LoopPlan, Ui } from '../../types'
+import { helpersOf } from '../model'
 
 type SectionName = 'need' | 'failed' | 'running' | 'ended'
 export type PaneItem =
@@ -7,8 +8,8 @@ export type PaneItem =
   | { kind: 'section'; name: SectionName; count: number; shut?: boolean }
   | { kind: 'row'; agent: CrewAgent; walk: boolean; ring: boolean; open: boolean }
   | { kind: 'drawer'; agent: CrewAgent }
-  | { kind: 'helper'; agent: CrewAgent; walk: boolean }
-  | { kind: 'kids'; parentId: string; count: number; failed: number; shut: boolean }
+  | { kind: 'helper'; agent: CrewAgent; walk: boolean; depth: 1 | 2 }
+  | { kind: 'kids'; parentId: string; count: number; failed: number; need?: number; shut: boolean }
   | { kind: 'ended'; agent: CrewAgent }
   | { kind: 'more'; section: SectionName; count: number }
   | { kind: 'empty' }
@@ -25,13 +26,14 @@ export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: Pan
   if (!crew.agents.length && !crew.ended.length) return [{ kind: 'empty' }]
   const walk = (a: CrewAgent) => loops.walkers.includes(a.id)
   const rowParts = (a: CrewAgent): Part[] => {
-    const shut = ui.shut.includes(a.id)
+    const shut = ui.shut.includes(a.id), hs = helpersOf(a), need = hs.filter(h => h.state === 'need').length
     return [
       { item: { kind: 'row', agent: a, walk: walk(a), ring: loops.ring === a.id, open: ui.open === a.id }, fixed: false, agents: 1 },
       ...(ui.open === a.id ? [{ item: { kind: 'drawer', agent: a } as PaneItem, fixed: true, agents: 0 }] : []),
-      ...(shut ? [] : a.helpers.map(h => ({ item: { kind: 'helper', agent: h, walk: walk(h) } as PaneItem, fixed: false, agents: 1 }))),
-      ...(a.helpers.length
-        ? [{ item: { kind: 'kids', parentId: a.id, count: a.helpers.length, failed: a.helpers.filter(h => h.state === 'failed').length, shut } as PaneItem, fixed: false, agents: 0 }]
+      ...(shut ? [] : hs.map(h => ({ item: { kind: 'helper', agent: h, walk: walk(h), depth: h.parentId === a.id ? 1 : 2 } as PaneItem, fixed: false, agents: 1 }))),
+      // Folded, the toggle names the waiting helpers it hides, so an alert always points at something visible.
+      ...(hs.length
+        ? [{ item: { kind: 'kids', parentId: a.id, count: hs.length, failed: hs.filter(h => h.state === 'failed').length, ...(shut && need ? { need } : {}), shut } as PaneItem, fixed: false, agents: 0 }]
         : []),
     ]
   }

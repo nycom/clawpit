@@ -4,7 +4,7 @@ import { paneTree } from '../../plugin/hooks/pane/draw'
 import { pickLoops, BUDGET } from '../../plugin/hooks/loops'
 import { paneLoopCount, paneViewOf } from '../../plugin/tests/build-pane'
 
-const SHOTS = ['hydra', 'needsYou', 'failed', 'both', 'drawerOpen', 'helpers', 'emptyPane', 'manyAgents'] as const
+const SHOTS = ['hydra', 'needsYou', 'failed', 'both', 'drawerOpen', 'helpers', 'emptyPane', 'manyAgents', 'helperNeedsYou', 'nestedHelper'] as const
 for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (const w of [36, 52] as const)   // narrow, wide
   test(`pane: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
     await show(page, paneTree(paneViewOf(s, { columns: w })), { surface: 'pane', widthCells: w, theme })
@@ -29,7 +29,7 @@ test('pane: a held failure does not move in the pane', async ({ page }) => {
   expect(await loops(page)).toEqual({ drawings: 0, eased: 0 })
 })
 
-for (const s of ['hydra', 'needsYou', 'both'] as const)
+for (const s of ['hydra', 'needsYou', 'both', 'helperNeedsYou', 'nestedHelper'] as const)
   test(`pane: ${s} loops match the plan and the budget`, async ({ page }) => {
     const v = paneViewOf(s); await show(page, paneTree(v), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
     const l = await loops(page); expect(l.eased).toBe(0); expect(l.drawings).toBe(paneLoopCount(v)); expect(l.drawings).toBeGreaterThan(0)

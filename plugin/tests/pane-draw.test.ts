@@ -173,3 +173,71 @@ test('pane: a waiting helper keeps its question and a readable wait at 36 column
     expect(String(inner(at(ms)).alt)).toContain(`waiting ${age}: Keep the old cache key for now?`)
   }
 })
+
+// hydra with k1 waiting on you and, when `nested`, k3 helping k1 and waiting too.
+const waitingHelper = (over: Partial<ReturnType<typeof paneViewOf>> = {}, question = 'Keep the old cache key?', nested = false) =>
+  withAgents(paneViewOf('hydra', over), a => a.map(x => (x.id === 'rev' ? { ...x, helpers: x.helpers.map(h => (h.id === 'k1' ? {
+    ...h, state: 'need' as const, prop: 'wait' as const, question, waitingSince: NOW - 150_000, activity: null,
+    helpers: nested ? [{ ...h, id: 'k3', title: 'read the guard', parentId: 'k1', helpers: [] }] : [] } : h)) } : x)))
+
+test('pane: a waiting helper counts in the summary, reads waiting Nm, and cuts its question at two lines', () => {
+  const v = waitingHelper({ columns: 36 }, 'Should the guard keep the old cache key for one release, or drop it now that every caller has moved over?')
+  const t = paneTree({ ...v, ui: { ...v.ui, shut: [] } }), row = find(t, 'helper-k1')!
+  expect(words(find(t, 'head'))).toContain('1 needs you · 4 running')
+  expect(inner(row).height).toBe(32); expect(src(row)).toContain('needTint')
+  expect(src(row)).toMatch(/text-anchor="end"><tspan class="er" font-weight="600">waiting 2m</)
+  const first = src(row).match(/<tspan class="fg">find call[^<]* <\/tspan><tspan class="er">([^<]*)<\/tspan><\/text>/)!
+  const second = [...src(row).matchAll(/<text x="10" y="27" class="er" font-size="12" font-weight="600">([^<]*)<\/text>/g)].map(m => unescape(m[1]))
+  expect(first[1].startsWith('Should')).toBe(true); expect(second.length).toBe(1); expect(second[0].endsWith('…')).toBe(true)
+  expect(String(inner(row).alt)).toContain('waiting 2m: Should the guard')
+})
+
+test('pane: a folded toggle names the helpers that need you in er', () => {
+  const v = waitingHelper(), kids = (shut: string[]) => find(paneTree({ ...v, ui: { ...v.ui, shut } }), 'kids-rev')!
+  expect(words(kids(['rev']))).toBe('2 helpers · 1 needs you'); expect(src(kids(['rev']))).toMatch(/class="er"[^>]*> · 1 needs you</)
+  expect(words(kids([]))).toBe('2 helpers')
+  const failed = paneViewOf('failed'), both = withAgents(failed, a => a.map(x => (x.id === 'rev' ? { ...x, helpers: x.helpers.map(h => (h.id === 'k1' ? { ...h, state: 'need' as const } : h)) } : x)))
+  expect(words(find(paneTree({ ...both, ui: { ...both.ui, shut: ['rev'] } }), 'kids-rev'))).toBe('2 helpers · 1 needs you · 1 failed')
+})
+
+test('pane: a helper of a helper sits under it on the same tree line, indented', () => {
+  const v = waitingHelper({}, 'Keep the old cache key?', true), t = paneTree({ ...v, ui: { ...v.ui, shut: [] } }), k = keys(t)
+  expect(k.indexOf('helper-k1')).toBeLessThan(k.indexOf('helper-k3')); expect(k.indexOf('helper-k3')).toBeLessThan(k.indexOf('kids-rev'))
+  const crab1 = find(t, 'crab-k1')!, crab3 = find(t, 'crab-k3')!
+  expect(inner(crab3).width).toBeGreaterThan(inner(crab1).width as number)
+  for (const c of [crab1, crab3]) expect(src(c)).toContain('<rect x="12" y="0" width="1.5" height="32" class="track"/>')
+  expect((inner(find(t, 'helper-k3')!).width as number) + (inner(crab3).width as number)).toBe(52 * 8.5)
+  expect(words(find(t, 'kids-rev'))).toBe('3 helpers')
+})
+
+test('pane: step blocks stop at 11 and fill in proportion', () => {
+  const v = withAgents(paneViewOf('hydra'), a => a.map(x => (x.id === 'imp' ? { ...x, stepDone: 10, stepTotal: 20 } : x)))
+  const s = src(find(paneTree(v), 'row-imp'))
+  expect(s.match(/width="6" height="6" rx="2"/g)!.length).toBe(11); expect(s.match(/width="6" height="6" rx="2" class="role-implement"/g)!.length).toBe(6)
+  expect(src(find(paneTree(paneViewOf('hydra')), 'row-imp')).match(/width="6" height="6" rx="2"/g)!.length).toBe(5)
+})
+
+test('pane: a summary that does not fit one line puts the cost and the time left on a second', () => {
+  const wide = find(paneTree(paneViewOf('both')), 'head')!, narrow = find(paneTree(paneViewOf('both', { columns: 36 })), 'head')!
+  expect(inner(wide).height).toBe(60); expect(inner(narrow).height).toBe(76)
+  expect(src(narrow)).toMatch(/<text x="0" y="68" font-size="12"><tspan class="muted">≈\$1\.06<\/tspan><tspan class="muted"> · <\/tspan><tspan class="muted">~4m left</)
+  const first = src(narrow).match(/<text x="0" y="52" font-size="12">(.*?)<\/text>/)![1]
+  expect(first).toContain('> done</tspan>'); expect(first).not.toContain('≈$')
+})
+
+test('pane: the drawer opens still; only a line under a second old fades in while the older ones slide down', () => {
+  const v = paneViewOf('drawerOpen'), imp = v.crew.agents.find(a => a.id === 'imp')!
+  const at = (now: number, log = imp.log) => src(find(paneTree({ ...withAgents(v, a => a.map(x => (x.id === 'imp' ? { ...x, log } : x))), now }), 'drawer-imp'))
+  // minute-aligned ages: no age crosses a minute between now and now+59 s
+  const settled = imp.log.map((l, i) => ({ ...l, at: NOW - (i + 1) * 60_000 }))
+  expect(at(NOW + 59_000, settled)).toBe(at(NOW, settled)); expect(at(NOW, settled)).not.toContain('animation')
+  const fresh = [{ kind: 'step' as const, text: 'Ran the fold test.', at: NOW - 400 }, ...settled]
+  const s = at(NOW, fresh)
+  expect(s).toContain('.nw{animation:in 300ms cubic-bezier(.2,.8,.2,1) 100ms both}')
+  expect(s).toContain('@keyframes in{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}')
+  expect(s).toContain('.old{animation:dn 300ms cubic-bezier(.2,.8,.2,1) both}'); expect(s).toContain('@keyframes dn{from{transform:translateY(-23px)}to{transform:none}}')
+  expect(s.match(/<g class="nw">/g)!.length).toBe(1); expect(s.match(/<g class="old">/g)!.length).toBe(settled.length)
+  expect(s).toMatch(/<g class="nw"><text[^>]*>Ran the fold test\.<\/text><text[^>]*>0s<\/text><\/g>/)
+  expect(s).toMatch(/@media \(prefers-reduced-motion: reduce\)\{\*\{animation:none!important;transition:none!important\}\}<\/style>(?!.*<style>)/)
+  expect(at(NOW + 1_000, fresh)).not.toContain('animation'); expect(s).not.toContain('.rv')
+})
