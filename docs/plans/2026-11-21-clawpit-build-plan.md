@@ -214,14 +214,16 @@ declare module 'claude-code' {
   interface PluginState {
     clawpit: { takeover: boolean; stats: Stats; ui: Ui; tick: number; idleSince: number | null }
     'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[] }
+    ponytail: { band: PonytailBand }
   }
 }
 ```
 
-- Produces `plugin/tests/fixtures/states.ts`: `export const NOW = 1_800_000_000_000` and `export const STATES: Record<StateName, Fixture>` with `type Fixture = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>; stats: Stats; ui: Ui; busy: boolean; armed: boolean }` and `StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead' | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents'`.
-  - `hydra` is the mockup's dataset (`seed()` and `ST` in `design/mockups-all.html`): four agents (`e2e tests`, `savvy-progress implement`, `cache-tax review c1` with two helpers, `plan the release`) and one ended run (`docs pass`, took 1:05), seven tasks `schema, api, fold, fixtures, review, release, merge` with 2 done, phase `delegate`, context 58, 5h 21, 7d 63 and ahead, 44 turns, tests 179 passed.
+- Decision M5 adds to the contract: `CodeStat = { reusePct: number | null; reused: number; created: number; callers: string[] }`, `Stats.code: CodeStat | null`, the column keys `reuse` and `callers`, and `PonytailBand = { reused: string[]; created: string[]; openCallers: string[] }` (the fields of ponytail's `band` atom that clawpit reads).
+- Produces `plugin/tests/fixtures/states.ts`: `export const NOW = 1_800_000_000_000` and `export const STATES: Record<StateName, Fixture>` with `type Fixture = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>; stats: Stats; ui: Ui; busy: boolean; armed: boolean }` and `StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead' | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns'`.
+  - `hydra` is the mockup's dataset (`seed()` and `ST` in `design/mockups-all.html`): four agents (`e2e tests`, `savvy-progress implement`, `cache-tax review c1` with two helpers, `plan the release`) and one ended run (`docs pass`, took 1:05), seven tasks `schema, api, savvy-progress implement, e2e tests, cache-tax review c1, plan the release, merge` with 2 done (task titles equal the run descriptions they match, as savvy's contract asks; decision M9), phase `delegate`, context 58, 5h 21, 7d 63 and ahead, 44 turns, tests 179 passed.
   - `needsYou` = `hydra` with `e2e tests` blocked on `Postgres or SQLite for the fixture?`. `failed` = the mockup's `?state=failed` (reason `Could not reach Postgres on :5432`, error `connect ECONNREFUSED 127.0.0.1:5432`, 3 tries; `cache-tax review c1` struggling with 3 tries; helper `map the cache keys` failed). `both` adds `plan the release` blocked on `Ship the release notes in this PR, or after it?`.
-  - `idle`: no runs, no turn. `busy`: a turn 1:42 old, +38 −6, cost 0.42, no agents. `context90`: context 92, `autoPct` 97. `limitAhead`: 5h at 62 with `projected` 131. `manyAgents`: 80 running runs. `drawerOpen` and `helpers` are `hydra` with `ui.open` and `ui.shut` set. `sizeGauges`, `sizeLine` are `needsYou` at those sizes.
+  - `idle`: no runs, no turn. `busy`: a turn 1:42 old, +38 −6, cost 0.42, no agents. `context90`: context 92, `autoPct` 97. `limitAhead`: 5h at 62 with `projected` 131. `manyAgents`: 80 running runs. `drawerOpen` and `helpers` are `hydra` with `ui.open` and `ui.shut` set. `sizeGauges`, `sizeLine` are `needsYou` at those sizes. `codeColumns`: idle, 2 turns, so the two lowest columns have room. Every state carries `code` = reuse 72% (18 used, 7 new) and 2 callers open.
 
 - [ ] **Step 1: Write the failing test** in `plugin/tests/fixtures.test.ts`
 
@@ -450,7 +452,7 @@ git commit -m "track: add the activity, step log and tests trackers"
 ### Task 7: Trackers B (ETA, turn, pace, context)
 
 **Files:**
-- Create: `plugin/hooks/track/eta.ts`, `plugin/hooks/track/turn.ts`, `plugin/hooks/track/pace.ts`, `plugin/hooks/track/context.ts`, and one test file each under `plugin/tests/`
+- Create: `plugin/hooks/track/eta.ts`, `plugin/hooks/track/turn.ts`, `plugin/hooks/track/pace.ts`, `plugin/hooks/track/context.ts`, `plugin/hooks/track/code.ts`, and one test file each under `plugin/tests/`
 
 **Interfaces:**
 - Consumes: types from Task 4.
@@ -481,9 +483,11 @@ export type CtxInput = { percent?: number; breakdown?: { percentage: number; tot
 export const pushTurn: (history: number[], totalTokens: number) => number[]                           // last 10; cleared on a drop
 export const contextOf: (c: CtxInput, history: number[]) => ContextStat | null
 export const contextText: (c: ContextStat | null, turns: number) => string
+// code.ts (decision M5)
+export const codeOf: (band: unknown) => CodeStat | null
 ```
 
-Rules: design §6.3, §6.4, §6.6, §6.7, §6.8, exactly.
+Rules: design §6.3, §6.4, §6.6, §6.7, §6.8, §6.9, exactly.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -543,6 +547,18 @@ test('context: the so-what line', () => {
   expect(contextText({ pct: 92, msgsPct: 34, turnsLeft: 1, autoPct: 97, alarm: true }, 44)).toBe('auto-compacts at 97%')
   expect(contextText({ pct: 92, msgsPct: null, turnsLeft: null, autoPct: null, alarm: true }, 44)).toBe('context nearly full')
 })
+const names = (n: number, p: string) => Array.from({ length: n }, (_, i) => `${p}${i}`)
+test('code: the reuse share as ponytail computes it', () =>
+  expect(codeOf({ reused: names(18, 'r'), created: names(7, 'c'), openCallers: [] })).toEqual({ reusePct: 72, reused: 18, created: 7, callers: [] }))
+test('code: under three functions there is no share', () => expect(codeOf({ reused: ['a'], created: ['b'], openCallers: [] })!.reusePct).toBeNull())
+test('code: callers open are the refs, cleaned and capped', () => {
+  const c = codeOf({ reused: [], created: [], openCallers: ['hooks/a.ts:4\u0007', 7, 'x'.repeat(300)] })!
+  expect(c.callers).toEqual(['hooks/a.ts:4', 'x'.repeat(120)])
+})
+test('code: ponytail absent or malformed', () => {
+  for (const b of [undefined, null, 5, 'x']) expect(codeOf(b)).toBeNull()
+  expect(codeOf({ reused: 'x' })).toEqual({ reusePct: null, reused: 0, created: 0, callers: [] })
+})
 ```
 
 - [ ] **Step 2: Run** `claude plugin test plugin`. Expected: the four new files fail.
@@ -551,8 +567,8 @@ test('context: the so-what line', () => {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/hooks/track/eta.ts plugin/hooks/track/turn.ts plugin/hooks/track/pace.ts plugin/hooks/track/context.ts plugin/tests
-git commit -m "track: add the eta, turn, pace and context trackers"
+git add plugin/hooks/track/eta.ts plugin/hooks/track/turn.ts plugin/hooks/track/pace.ts plugin/hooks/track/context.ts plugin/hooks/track/code.ts plugin/tests
+git commit -m "track: add the eta, turn, pace, context and code trackers"
 ```
 
 ### Task 8: The loop picker
@@ -601,7 +617,7 @@ git commit -m "loops: add the single loop picker for the panel and the pane"
 
 ```ts
 // columns.ts
-export const ORDER: readonly ColumnKey[]            // context, turn, 5h, 7d, plan, session, tests, tokens, agent, agents
+export const ORDER: readonly ColumnKey[]            // context, turn, 5h, 7d, plan, session, tests, tokens, agent, reuse, callers, agents
 export const maxColumns: (bodyColumns: number) => number
 export const candidates: (stats: Stats, crew: Crew, size: Size, busy: boolean) => Column[]
 export const fit: (cols: Column[], max: number) => ColumnKey[]
@@ -626,10 +642,13 @@ test('columns: a hot limit jumps forward', () => { /* 7d hot -> 90; 5h hot -> 96
 test('columns: this turn only while busy; tests drop to 20 while busy', () => {})
 test('columns: tokens and agent time only after three turns', () => {})
 test('columns: missing limits produce no limit column', () => { /* stats.limits [] -> no '5h', no '7d' */ })
+test('columns: reuse and callers are the two lowest and step aside first', () => {
+  /* codeColumns -> reuse 12, callers 10, both below every other candidate (tests busy 20 included); 'reuse' only when code.reusePct is not null,
+     'callers' only when code.callers is non-empty, neither when code is null; at maxColumns(60) = 4 with hydra they are the first cut */ })
 test('columns: plan and agents are columns only when folded', () => { /* full -> neither; gauges with a plan and agents -> plan 97, agents 99 */ })
 test('columns: fit keeps the top by priority and lays them in the fixed order', () =>
   expect(fit([{ key: 'agents', priority: 99 }, { key: 'session', priority: 80 }, { key: 'context', priority: 100 }, { key: 'tokens', priority: 30 }], 3)).toEqual(['context', 'session', 'agents']))
-test('columns: the one-line parts', () => { /* context always; only hot limits; plan when a plan exists else session; agents last when the crew has agents */ })
+test('columns: the one-line parts', () => { /* context always; only hot limits; plan when a plan exists else session; agents last when the crew has agents; never reuse or callers */ })
 test('fold: full, gauges, line, full', () => { expect(nextSize('full')).toBe('gauges'); expect(nextSize('gauges')).toBe('line'); expect(nextSize('line')).toBe('full') })
 test('fold: a bad stored value is full', () => { expect(parseSize('big')).toBe('full'); expect(parseSize(undefined)).toBe('full'); expect(parseSize('line')).toBe('line') })
 test('fold: the dot shows only while folded with a waiter or a failure', () => {})
@@ -704,7 +723,7 @@ test('roleOf: by type, then by description, else explore', () => {
   expect(roleOf('implementer', 'x')).toBe('implement'); expect(roleOf('validator', 'x')).toBe('test'); expect(roleOf('general-purpose', 'cache-tax review c1')).toBe('review')
   expect(roleOf('general-purpose', 'plan the release')).toBe('design'); expect(roleOf('whatever', 'look around')).toBe('explore')
 })
-test('planOf: task states from the newest matching run; live fill never under 8 percent', () => { /* hydra: 2 done, fixtures need, fold live with fill 0.6, merge todo */ })
+test('planOf: task states from the newest matching run; live fill never under 8 percent', () => { /* needsYou: 2 done, 'e2e tests' need, 'savvy-progress implement' live with fill 0.6, 'merge' todo */ })
 test('planOf: design phase reads as plan; a finished flow is null', () => {})
 test('paneLayout: the section order and the default-shut Ended', () => { /* kinds in order: head, section need, row…, section running, row…, section ended(shut) and no 'ended' items */ })
 test('paneLayout: an open drawer follows its row; helpers follow unless shut', () => {})
@@ -782,7 +801,7 @@ export const COMPACT_KEY = 'clawpit-compact'                                // t
 export const viewOf: (state: StateName, over?: Partial<PanelView>) => PanelView   // builds crew, loops and settles from STATES with a fixed etaOf table
 ```
 
-Rules: design §7.3, §9 (the constant-props rule), §11. Keys: columns `col-<key>`, the toggle `toggle`, the plan line `plan-line`, the plan bar `plan-bar`, alert chips `chips-alert`, a chip `chip-<id>`, the folded crab `mascot`. `image` throws when the serialized props pass 60,000 characters.
+Rules: design §7.3, §9 (the constant-props rule), §11. The reuse and callers columns (decision M5): reuse reads label `reuse`, value `72%` in `fg`, so-what `18 used · 7 new` in `muted`; callers reads label `callers`, value `2 open` in `warn`, so-what the first two refs joined by `, `, cut to the column with `fit`. Keys: columns `col-<key>`, the toggle `toggle`, the plan line `plan-line`, the plan bar `plan-bar`, alert chips `chips-alert`, a chip `chip-<id>`, the folded crab `mascot`. `image` throws when the serialized props pass 60,000 characters.
 
 - [ ] **Step 1: Write the failing unit tests**
 
@@ -802,7 +821,7 @@ test('panel: a looping client has the same props one second later', () => {
 })
 test('panel: alert chips share one client; a still chip is a plain Svg', () => {})
 test('panel: the failed chip pulses only while armed', () => { /* armed false -> 'chips-alert' source has no 'animation' */ })
-test('panel: wording', () => { /* chip '3/5 · ~2m left'; struggling '1/4 · ~4m left · 3 failed tries'; slow '… · slower'; failed 'failed · Could not reach Postgres on :5432'; folded 'next: savvy-progress implement · ~2m left'; plan '2/7 tasks · ~9m left' */ })
+test('panel: wording', () => { /* chip '3/5 · ~2m left'; struggling '1/4 · ~4m left · 3 failed tries'; slow '… · slower'; failed 'failed · Could not reach Postgres on :5432'; folded 'next: savvy-progress implement · ~2m left'; plan '2/7 tasks · ~9m left'; codeColumns: 'col-reuse' says '72%' and '18 used · 7 new', 'col-callers' says '2 open' in warn and 'hooks/band.ts:41, tests/fold.test.ts:12' */ })
 test('panel: a hostile chip title still yields well-formed svg', () => { /* title '<b>&"\u0000' -> every source parses with the test's tiny tag-balance check, and contains '&lt;b&gt;' */ })
 test('panel: every image has an alt and every client is under the size cap', () => {})
 test('panel: forty agents collapse into a +N more chip within maxRows', () => {})
@@ -814,7 +833,7 @@ test('panel: forty agents collapse into a +N more chip within maxRows', () => {}
 - [ ] **Step 5: Write the visual tests** `tests/visual/panel.spec.ts`
 
 ```ts
-const SHOTS = ['idle','busy','hydra','needsYou','failed','both','context90','limitAhead','sizeGauges','sizeLine'] as const
+const SHOTS = ['idle','busy','hydra','needsYou','failed','both','context90','limitAhead','sizeGauges','sizeLine','codeColumns'] as const
 for (const s of SHOTS) for (const theme of ['dark','light'] as const) for (const w of [60, 96] as const)   // narrow, wide
   test(`panel: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
     await show(page, panelTree(viewOf(s, { bodyColumns: w })), { surface: 'panel', widthCells: w, theme }); await expect(page).toHaveScreenshot(`panel-${s}-${theme}-${w}.png`)
@@ -940,7 +959,7 @@ Workflow({
         files: ["plugin/hooks/track/activity.ts","plugin/hooks/track/steplog.ts","plugin/hooks/track/tests.ts","plugin/tests/activity.test.ts","plugin/tests/steplog.test.ts","plugin/tests/tests.test.ts"],
         brief: BRIEF(6), gate: G },
       { id: "track-b",      repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--track-b",      model: "opus",
-        files: ["plugin/hooks/track/eta.ts","plugin/hooks/track/turn.ts","plugin/hooks/track/pace.ts","plugin/hooks/track/context.ts","plugin/tests/eta.test.ts","plugin/tests/turn.test.ts","plugin/tests/pace.test.ts","plugin/tests/context.test.ts"],
+        files: ["plugin/hooks/track/eta.ts","plugin/hooks/track/turn.ts","plugin/hooks/track/pace.ts","plugin/hooks/track/context.ts","plugin/hooks/track/code.ts","plugin/tests/eta.test.ts","plugin/tests/turn.test.ts","plugin/tests/pace.test.ts","plugin/tests/context.test.ts","plugin/tests/code.test.ts"],
         brief: BRIEF(7), gate: G },
       { id: "loops",        repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--loops",        model: "sonnet",
         files: ["plugin/hooks/loops.ts","plugin/tests/loops.test.ts"],
@@ -1011,7 +1030,7 @@ Shots stay under `artifacts/app-checks/<task>/`. They show real session content 
   - `plugin/hooks/draw.ts`: the one `image(key, p, loop)` and `El`, imported by both draw modules (their own copies are deleted). `track/activity.ts` drops its `clean` for `oneLine` and `clip`.
   - `client/image.tsx`: `export default Image: ClientModule<ImageProps, { isHover: boolean }>`, design §9.
   - In `register.tsx`, no drawing yet: the atoms of design §4; `session.start` (sets `takeover` on a desktop surface, loads `size` and every `eta:*` key from `$.store`, takes a first `$.session.usage({ breakdown: 'summary' })`); observers for `tool.call` (catch-all), `agent.spawn`, `turn.start`, `turn.step`, `turn.complete`, `session.measure`, and `state.set` on savvy's `agents`; the tick rule of design §4; the 600,000 ms wake of design §6.8; `ui.message` for the five presses.
-  - `export const view: ($: EngineInterface, bodyColumns: number) => Promise<{ panel: PanelView; pane: PaneView }>`: reads the atoms and module state once and builds both views from one `crewOf`.
+  - `export const view: ($: EngineInterface, bodyColumns: number) => Promise<{ panel: PanelView; pane: PaneView }>`: reads the atoms and module state once and builds both views from one `crewOf`. It reads `{ plugin: 'ponytail', key: 'band' }` and sets `stats.code = codeOf(band)` (decision M5); a failed read gives `null`.
 
 - [ ] **Step 1: Write the failing tests** (engine mock: `mock` clock, store and state from `claude-code/testing`)
 
@@ -1025,6 +1044,7 @@ test('wiring: an answered agent turn records its duration once, a second run of 
 test('wiring: a failed or aborted agent turn records nothing', …)
 test('wiring: the step log follows savvy\'s agents atom', …)                // set savvy agents twice (note added) -> view().pane crew agent log length 1
 test('wiring: savvy absent: the views still build, with the empty crew', …)
+test('wiring: ponytail absent gives code null; its band atom gives reuse and callers', …)
 test('wiring: the size press cycles and persists; a bad stored size is full', …)
 test('wiring: row, kids and ended presses change only the ui atom and never the store', …)
 test('wiring: an unknown press is ignored and answered {}', …)
@@ -1076,6 +1096,7 @@ test('panel hook: savvy\'s band stays out while takeover is true', …)         
   - [ ] The context needle settles once when the value changes and does not twitch each second.
   - [ ] Chips: the wash, the crab and the text read as one chip; a walking crab does not restart every second.
   - [ ] Light mode: every text reads.
+  - [ ] Reuse and callers show only when the width has room after every other column, step aside first as it narrows, and callers reads in amber.
 - [ ] **Step 7: Commit**
 
 ```bash
@@ -1164,7 +1185,7 @@ No repo is edited; both are settings on the maintainer's machine.
 - [ ] **Step 1: Record what each shows today.** Capture `before` with `bash scripts/app-capture.sh retire before`.
 - [ ] **Step 2 (maintainer): switch ponytail's band off** with ponytail's own band command (it writes `off` to its band flag file in the user's Claude config folder; its band hook reads that file and draws nothing).
 - [ ] **Step 3 (maintainer): switch skins' usage footer off** in the skins settings (the active skin's `band` preference goes false). Transcript row styling stays on.
-- [ ] **Step 4: Check the information is kept.** Against the `before` shot, tick each figure off in the panel: session cost, last turn cost, tokens, turns, agent time, tests, context, the 5h and 7d limits with pace. Reuse and callers-open are kept as low-priority columns (decision M5).
+- [ ] **Step 4: Check the information is kept.** Against the `before` shot, tick each figure off in the panel: session cost, last turn cost, tokens, turns, agent time, tests, context, the 5h and 7d limits with pace. Reuse and callers-open are kept as the two lowest-priority columns (decision M5): with ponytail's band off, its `band` atom still updates (only its render hook reads the flag), so check both columns move after an edit, on a width where they have room.
 - [ ] **Step 5: App check**, task name `retire`: `idle` and `busy`, dark and light. Expected: one panel above the prompt, nothing of ponytail's or skins' beside it.
 - [ ] **Step 6: By-eye gate** (maintainer): the transcript rows are still skinned; nothing else above the prompt moves.
 
@@ -1244,7 +1265,7 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 ### Task 22: Full verification
 
 - [ ] **Step 1: The unit suite.** `claude plugin test plugin`. Expected: `0 fail`.
-- [ ] **Step 2: Validate.** `claude plugin validate plugin`. Expected: no error. Read its list of hooks and state reads: it must name exactly the hooks of Tasks 14 to 17 and 20, and the reads `savvy-progress.flow` and `savvy-progress.agents`.
+- [ ] **Step 2: Validate.** `claude plugin validate plugin`. Expected: no error. Read its list of hooks and state reads: it must name exactly the hooks of Tasks 14 to 17 and 20, and the reads `savvy-progress.flow`, `savvy-progress.agents` and `ponytail.band`.
 - [ ] **Step 3: The mods-check gate.** The maintainer's local mods-check script for `clawpit` and `savvy-progress`. Expected: both `ok`.
 - [ ] **Step 4: Playwright.** `npm run test:visual`. Expected: all pass, no baseline written.
 - [ ] **Step 5: The script tests.** `npm run test:scripts`. Expected: `fail 0`.
@@ -1281,6 +1302,9 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 | M6 | (a) This session only. |
 | M7 | (a) Keep the "Hydra run" section and model names while building; strip them before this plan goes into a PR. |
 | M8 | (a) Pin savvy-progress to the local claude-kit checkout, so an upstream update cannot undo the local change. |
+| M9 | The fixture's flow tasks are titled as the runs they match (`savvy-progress implement`, `e2e tests`, …), as savvy's own contract asks, instead of the mockup's short names `fold`, `fixtures`. Asked during the build, because the plan's match rule could not link the mockup's names to the runs. |
+
+**How M5 is built.** ponytail 5.3.3 keeps `reused`, `created` and `openCallers` in its `{ plugin: 'ponytail', key: 'band' }` atom. Its `tool.call` and `turn.complete` observers update it whatever the band flag says; only its `AbovePrompt` render hook reads `.ponytail-band`. So clawpit reads the atom, as savvy reads skins' theme, and computes the share the way ponytail does (`hooks/band/metrics.ts`, `percent`: no share under 3 functions). Nothing is computed twice and nothing needs the band on.
 
 ## Self-review
 

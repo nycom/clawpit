@@ -118,6 +118,12 @@ scripts/leak-check.sh, preview.sh    existing
 | `flow` | `SavvyFlow \| null` | the plan row, the pane title, task states |
 | `agents` | `SavvyRun[]` | every agent row and chip |
 
+### Read from ponytail (`plugin: 'ponytail'`, decision M5)
+
+| Key | Type | Used for |
+|---|---|---|
+| `band` | `PonytailBand` (`reused`, `created`, `openCallers`, all `string[]`) | the reuse and callers columns; read at render, so it needs no observer |
+
 `background`, `panel` and `mainTurn` are not read: clawpit hears `turn.start` itself, keeps its own fold state, and leaves background tasks to savvy's pane. Cross-plugin reads are an engine rule ("any plugin reads any value; its owner alone writes it", `d.ts:3629-3635`), and savvy's read of `{ plugin: 'skins', key: 'theme' }` shows it working today.
 
 ### `$.store` (persisted, per plugin, 4 MiB, `d.ts:3603-3627`)
@@ -174,10 +180,11 @@ export type ContextStat = { pct: number; msgsPct: number | null; turnsLeft: numb
 export type LimitStat = { kind: 'five_hour' | 'seven_day'; pct: number; pacePct: number | null; projected: number | null; ahead: boolean; hot: boolean }
 export type TurnStat = { startedAt: number; added: number; removed: number; costUsd: number | null }
 export type TestStat = { passed: number; failed: number; at: number }
+export type CodeStat = { reusePct: number | null; reused: number; created: number; callers: string[] }
 export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number }
-export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat }
+export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat; code: CodeStat | null }
 
-export type ColumnKey = 'context' | 'turn' | '5h' | '7d' | 'plan' | 'session' | 'tests' | 'tokens' | 'agent' | 'agents'
+export type ColumnKey = 'context' | 'turn' | '5h' | '7d' | 'plan' | 'session' | 'tests' | 'tokens' | 'agent' | 'reuse' | 'callers' | 'agents'
 export type Column = { key: ColumnKey; priority: number }
 export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean }
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
@@ -192,6 +199,7 @@ export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
   stepDone?: number; stepTotal?: number; stepNote?: string
   failedAttempts?: number; blocked?: string; heldDone?: boolean
   failNote?: string; failLine?: string }
+export type PonytailBand = { reused: string[]; created: string[]; openCallers: string[] }
 export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[] }
 ```
 
@@ -322,6 +330,13 @@ armed = a main turn is running
 - A failed run leaves at the next composer or bridge prompt (savvy clears `heldDone`), so re-arming applies only to a turn that starts without a prompt.
 - Struggling never pulses.
 
+### 6.9 Reuse and callers open (`track/code.ts`, decision M5)
+
+`codeOf(band)` reads ponytail's `band` atom: anything but an object gives `null`; a field that is not an array counts as empty; non-strings are dropped; each ref is cleaned like any outside string and cut at 120.
+
+- `reusePct = round(reused / (reused + created) * 100)`, `null` under 3 functions (ponytail's own `percent`).
+- `callers` = `openCallers`, the `file:line` refs to a removed definition that is still called.
+
 ## 7. The panel
 
 ### 7.1 Columns (`panel/columns.ts`)
@@ -340,8 +355,10 @@ armed = a main turn is running
 | `tests` | `stats.tests` | 20 busy, 45 idle |
 | `tokens` | `session.turns >= 3` | 30 |
 | `agent` | `session.turns >= 3` | 28 |
+| `reuse` | `stats.code.reusePct` is not `null` | 12 |
+| `callers` | `stats.code.callers` is non-empty | 10 |
 
-`maxColumns(bodyColumns) = clamp(floor((bodyColumns - 4) / 14), 2, 6)`: one column per 14 cells, 4 cells kept for the toggle (`bodyColumns` is already net of the engine's own mark, `d.ts:11411-11419`). `fit` keeps the top `max` by priority, then lays them out in the fixed order `context, turn, 5h, 7d, plan, session, tests, tokens, agent, agents`.
+`maxColumns(bodyColumns) = clamp(floor((bodyColumns - 4) / 14), 2, 6)`: one column per 14 cells, 4 cells kept for the toggle (`bodyColumns` is already net of the engine's own mark, `d.ts:11411-11419`). `fit` keeps the top `max` by priority, then lays them out in the fixed order `context, turn, 5h, 7d, plan, session, tests, tokens, agent, reuse, callers, agents`. Reuse and callers are the two lowest: they show only when every other column has room, and step aside first.
 
 ### 7.2 Sizes (`panel/fold.ts`)
 
@@ -564,7 +581,7 @@ Without these fields the row and chip can only say "failed after m:ss" and "N fa
 
 | What | Mechanism (verified in the installed code) | Its information lives on in |
 |---|---|---|
-| ponytail's band | its band hook returns nothing while the file `.ponytail-band` in the user's Claude config folder holds `off` (ponytail 5.3.3 `hooks/band/register.tsx:89`; its own command writes the file) | session cost, last turn, tokens, turns, agent time: the `session`, `tokens`, `agent` and `tests` columns. Reuse and callers-open are dropped |
+| ponytail's band | its band hook returns nothing while the file `.ponytail-band` in the user's Claude config folder holds `off` (ponytail 5.3.3 `hooks/band/register.tsx:89`; its own command writes the file) | session cost, last turn, tokens, turns, agent time: the `session`, `tokens`, `agent` and `tests` columns; reuse and callers-open in the `reuse` and `callers` columns, read from ponytail's atom, which updates with the band off |
 | skins' usage footer | drawn only while the active skin's `prefs.band` is true (skins `hooks/register.tsx:737`; the toggle is in its settings) | context, 5h, 7d with pace: the gauge columns. skins keeps styling the transcript rows |
 | the filetree fork | uninstall `filetree@nati-mods`, archive the fork's checkout, install upstream `data-goblin/claude-code-filetree` pinned at v0.8.5 with `start=off`, `work=off`, `shimmer=on` | upstream's own pane |
 

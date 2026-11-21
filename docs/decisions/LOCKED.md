@@ -26,6 +26,7 @@ Plan writing is deferred: the maintainer asked to do the panel above the prompt 
 - **session:** cost and last-turn cost.
 - **tokens and agent time:** after 3 turns. These step aside first.
 - **tests:** once a test has run since the last change.
+- **reuse and callers open (decided 2026-11-21, M5):** kept from ponytail's band as the two lowest-priority columns. They show only when the width has room after every other column, and step aside first.
 
 **Agents section.** Applies to plain subagents and Hydra crews alike.
 - One chip per agent: crab, name, steps and time left. A slow agent shows "slower" in amber.
