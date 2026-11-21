@@ -319,7 +319,7 @@ test('panel: every image has an alt and every client is under the size cap', () 
   expect(() => image('big', { source: 'x'.repeat(60_001), alt: 'a', width: 1, height: 1 }, true)).toThrow()
 })
 
-test('panel: forty agents collapse into a +N more chip within maxRows', () => {
+test('panel: forty agents collapse into a +N more chip on the two chip rows (CHIP_ROWS)', () => {
   const v = viewOf('manyAgents'), crew = { ...v.crew, agents: v.crew.agents.slice(0, 40) }
   const t = panelTree({ ...v, crew, bodyColumns: 60 })
   const rows = (find(t, 'chips')!.children as El[])
