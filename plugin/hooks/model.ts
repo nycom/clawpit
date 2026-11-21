@@ -83,9 +83,14 @@ export const crewOf = (i: CrewInput): Crew => {
 // savvy-progress's own normalisation, so a task matches the runs savvy matched it to.
 const norm = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
-const taskOf = (name: string, agents: CrewAgent[]): PlanTask => {
-  const t = norm(name)
-  const a = agents.filter(x => { const d = norm(x.title); return d === t || d.startsWith(`${t} `) }).sort((x, y) => y.startedAt - x.startedAt)[0]
+// savvy's titleOf: of several titles that fit, the longest wins, so "kit-pr2 review" is kit-pr2's and not kit's.
+const titleOf = (titles: string[], description: string): string | undefined => {
+  const d = norm(description)
+  return titles.filter(t => d === t || d.startsWith(`${t} `)).sort((a, b) => b.length - a.length)[0]
+}
+
+const taskOf = (name: string, agents: CrewAgent[], titles: string[]): PlanTask => {
+  const a = agents.filter(x => titleOf(titles, x.title) === norm(name)).sort((x, y) => y.startedAt - x.startedAt)[0]
   if (!a) return { name, state: 'todo', fill: 0 }
   const state = a.state === 'need' ? 'need' : a.state === 'running' ? 'live' : a.prop === 'fail' ? 'failed' : 'done'
   const progress = Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0)
@@ -94,7 +99,8 @@ const taskOf = (name: string, agents: CrewAgent[]): PlanTask => {
 
 export const planOf = (flow: SavvyFlow | null, agents: CrewAgent[]): Plan | null => {
   if (!flow || flow.isFinished) return null
-  const tasks = flow.tasks.map(t => taskOf(t.title, agents))
+  const titles = flow.tasks.map(t => norm(t.title))
+  const tasks = flow.tasks.map(t => taskOf(t.title, agents, titles))
   let short = flow.done - tasks.filter(t => t.state === 'done').length
   for (const t of tasks) if (short > 0 && t.state === 'todo') { t.state = 'done'; t.fill = 1; short-- }
   return { title: flow.title, phase: flow.phase === 'design' ? 'plan' : flow.phase, done: tasks.filter(t => t.state === 'done').length, total: flow.total, tasks }

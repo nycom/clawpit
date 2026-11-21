@@ -84,3 +84,9 @@ test('planOf: design phase reads as plan; a finished flow is null', () => {
   expect(crewOf(input('hydra')).plan!.phase).toBe('delegate')
   expect(crewOf(input('hydra', { flow: { ...flow, isFinished: true } }))).toMatchObject({ plan: null, title: 'Subagents' })
 })
+
+test('planOf: a run belongs to its longest matching task only', () => {
+  const run = { ...failedRun, id: 'k2', description: 'kit-pr2 review', status: 'running', startedAt: NOW - 1_000, endedAt: undefined, heldDone: false } as SavvyRun
+  const flow = { ...STATES.hydra.flow!, done: 0, tasks: [{ title: 'kit' }, { title: 'kit-pr2' }] } as typeof STATES.hydra.flow
+  expect(crewOf(input('hydra', { flow, runs: [run] })).plan!.tasks.map(t => t.state)).toEqual(['todo', 'live'])
+})
