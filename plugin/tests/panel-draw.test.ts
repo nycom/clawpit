@@ -173,3 +173,25 @@ test('panel: a failed chip with no reason and no end time shows no running clock
   }
   expect(strip(NOW + 1000)).toEqual(strip(NOW))
 })
+
+test('panel: a helper that waits on you while the pane is closed dresses the crab, dots the toggle and leads the alert chips', () => {
+  const wait = (s: 'hydra' | 'failed') => {
+    const v = viewOf(s), agents = v.crew.agents.map((a): CrewAgent => (a.id !== 'rev' ? a : {
+      ...a, helpers: a.helpers.map((h): CrewAgent => (h.id === 'k1' ? { ...h, state: 'need', prop: 'wait', question: 'Which guard should I keep?', waitingSince: NOW - 30_000 } : h)) }))
+    return (size: 'full' | 'gauges' | 'line') => viewOf(s, { crew: { ...v.crew, agents }, ui: { ...v.ui, paneOpen: false, size } })
+  }
+  const hydra = wait('hydra')
+  for (const size of ['gauges', 'line'] as const) {
+    const v = hydra(size), t = panelTree(v)
+    expect(v.loops.mascot).toBe('hop')
+    expect(propsOf(find(t, 'mascot')!).alt).toContain('find callers of guard needs you')
+    expect(propsOf(find(t, 'toggle')!).alt).toMatch(/\. An agent needs you$/)
+    expect(sourceOf(t, 'toggle')).toContain('class="er"')
+  }
+  const alert = propsOf(find(panelTree(hydra('full')), 'chips-alert')!)
+  expect(alert.alt).toBe('find callers of guard: Which guard should I keep?')
+  // need, then failed (a top-level agent, then a helper), then the rest.
+  const failed = panelTree(wait('failed')('full')), order = propsOf(find(failed, 'chips-alert')!).alt.split('; ').map(s => s.split(':')[0])
+  expect(order).toEqual(['find callers of guard', 'e2e tests', 'map the cache keys'])
+  expect(find(failed, 'chip-k1')).toBeUndefined()
+})

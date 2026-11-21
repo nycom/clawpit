@@ -4,6 +4,7 @@ import { crab } from '../crab'
 import { dial, icon, segBar, toggleIcon } from '../icons'
 import { CELL_PX, FONT, MOTION, SIZE, SURFACE, svg } from '../tokens'
 import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtDuration, fmtLeft, fmtTokens, oneLine, textWidth, xml } from '../text'
+import { alertsOf } from '../model'
 import { contextText } from '../track/context'
 import { paceText } from '../track/pace'
 import { candidates, fit, lineParts, maxColumns } from './columns'
@@ -132,14 +133,16 @@ const columnImage = (key: ColumnKey, c: Cell, w: number, first: boolean): El => 
 
 // ---------- the agents crab: who it dresses as, and what it says ----------
 type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean }
+// The top-level agents, then their helpers: a helper that waits on you or failed is an alert too.
+const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(a => a.helpers)]
 const nextUp = (agents: CrewAgent[]) => {
   const left = agents.filter(a => a.state === 'running' && a.eta.kind === 'left')
   return left.sort((x, y) => (x.eta.kind === 'left' && y.eta.kind === 'left' ? x.eta.minutes - y.eta.minutes : 0))[0]
     ?? agents.find(a => a.state === 'running') ?? agents[0]
 }
 const faceOf = (crew: Crew): Face => {
-  const as = crew.agents, title = (a: CrewAgent) => clean(a.title, 60)
-  const need = as.find(a => a.state === 'need'), failed = as.find(a => a.state === 'failed'), hard = as.find(a => a.struggling)
+  const as = crew.agents, all = withHelpers(as), title = (a: CrewAgent) => clean(a.title, 60)
+  const need = all.find(a => a.state === 'need'), failed = all.find(a => a.state === 'failed'), hard = as.find(a => a.struggling)
   if (need) return { a: need, say: `${title(need)} needs you`, tone: 'er', w: 600, alert: true }
   if (failed) return { a: failed, say: `${title(failed)} failed`, tone: 'er', w: 600, alert: true }
   if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false }
@@ -170,7 +173,7 @@ const agentsColumn = (v: PanelView, w: number): El => {
 const SIZE_ALT = { full: 'Panel: everything. Fold the agents', gauges: 'Panel: agents folded. Show one line', line: 'Panel: one line. Show everything' } as const
 const toggle = (v: PanelView): El => {
   const dot = hasDot(v.ui.size, v.crew)
-  return image('toggle', { source: svg(24, 24, at(5, 5, toggleIcon(v.ui.size, dot))), alt: `${SIZE_ALT[v.ui.size]}${dot ? (v.crew.counts.need ? '. An agent needs you' : '. An agent failed') : ''}`, width: 24, height: 24, press: 'size' }, true)
+  return image('toggle', { source: svg(24, 24, at(5, 5, toggleIcon(v.ui.size, dot))), alt: `${SIZE_ALT[v.ui.size]}${dot ? (alertsOf(v.crew).need ? '. An agent needs you' : '. An agent failed') : ''}`, width: 24, height: 24, press: 'size' }, true)
 }
 const spacer: El = { type: 'Box', props: { flexGrow: 1 } }
 
@@ -266,7 +269,7 @@ const chipRows = (v: PanelView, W: number): El | null => {
   if (!crew.agents.length) return null
   // The alert chips share one row: as many as keep ALERT_MIN px each; the rest count into '+N more'.
   const fitAlerts = Math.max(1, Math.floor((W - 2 * CHIP_PAD + CHIP_GAP) / (ALERT_MIN + CHIP_GAP)))
-  const allAlerts = crew.agents.filter(isAlert), alerts = allAlerts.slice(0, fitAlerts), rest = crew.agents.filter(a => !isAlert(a))
+  const pool = withHelpers(crew.agents), allAlerts = [...pool.filter(a => a.state === 'need'), ...pool.filter(a => a.state === 'failed')], alerts = allAlerts.slice(0, fitAlerts), rest = crew.agents.filter(a => !isAlert(a))
   const pulses = (a: CrewAgent) => loops.chipPulse && (a.state === 'need' || v.armed)
   const items: { el: El; agents: number }[] = []
   if (alerts.length) {
@@ -281,7 +284,7 @@ const chipRows = (v: PanelView, W: number): El | null => {
   let shown = items
   if (alerts.length < allAlerts.length || !fitsIn(items.map(i => width(i.el)), W, CHIP_ROWS)) {
     let k = items.length
-    const total = crew.agents.length, more = (k: number) => moreChip(total - items.slice(0, k).reduce((s, i) => s + i.agents, 0))
+    const total = allAlerts.length + rest.length, more = (k: number) => moreChip(total - items.slice(0, k).reduce((s, i) => s + i.agents, 0))
     while (k > 1 && !fitsIn([...items.slice(0, k).map(i => width(i.el)), width(more(k))], W, CHIP_ROWS)) k--
     shown = [...items.slice(0, k), { el: more(k), agents: 0 }]
   }
