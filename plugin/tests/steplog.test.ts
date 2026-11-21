@@ -30,3 +30,15 @@ test('steplog: thirty lines at most, a vanished run drops its log', () => {
   expect((logs as Record<string, unknown[]>).r1.length).toBe(30)
   expect(diff(logs, [a], [], {}, 99).r1).toBeUndefined()
 })
+test('steplog: failNote wins over stepNote when both are set', () => {
+  const a = { id: 'r1', status: 'running' } as SavvyRun
+  const logs = diff({}, [a], [{ ...a, status: 'failed', failNote: 'real cause', stepNote: 'last step' }], {}, 1)
+  expect(logs.r1[0].text).toBe('Failed: real cause')
+})
+test('steplog: a failure with no notes has no dangling colon', () => {
+  const a = { id: 'r1', status: 'running', startedAt: 0 } as SavvyRun
+  const logs = diff({}, [a], [{ ...a, status: 'failed', failedAttempts: 1 }], {}, 1)
+  expect(logs.r1.map(l => l.text)).toEqual(['Failed', 'Try 1 failed'])
+  const h = diff({}, [a, { ...a, id: 'k' }], [a, { ...a, id: 'k', status: 'failed', description: 'x', endedAt: 48_000 }], { k: 'r1' }, 1)
+  expect(h.r1[0].text).toBe('Helper "x" failed after 0:48')
+})
