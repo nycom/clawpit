@@ -9,16 +9,12 @@ import { contextText } from '../track/context'
 import { paceText } from '../track/pace'
 import { candidates, fit, lineParts, maxColumns } from './columns'
 import { hasDot } from './fold'
+import { image, type El } from '../draw'
+
+export { image, type El }
 
 export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle> }
-export type El = { type: string; props?: Record<string, unknown>; children?: (El | string)[] }
 export const COMPACT_KEY = 'clawpit-compact'
-
-const PROPS_MAX = 60_000
-export const image = (key: string, p: ImageProps, loop: boolean): El => {
-  if (JSON.stringify(p).length > PROPS_MAX) throw new Error(`clawpit: image ${key} is over ${PROPS_MAX} characters`)
-  return loop || p.press ? { type: 'Client', props: { key, module: './client/image.tsx', props: p } } : { type: 'Svg', props: { key, ...p } }
-}
 
 // ---------- text ----------
 // shortcut: the kit's width table runs up to ~10% short of SF Pro, so drawn widths add 10%; drop SLACK once the table is measured.

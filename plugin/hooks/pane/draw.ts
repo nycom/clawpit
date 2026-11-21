@@ -1,5 +1,6 @@
 // The Agents pane as a plain RenderElement tree (design §8.2). Pure: no host imports.
-import type { Crew, CrewAgent, ImageProps, LoopPlan, Role, Ui } from '../../types'
+import type { Crew, CrewAgent, LoopPlan, Role, Ui } from '../../types'
+import { image, type El } from '../draw'
 import { CELL_PX, FONT, MONO, MOTION, SIZE, cssOf, svg } from '../tokens'
 import { clip, fit, fmtAge, fmtClock, fmtCost, fmtLeft, oneLine, textWidth, wrap, xml } from '../text'
 import { icon, segBar, stepBlocks, type Seg } from '../icons'
@@ -7,16 +8,8 @@ import { crab } from '../crab'
 import { alertsOf, helpersOf } from '../model'
 import { paneLayout, type PaneItem } from './layout'
 
-export type El = { type: string; props?: Record<string, unknown>; children?: (El | string)[] }
+export type { El }
 export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number }
-
-const PROPS_MAX = 60_000
-// A looping or pressable image is a Client, so it keeps its instance across redraws; anything else is a plain Svg.
-export const image = (key: string, p: ImageProps, loop: boolean): El => {
-  const size = JSON.stringify(p).length
-  if (size > PROPS_MAX) throw new Error(`clawpit: image ${key} has ${size} characters of props, over ${PROPS_MAX}`)
-  return loop || p.press ? { type: 'Client', props: { key, module: './client/image.tsx', props: p } } : { type: 'Svg', props: { key, ...p } }
-}
 
 // The row's four columns: crab 38, title and activity, the 88px reading column, the chevron.
 const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, HELPER_READ = 72, INDENT = 14
