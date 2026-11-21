@@ -10,6 +10,13 @@ for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (cons
     await show(page, panelTree(viewOf(s, { bodyColumns: w })), { surface: 'panel', widthCells: w, theme })
     await expect(page).toHaveScreenshot(`panel-${s}-${theme}-${w}.png`, { fullPage: true })
   })
+// One folded agent: its name in the value slot and its state under it, at both folded sizes.
+for (const s of ['oneRunning', 'oneNeedsYou'] as const) for (const size of ['gauges', 'line'] as const) for (const theme of ['dark', 'light'] as const)
+  test(`panel: ${s}, ${size}, ${theme}, 60 cells @shot`, async ({ page }) => {
+    const v = viewOf(s, { bodyColumns: 60 })
+    await show(page, panelTree({ ...v, ui: { ...v.ui, size } }), { surface: 'panel', widthCells: 60, theme })
+    await expect(page).toHaveScreenshot(`panel-${s}-${size}-${theme}-60.png`, { fullPage: true })
+  })
 test('panel: nothing animates while idle', async ({ page }) => {
   await show(page, panelTree(viewOf('idle')), { surface: 'panel', widthCells: 96, theme: 'dark', motion: true }); expect(await loops(page)).toEqual({ drawings: 0, eased: 0 })
 })

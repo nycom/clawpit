@@ -6,7 +6,7 @@ import type { Activity, Eta, LogLine, SavvyFlow, SavvyRun, Stats, Ui } from '../
 export const NOW = 1_800_000_000_000
 
 export type StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead'
-  | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns'
+  | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns' | 'oneRunning' | 'oneNeedsYou'
 export type Fixture = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>
   logs: Record<string, LogLine[]>; stats: Stats; ui: Ui; busy: boolean; armed: boolean }
 
@@ -106,6 +106,9 @@ export const STATES: Record<StateName, Fixture> = {
   // Few enough columns that the two lowest (reuse, callers) have room: idle, under three turns.
   codeColumns: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, busy: false, armed: false,
     stats: { ...IDLE_STATS, session: { costUsd: 4.1, lastTurnUsd: 1.9, turns: 2, tokens: 9_400_000, agentMs: 380_000 } } }),
+  // One agent and no plan: the folded agents column names it instead of counting it.
+  oneRunning: base({ flow: null, runs: HYDRA_RUNS.filter(r => r.id === 'imp'), parents: {}, ui: { ...UI, size: 'gauges' } }),
+  oneNeedsYou: base({ flow: null, runs: NEEDS.filter(r => r.id === 'e2e'), parents: {}, logs: NEEDS_LOGS, ui: { ...UI, size: 'gauges' } }),
   manyAgents: base({
     flow: null, parents: {}, activity: {}, logs: {},
     runs: Array.from({ length: 80 }, (_, i) => run(`m${i}`, 'general-purpose', `worker ${i + 1}`, 'claude-sonnet-5-5', 10_000 + i * 1_000,
