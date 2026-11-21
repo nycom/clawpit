@@ -1,0 +1,16 @@
+{
+  "name": "clawpit-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:visual": "playwright test",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "refresh:visual": "playwright test --update-snapshots && bash scripts/preview.sh",
+    "app-diff": "node scripts/app-diff.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "pixelmatch": "6.0.0",
+    "pngjs": "7.0.0"
+  }
+}
