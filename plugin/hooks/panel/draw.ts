@@ -198,10 +198,15 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
 
 const agentsColumn = (v: PanelView, w: number): El => {
   const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
+  // One agent: its name in the value slot and only its state under it; a count of 1 says nothing (maintainer, 2026-11-21).
+  const solo = n === 1 ? v.crew.agents[0] : null, own = solo && m.f.a === solo
+  const state = own ? (m.f.tail?.trim() ?? m.f.say.replace(/^next: /, '').slice(clean(solo.title, 60).length).replace(/^ · /, '').trim()) : ''
+  const value = solo ? text(vx, 35, fitTo(clean(solo.title, 60), w - 4 - vx, 14, 600), 14, 'fg', { w: 600 })
+    : text(vx, 35, String(n), 16, 'fg', { w: 600 }) + text(ux, 35, fitWhole('agents', w - 4 - ux, 12), 12, 'muted')
   const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'agents', 11, 'muted', { max })
-    + at(x0, 15, m.body) + text(vx, 35, String(n), 16, 'fg', { w: 600 }) + text(ux, 35, fitWhole('agents', w - 4 - ux, 12), 12, 'muted')
-    + text(x0, 54, sayFit(m.f, max, 11), 11, m.f.tone, { w: m.f.w })
-  return image('mascot', { source: doc(w, COL_H, body, m.animated), alt: `Agents: show them all. ${n} agents, ${m.f.say}`, width: w, height: COL_H, press: 'open' }, true)
+    + at(x0, 15, m.body) + value
+    + text(x0, 54, own ? fitTo(state, max, 11, m.f.w) : sayFit(m.f, max, 11), 11, m.f.tone, { w: m.f.w })
+  return image('mascot', { source: doc(w, COL_H, body, m.animated), alt: `Agents: show them all. ${n} ${n === 1 ? 'agent' : 'agents'}, ${m.f.say}`, width: w, height: COL_H, press: 'open' }, true)
 }
 
 // ---------- the toggle ----------

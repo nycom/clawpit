@@ -551,3 +551,13 @@ test('panel: spare width goes to the column whose clauses would drop, warn first
   // With the limit calm, the lowest priority column gives instead: the 7d limit, and the chip is whole.
   expect(colWidth(still, 'col-7d')).toBe(13); expect(lastText(sourceOf(still, 'col-7d'))).toBe(''); expect(words(chipOf(still)!.source)).toBe('compact')
 })
+
+test('panel: one folded agent shows its name, not "1 agents", and its state under it', () => {
+  const v = viewOf('sizeGauges', { bodyColumns: 96 }), a = v.crew.agents.find(x => x.state === 'need') ?? v.crew.agents[0]
+  const texts = (t: El) => [...sourceOf(t, 'mascot').matchAll(/<text[^>]*>(.*?)<\/text>/g)].map(m => words(m[1]))
+  const one = texts(panelTree({ ...v, crew: { ...v.crew, agents: [a] } } as typeof v))
+  expect(one).not.toContain('1')
+  expect(one.filter(x => x.includes(a.title.slice(0, 6))).length).toBe(1)
+  expect(one.some(x => /^needs you$/.test(x))).toBe(true)
+  expect(texts(panelTree(v))).toContain(String(v.crew.agents.length))
+})
