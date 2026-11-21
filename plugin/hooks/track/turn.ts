@@ -2,6 +2,7 @@ import type { SessionStat, TurnStat } from '../../types'
 
 export type TurnState = { turn: TurnStat | null; cost0: number | null; session: SessionStat; idleSince: number | null }
 export const IDLE_ARM_MS = 600_000
+export const TURN_COSTS = 20
 
 export const emptyTurn = (): TurnState =>
   ({ turn: null, cost0: null, session: { costUsd: null, lastTurnUsd: null, turns: 0, tokens: 0, agentMs: 0 }, idleSince: null })
@@ -20,9 +21,12 @@ export const onCost = (s: TurnState, usd: number | null): TurnState =>
 export const onComplete = (s: TurnState, e: { isMain: boolean; durationMs: number; tokens: number }, at: number, usd: number | null): TurnState => {
   const session = { ...s.session, tokens: s.session.tokens + e.tokens }
   if (!e.isMain) return { ...s, session }
+  const last = delta(s, usd), costs = session.turnCosts ?? []
   return {
     ...s, turn: null, idleSince: at,
-    session: { ...session, costUsd: usd, lastTurnUsd: delta(s, usd), turns: session.turns + 1, agentMs: session.agentMs + e.durationMs },
+    // shortcut: a turn with no cost reading adds no entry, so the pane's turn numbers drift if readings come and go; record nulls if that shows up.
+    session: { ...session, costUsd: usd, lastTurnUsd: last, turns: session.turns + 1, agentMs: session.agentMs + e.durationMs,
+      turnCosts: last === null ? costs : [...costs, last].slice(-TURN_COSTS) },
   }
 }
 

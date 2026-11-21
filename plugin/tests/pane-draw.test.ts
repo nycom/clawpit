@@ -117,7 +117,7 @@ test('pane: the empty state', () => {
   const t = paneTree(paneViewOf('emptyPane'))
   expect(t.props!.key).toBe('clawpit-pane'); expect(t.children!.length).toBe(1)
   const e = t.children![0] as El
-  expect(e.type).toBe('Svg'); expect(words(e)).toBe('No agents yet'); expect(src(e)).toContain('width="51"'); expect(src(e)).not.toContain('animation')
+  expect(e.type).toBe('Svg'); expect(words(e)).toBe('No agents yet Agents you start show up here'); expect(src(e)).toContain('width="51"'); expect(src(e)).not.toContain('animation')
 })
 
 test('pane: a two-line question is cut with an ellipsis and fits the body width', () => {
@@ -251,4 +251,85 @@ test('pane: the drawer opens still; only a line under a second old fades in whil
   expect(s).toMatch(/<g class="nw"><text[^>]*>Ran the fold test\.<\/text><text[^>]*>&lt;1m<\/text><\/g>/)
   expect(s).toMatch(/@media \(prefers-reduced-motion: reduce\)\{\*\{animation:none!important;transition:none!important\}\}<\/style>(?!.*<style>)/)
   expect(at(NOW + 1_000, fresh)).not.toContain('animation'); expect(s).not.toContain('.rv')
+})
+
+// Every text run an image draws, as [class, text], styles and titles dropped.
+const pieces = (e: El) => [...src(e).replace(/<style>.*?<\/style>/g, '').replace(/<title>.*?<\/title>/g, '')
+  .matchAll(/<(?:tspan|text)\b([^>]*)>([^<]*)(?=<)/g)].map(m => [m[1].match(/class="([^"]*)"/)?.[1] ?? '', unescape(m[2])] as const)
+const VIEWS = ['hydra', 'needsYou', 'failed', 'both', 'drawerOpen', 'manyAgents'] as const
+
+test('pane: a cut fragment under 8 characters is dropped, never a bare ellipsis; the struggling note stays', () => {
+  const short: string[] = []
+  for (const s of VIEWS) for (let columns = 36; columns <= 64; columns += 2) {
+    const v = paneViewOf(s, { columns }), t = paneTree({ ...v, ui: { ...v.ui, shut: [] } })
+    for (const e of all(t).filter(x => x.type === 'Svg' || x.type === 'Client')) for (const [, p] of pieces(e))
+      if (p.endsWith('…') && [...p.slice(0, -1).trim()].length < 8) short.push(`${s} ${columns}: ${p}`)
+    if (s === 'failed') expect(words(find(t, 'row-rev'))).toMatch(/3 failed tr/)
+  }
+  expect(short).toEqual([])
+  // At 40 columns only a few letters of the verb fit after the note: they go, with the separator before them.
+  expect(src(find(paneTree(paneViewOf('failed', { columns: 40 })), 'row-rev'))).toMatch(/<tspan class="warn">3 failed tries<\/tspan><\/text>/)
+})
+
+test('pane: a reading column with no estimate reads the clock and a muted so far', () => {
+  const row = find(paneTree(paneViewOf('manyAgents')), 'row-m0')!
+  expect(words(row)).toContain('0:10 so far'); expect(src(row)).toMatch(/<tspan class="fg" font-weight="600">0:10<\/tspan><tspan class="muted"> so far</)
+  expect(String(inner(row).alt)).toContain('0:10 so far')
+})
+
+test('pane: the empty state says how agents arrive', () => {
+  const e = paneTree(paneViewOf('emptyPane')).children![0] as El
+  expect(pieces(e)).toEqual([['muted', 'No agents yet'], ['muted', 'Agents you start show up here']])
+  expect(src(e)).toMatch(/font-size="12"[^>]*>Agents you start show up here</)
+})
+
+test('pane: the drawer footer wraps whole items and drops usually first when tight', () => {
+  const foot = (columns: number) => {
+    const v = paneViewOf('failed', { columns }), ui = { ...v.ui, open: 'e2e' }
+    return pieces(find(paneTree({ ...v, ui }), 'drawer-e2e')!).map(([, p]) => p).join('|')
+  }
+  for (const f of ['steps |2/4', 'tries |3', 'context |62%', 'cost |≈$0.07', 'ran |2:10']) expect(foot(30)).toContain(f)
+  expect(foot(30)).not.toContain('usually'); expect(foot(36)).toContain('usually |4m'); expect(foot(52)).toContain('usually |4m')
+})
+
+test('pane: a cut activity, question or reason carries its full text in a title and the alt, unframed', () => {
+  const tip = (e: El) => src(e).match(/<title>([^<]*)<\/title>/)?.[1]
+  const rev = find(paneTree(paneViewOf('hydra', { columns: 36 })), 'row-rev')!
+  expect(unescape(tip(rev)!)).toBe('slower · Searching "UNATTENDED" in hooks/'); expect(String(inner(rev).alt)).toContain('slower · Searching "UNATTENDED" in hooks/')
+  expect(tip(find(paneTree(paneViewOf('hydra')), 'row-imp')!)).toBeUndefined()
+  const long = 'Should the fixture use Postgres, SQLite, or an in-memory fake that mirrors the migrations, given that the login flow test needs real constraints?'
+  const need = find(paneTree(withAgents(paneViewOf('needsYou', { columns: 36 }), a => a.map(x => (x.id === 'e2e' ? { ...x, question: long } : x)))), 'row-e2e')!
+  expect(unescape(tip(need)!)).toBe(long); expect(String(inner(need).alt)).toContain(long)
+  const reason = 'Could not reach Postgres on :5432 after three restarts of the container and a fresh volume'
+  const failed = find(paneTree(withAgents(paneViewOf('failed', { columns: 36 }), a => a.map(x => (x.id === 'e2e' ? { ...x, reason } : x)))), 'row-e2e')!
+  expect(unescape(tip(failed)!)).toBe(reason); expect(String(inner(failed).alt)).toContain(reason)
+  expect(tip(find(paneTree(paneViewOf('failed')), 'row-e2e')!)).toBeUndefined()
+  const helperW = withAgents(paneViewOf('failed', { columns: 36 }), a => a.map(x => (x.id === 'rev' ? { ...x, helpers: x.helpers.map(h => (h.id === 'k2' ? { ...h, reason: 'no "cacheKey" anywhere in src/ or in the tests' } : h)) } : x)))
+  const k2 = find(paneTree({ ...helperW, ui: { ...helperW.ui, shut: [] } }), 'helper-k2')!
+  expect(unescape(tip(k2)!)).toBe('no "cacheKey" anywhere in src/ or in the tests'); expect(String(inner(k2).alt)).toContain('no "cacheKey" anywhere in src/ or in the tests')
+  for (const e of [rev, need, failed, k2]) expect(inner(e).interactive).toBeUndefined()
+})
+
+test('pane: a helper that waits on you is pressed with ask:<id>; other helpers have no press', () => {
+  const v = waitingHelper(), t = paneTree({ ...v, ui: { ...v.ui, shut: [] } })
+  const k1 = find(t, 'helper-k1')!
+  expect(k1.type).toBe('Client'); expect(inner(k1).press).toBe('ask:k1'); expect(inner(k1).hover).toBe(true)
+  expect(find(t, 'helper-k2')!.type).toBe('Svg')
+  expect(inner(find(paneTree(paneViewOf('needsYou')), 'row-e2e')!).press).toBe('row:e2e')
+})
+
+test('pane: the costs view lists turn N · $X newest first with the session total and a back row', () => {
+  const v = paneViewOf('costs'), t = paneTree(v)
+  expect(t.props!.key).toBe('clawpit-pane'); expect(find(t, 'head')).toBeUndefined()
+  const back = find(t, 'back')!
+  expect(back.type).toBe('Client'); expect(inner(back).press).toBe('crew'); expect(words(back)).toBe('Agents'); expect(String(inner(back).alt)).toBe('Back to the agents')
+  const list = find(t, 'costs')!, w = words(list)
+  expect(w.startsWith('Session cost $267 · 44 turns')).toBe(true)
+  expect(w).toContain('turn 44 · $2.46 turn 43 · $1.10 turn 42 · $0.85')
+  expect(w.indexOf('turn 44')).toBeLessThan(w.indexOf('turn 25')); expect(w).not.toContain('turn 24')
+  expect(String(inner(list).alt)).toContain('turn 44 $2.46')
+  expect(src(list)).not.toContain('animation')
+  const none = words(find(paneTree({ ...v, session: { costUsd: null, lastTurnUsd: null, turns: 0, tokens: 0, agentMs: 0 } }), 'costs')!)
+  expect(none).toBe('Session cost no reading yet No turns yet')
+  for (const c of clients(t)) expect(String(inner(c).press)).toBe('crew')
 })

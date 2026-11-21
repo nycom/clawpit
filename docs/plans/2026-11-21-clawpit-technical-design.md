@@ -107,7 +107,7 @@ scripts/leak-check.sh, preview.sh    existing
 |---|---|---|---|
 | `takeover` | `boolean` | `true` at `session.start` on a desktop surface | savvy-progress (section 14) |
 | `stats` | `Stats` | `session.measure`, main `turn.start`/`turn.complete`, at most once per second from the turn tracker while a main turn runs | panel |
-| `ui` | `Ui` | Client presses, pane open/close, `session.start` (restores `size` from `$.store`) | panel, pane |
+| `ui` | `Ui` | Client presses (`view` by the `costs` and `crew` presses), pane open/close, `session.start` (restores `size` from `$.store`) | panel, pane |
 | `tick` | `number` | 1 Hz while a main turn or any agent runs; once a minute while a tests column, an armed failed chip or a limit column is on screen; never otherwise | panel, pane |
 | `idleSince` | `number \| null` | main `turn.complete` sets it, main `turn.start` clears it | failed-chip arming |
 
@@ -182,12 +182,12 @@ export type LimitStat = { kind: 'five_hour' | 'seven_day'; pct: number; pacePct:
 export type TurnStat = { startedAt: number; added: number; removed: number; costUsd: number | null }
 export type TestStat = { passed: number; failed: number; at: number }
 export type CodeStat = { reusePct: number | null; reused: number; created: number; callers: string[] }
-export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number }
+export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number; turnCosts?: number[] }   // turnCosts: the last 20 main turns' costs, newest last
 export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat; code: CodeStat | null }
 
 export type ColumnKey = 'context' | 'turn' | '5h' | '7d' | 'plan' | 'session' | 'tests' | 'tokens' | 'agent' | 'reuse' | 'callers' | 'agents'
 export type Column = { key: ColumnKey; priority: number }
-export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean }
+export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean; view?: 'crew' | 'costs' }   // view: the pane's; absent reads as crew
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
 export type Settle = { from: number; to: number }
@@ -275,7 +275,7 @@ Cap: 30 lines per agent, oldest dropped. Newest first when drawn. Runs that leav
 
 - Main `turn.start` (no `agentId`): `startedAt = $.clock.now()`, `cost0 = usage.cost?.usd`, lines zeroed, `idleSince = null`.
 - While the turn runs: lines add up from 6.1 for every loop (subagent edits count toward the turn they ran in). Live cost is `usage.cost.usd - cost0`, refreshed on each `session.measure` and after each main-loop tool call; `null` where the host keeps no ledger (`cost?`, `d.ts:13078-13083`).
-- Main `turn.complete`: `lastTurnUsd` = the final delta, `turns += 1`, `agentMs += durationMs`, `idleSince = now`, `turn = null`.
+- Main `turn.complete`: `lastTurnUsd` = the final delta, `turns += 1`, `agentMs += durationMs`, `idleSince = now`, `turn = null`. A delta that is not `null` is pushed onto `turnCosts`, which keeps the last 20.
 - Every `turn.complete` (main or agent) with `usage`: `tokens +=` input + output + cache read + cache creation.
 - Session figures count from this plugin load; a resumed session starts them at zero. The session cost itself is the engine's running total and is not reset.
 
@@ -397,7 +397,9 @@ The toggle shows the `er` dot when `size !== 'full'` and any agent is `need` or 
 4. **Running N**: 48px rows; under a row, its drawer when `ui.open === id`, then its helper rows (32px) unless its id is in `ui.shut`, then the "N helpers" toggle ("N helpers · M failed"; folded, also "· M needs you", in `er`); helper rows include helpers of helpers one level deeper on the same tree line;
 5. **Ended N**: a toggle; 30px rows unless `'ended'` is in `ui.shut`. It starts shut.
 
-With no agents at all the pane draws the empty state: crab L, still, and "No agents yet".
+With no agents at all the pane draws the empty state: crab L, still, "No agents yet", and under it one muted 12px line, "Agents you start show up here".
+
+**The costs view** (`ui.view === 'costs'`) replaces all of the above: a back row (a left chevron and "Agents", press `crew`), then one plain image with "Session cost" (13/600), the total and the turn count ("$267 · 44 turns", or "no reading yet"), and one line per kept turn, newest first: "turn N · $X" (N counted back from `turns`; finished figures are exact, no "≈"); "No turns yet" when there are none.
 
 **Budget.** Rows are taken in that order while they fit the bounds in section 11. The first that does not fit stops its section and adds `+N more`. Section heads, the title block and an open drawer are fixed and always drawn.
 
@@ -411,6 +413,10 @@ With no agents at all the pane draws the empty state: crab L, still, and "No age
 - **The drawer**: one plain Svg under the row: log lines newest first with ages, the error line in the monospace block when present, and the footer (`steps n/N`, `tries N`, `context N%`, `cost ≈$X`, `ran m:ss` for a failed run, `usually Nm`). The drawer opens still and ages read in whole minutes (`<1m`, `Nm`, the waiting-age format). Only a line under a second old fades in from the right (300 ms, 100 ms late) while older lines slide down one row; the image changes only when a line arrives or an age crosses a minute.
 - **A waiting helper row**: tinted, reads `waiting Nm` with its question. The reading column shows at most 11 step blocks. The summary moves cost and time left to a second line when it does not fit.
 - **Two-line text**: the question and the reason wrap in `wrap(text, widthPx, 2)` from `text.ts`, which measures with a per-character width table and ends the second line with "…".
+- **Cuts**: a run cut to fewer than 8 characters before its "…" is dropped, with the " · " before it; a bare "…" is never drawn. A struggling or slow note is kept, cut if it must be. A cut activity, question or reason carries its full text (up to 300 characters) in a `<title>` around it and in the image `alt`; the image stays unframed, so it keeps its press.
+- **Reading column with no estimate**: the clock (600) and a muted " so far", the activity fallback's words.
+- **Drawer footer**: whole items per line; "usually Nm" is left out when it alone would take another line.
+- **Jump in**: a needs-you row's `row:<id>` press also names the agent in the prompt; a helper that waits on you is pressable with `ask:<id>`, which only does that. The text is `@<title> `, inserted at the cursor with `$.prompt.fill`, and skipped when the draft already holds `@<title>`. The engine has no call that focuses the prompt box (`$.ui.focus` reaches only a plugin's own sites), so the person clicks into it.
 - **Hover**: the `image` Client wraps its Svg in a Box with a `#80808014` background while the pointer is over it.
 
 ## 9. The Client module (`client/image.tsx`)
@@ -440,6 +446,9 @@ Why one module: a Svg is an image with no events, a Button holds only text, and 
 | `row:<id>` | `ui.open = ui.open === id ? null : id` |
 | `kids:<id>` | toggle `<id>` in `ui.shut` |
 | `ended` | toggle `'ended'` in `ui.shut` |
+| `ask:<id>` | when `<id>` waits on you, insert `@<title> ` into the prompt (also done by `row:<id>` on such a run) |
+| `costs` | `ui.view = 'costs'`; open the Agents pane |
+| `crew` | `ui.view = 'crew'` |
 
 The hook ignores a message whose `press` is not a string of one of these forms, and answers `{}`.
 
