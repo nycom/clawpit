@@ -20,3 +20,8 @@ test('icons: a fractional settle gets a valid keyframe name', () => {
 })
 test('icons: a crowded bar keeps every segment at least 1px wide', () =>
   expect(segBar(Array.from({ length: 40 }, () => ({ state: 'done' as const, fill: 1 })), 60, 'compact')).not.toContain('width="-'))
+test('icons: a crowded bar stays inside its width', () => {
+  const svg = segBar(Array.from({ length: 40 }, () => ({ state: 'done' as const, fill: 1 })), 60, 'compact')
+  const ends = [...svg.matchAll(/x="([\d.]+)" y="0" width="([\d.]+)"/g)].map(m => +m[1] + +m[2])
+  expect(Math.max(...ends)).toBeLessThanOrEqual(60)
+})

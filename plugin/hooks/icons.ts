@@ -39,9 +39,9 @@ export const dial = (pct: number, tone: 'accent' | 'warn' | 'er', opts: { ghost?
 }
 
 export type Seg = { state: 'done' | 'live' | 'need' | 'failed' | 'todo'; role?: Role; fill: number }
-// Full tier 8px / radius 3, compact 6px / radius 2, gap 2. `grow` adds the 600 ms fill one-shot.
+// Full tier 8px / radius 3, compact 6px / radius 2, gap 2 (narrower when crowded). `grow` adds the 600 ms fill one-shot.
 export const segBar = (segs: Seg[], widthPx: number, tier: 'full' | 'compact', grow = false): string => {
-  const h = tier === 'full' ? 8 : 6, r = tier === 'full' ? 3 : 2, gap = 2, w = Math.max(1, (widthPx - gap * (segs.length - 1)) / (segs.length || 1))
+  const h = tier === 'full' ? 8 : 6, r = tier === 'full' ? 3 : 2, gap = Math.min(2, widthPx / (segs.length || 1) / 2), w = (widthPx - gap * (segs.length - 1)) / (segs.length || 1)
   return segs.map((s, i) => {
     const x = n(i * (w + gap)), box = (c: string, bw: number, extra = '') => `<rect x="${x}" y="0" width="${n(bw)}" height="${h}" rx="${r}" class="${c}${extra}"/>`
     if (s.state === 'done') return box('ok', w)

@@ -18,3 +18,8 @@ test('text: wrap cuts a long unbreakable word to the width', () => {
   expect(out.every(l => textWidth(l, 12) <= 120)).toBe(true); expect(out[1]).toContain('…')
 })
 test('text: formatters pick the unit after rounding', () => { expect(fmtCost(99.999)).toBe('$100'); expect(fmtTokens(999_999)).toBe('1M') })
+test('text: wrap keeps a long first word instead of dropping it', () => {
+  const out = wrap('/srv/app/code/project/VeryLongFileName.tsx is missing', 88, 12, 2)
+  expect(out[0]).toContain('/srv'); expect(out.every(l => textWidth(l, 12) <= 88)).toBe(true)
+  expect(wrap('/srv/app/code/project/VeryLongFileName.tsx', 88, 12, 2)[0]).toContain('/srv')
+})
