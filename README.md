@@ -10,9 +10,14 @@ An instrument panel above the prompt and a crew pane beside it, for the Claude C
 > **Status:** design locked, build not started. The preview below is the design mockup, not the running mod.
 
 <!-- preview: refreshed after every visual change, see AGENTS.md -->
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="design/preview-light.png">
+  <img alt="clawpit mockup: the panel above the prompt with gauges, the Hydra plan and agent chips, beside the Agents pane of pixel crabs" src="design/preview-dark.png">
+</picture>
 
 ## Docs
 
+- [`AGENTS.md`](AGENTS.md): the rules for working in this repo. Read it before changing anything.
 - [`docs/decisions/`](docs/decisions/): the locked design decisions, the animation budget, and the file tree decision.
 - [`docs/plans/`](docs/plans/): build plans.
 - [`design/`](design/): the interactive mockup. Open `design/mockups-all.html` in a browser; add `?theme=dark` or `?theme=light`.
