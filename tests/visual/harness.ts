@@ -1,5 +1,6 @@
 // Test-only: draws a plain RenderElement tree as an HTML page, approximating the desktop host (design §12).
 import type { Page } from '@playwright/test'
+import { CELL_PX } from '../../plugin/hooks/tokens'
 
 export type Node = string | { type: string; props?: Record<string, unknown>; children?: Node[] }
 type Opts = { surface: 'panel' | 'pane'; widthCells: number }
@@ -29,23 +30,26 @@ function boxStyle(p: Record<string, unknown>): string {
   return css.join(';')
 }
 
-function image(p: Record<string, unknown>): string {
-  const w = num(p.width) ?? 0, h = num(p.height) ?? 0
+// The app draws an Svg that spans its box (laid out in CELL_PX units) scaled to the box's width in cells.
+// `avail` is the box width in CELL_PX units; an Svg narrower than that keeps its natural size.
+function image(p: Record<string, unknown>, avail: number): string {
+  const w = num(p.width) ?? 0, h = num(p.height) ?? 0, fill = w > 0 && Math.abs(w - avail) < 1
   const key = typeof p.key === 'string' ? ` data-key="${esc(p.key)}"` : ''
-  return `<div data-svg${key} style="width:${w}px;height:${h}px;flex:none" aria-label="${esc(String(p.alt ?? ''))}"><template>${String(p.source ?? '')}</template></div>`
+  return `<div data-svg${fill ? ' data-fill' : ''}${key} style="${fill ? 'width:100%' : `width:${w}px;height:${h}px`};flex:none" aria-label="${esc(String(p.alt ?? ''))}"><template>${String(p.source ?? '')}</template></div>`
 }
 
-function html(n: Node): string {
+function html(n: Node, avail: number): string {
   if (typeof n === 'string') return esc(n)
   if (!n || typeof n !== 'object') return ''
-  const p = n.props ?? {}, kids = (n.children ?? []).map(html).join('')
+  const p = n.props ?? {}, own = n.type === 'Box' && num(p.width) !== undefined ? (p.width as number) * CELL_PX : avail
+  const kids = (n.children ?? []).map(c => html(c, own)).join('')
   const key = typeof p.key === 'string' ? ` data-key="${esc(p.key)}"` : ''
   switch (n.type) {
     case 'Box': return `<div${key} style="${boxStyle(p)}">${kids}</div>`
     case 'Text': return `<span${key}>${kids}</span>`
     case 'Button': return `<button${key}>${esc(String(p.label ?? ''))}${kids}</button>`
-    case 'Svg': return image(p)
-    case 'Client': return image({ ...(p.props as Record<string, unknown> ?? {}), key: p.key })
+    case 'Svg': return image(p, avail)
+    case 'Client': return image({ ...(p.props as Record<string, unknown> ?? {}), key: p.key }, avail)
     default: return kids
   }
 }
@@ -55,8 +59,8 @@ export function pageOf(tree: Node, opts: Opts): string {
 html,body{margin:0}
 body{background:#faf9f5;color:#1f1e1d;width:${opts.widthCells * CELL_W}px;font:12px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 @media (prefers-color-scheme: dark){body{background:#252424;color:#ecebe6}}
-</style></head><body data-surface="${opts.surface}">${html(tree)}
-<script>for (const d of document.querySelectorAll('[data-svg]')) { const t = d.querySelector('template'); d.attachShadow({ mode: 'open' }).append(t.content); t.remove() }</script>
+</style></head><body data-surface="${opts.surface}">${html(tree, opts.widthCells * CELL_PX)}
+<script>for (const d of document.querySelectorAll('[data-svg]')) { const t = d.querySelector('template'), r = d.attachShadow({ mode: 'open' }); r.append(t.content); t.remove(); if (d.hasAttribute('data-fill')) { const s = r.querySelector('svg'); s.style.width = '100%'; s.style.height = 'auto' } }</script>
 </body></html>`
 }
 
