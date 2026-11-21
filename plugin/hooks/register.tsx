@@ -6,7 +6,7 @@ import { pickLoops } from './loops'
 import { nextSize, parseSize, settle } from './panel/fold'
 import { panelTree, type PanelView } from './panel/draw'
 import type { El } from './draw'
-import { paneTree, type PaneView } from './pane/draw'
+import { benchTree, paneTree, type PaneView } from './pane/draw'
 import { emptyFacts, isEdit, linesOf, onThink, onTool } from './track/activity'
 import { diff, type Logs } from './track/steplog'
 import { parseTests } from './track/tests'
@@ -51,11 +51,16 @@ let period = 0
 let wake: Timer | null = null
 let booted: Promise<void> | null = null
 let paneAsked = false                           // the pane opened by itself this session
+let benchOn = false                             // /clawpit-bench is registered: CLAWPIT_BENCH=1 at boot
+let bench: { count: number; eased: boolean } | null = null
+
+// The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
+const BENCH_MAX = 48
 
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}
-  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false
+  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchOn = false; bench = null
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -123,6 +128,12 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
+  try {
+    if ((await $.env.get('CLAWPIT_BENCH')) === '1') {
+      await $.command.register({ name: 'clawpit-bench', description: 'Draws n walking crabs in the Agents pane, past the loop budget; 0 restores it.', argumentHint: '<n> [eased]' })
+      benchOn = true
+    }
+  } catch { errors += 1 }
 })())
 
 // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
@@ -291,8 +302,21 @@ export const register: Register = on => {
   // shortcut: vscode and mobile pass through like the terminal, as the panel does.
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     if (e.surface !== 'desktop') return next(e)
+    if (bench) return liveOf($, e)(benchTree(bench.count, bench.eased))
     return liveOf($, e)(paneTree((await view($, e.props.bodyColumns)).pane))
   }).catch((_$, _e, next) => { errors += 1; return failedLine(next.error.kind) })
+
+  // `/clawpit-bench <n> [eased]`: the pane draws n looping crabs until `/clawpit-bench 0`. Unregistered, it passes through.
+  on('command.run', { command: 'clawpit-bench' }, async ($, e, next) => {
+    if (!benchOn) return next(e)
+    const [arg, mode] = e.args.trim().split(/\s+/), count = Number(arg)
+    if (!/^\d+$/.test(arg) || count > BENCH_MAX || (mode !== undefined && mode !== 'eased'))
+      return { text: `Usage: /clawpit-bench <n> [eased], n from 0 to ${BENCH_MAX}.` }
+    bench = count ? { count, eased: mode === 'eased' } : null
+    if (bench) await openPane($)
+    $.ui.invalidate('ui.render')
+    return { text: bench ? `Bench: ${count} ${bench.eased ? 'eased' : 'stepped'} crabs in the Agents pane.` : 'Bench off: the Agents pane is back.' }
+  })
 
   // paneOpen follows the pane itself. clawpit never closes it: the desktop leaves an emptied tile as a tab no one can close.
   on('ui.open', { id: PANE_ID }, async ($, e, next) => {

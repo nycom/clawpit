@@ -369,3 +369,12 @@ export const paneTree = (v: PaneView): El => {
   const items = paneLayout(v.crew, v.ui, v.loops, itemCost), edge = readEdge(items, W, v.now)
   return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, edge)) }
 }
+
+// The measuring bench: `count` walking M crabs, past the loop budget. Eased keeps the walk's size and keyframes on an
+// every-frame timing: the one place an eased loop is drawn.
+export const benchTree = (count: number, eased: boolean): El => {
+  const walk = crab({ role: 'explore', prop: 'none', walk: true, size: 'M' }), [w, h] = SIZE.crab.M
+  const source = eased ? walk.replaceAll(MOTION.walk, '.5s ease-in-out') : walk
+  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' },
+    children: Array.from({ length: count }, (_, i) => image(`bench-${i}`, { source, alt: 'bench crab', width: w, height: h }, true)) }
+}
