@@ -56,7 +56,7 @@ Plan writing is deferred: the maintainer asked to do the panel above the prompt 
 The maintainer chose **upstream + skins patch**. See `FILETREE-DECISION.md` for the details.
 - Install `data-goblin/claude-code-filetree`, pinned (v0.8.5, or 0.9.0 once it ships).
 - Settings: `start=off`, `work=off`, `shimmer=on`.
-- Uninstall `filetree@nati-mods` and archive the fork.
+- Uninstall the maintainer's fork (from the fork's own marketplace) and archive it.
 - ~~Skins theme-sync module~~: skipped for now (see "Colours" below).
 
 ## Colours: decided 2026-11-21

@@ -1,5 +1,7 @@
 # clawpit Implementation Plan
 
+Status: built 2026-11-21; the step checkboxes below were not ticked as work landed — LOCKED.md and the PR record what shipped.
+
 > **For whoever executes this:** work task by task, in order. Tasks 5 to 13 run as parallel workstreams; every other task runs in the build session with the maintainer present. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build clawpit, a desktop mod that draws an instrument panel above the prompt and an Agents pane of pixel crabs, as a view on savvy-progress's crew data.
@@ -90,7 +92,7 @@ test('scaffold: the plugin loads and draws nothing above the prompt', async $ =>
 ```
 
 - [ ] **Step 2: Run** `claude plugin test plugin`. Expected: it fails, because `plugin/` has no manifest.
-- [ ] **Step 3: Create the manifest and the empty module.** `plugin.json`: `name` `clawpit`, the README's first sentence as `description`, `types` `./types/index.d.ts`, `license` `MIT`, no `version`, no `userConfig`. `hooks.json`: `{ "modules": ["./register.tsx"] }`. `register.tsx`: `export const register: Register = () => {}`. `marketplace.json`: one plugin, `name` `clawpit`, `source` `./plugin`. Add `node_modules/`, `artifacts/`, `test-results/`, `playwright-report/` to `.gitignore`.
+- [ ] **Step 3: Create the manifest and the empty module.** `plugin.json`: `name` `clawpit`, the README's first sentence as `description`, `types` `./types/index.d.ts`, `license` `MIT`, no `version`, `userConfig` with `bench` and `animations` (both booleans, added later in the build). `hooks.json`: `{ "modules": ["./register.tsx"] }`. `register.tsx`: `export const register: Register = () => {}`. `marketplace.json`: one plugin, `name` `clawpit`, `source` `./plugin`. Add `node_modules/`, `artifacts/`, `test-results/`, `playwright-report/` to `.gitignore`.
 - [ ] **Step 4: Run** `claude plugin validate plugin && claude plugin test plugin`. Expected: validate reports no error; `1 pass`, `0 fail`.
 - [ ] **Step 5: Add CI.** `.github/workflows/ci.yml`, one job on `macos-latest`, on pull requests: `npm ci`, `npx playwright install chromium`, `npm run test:scripts`, `npm run test:visual -- --grep-invert @shot`, `bash scripts/leak-check.sh`. Screenshot comparisons (`@shot`) and `claude plugin test` are local gates: baselines depend on the machine's fonts, and the CLI is not on the runner. The job is committed now and goes green once Task 2 adds the scripts.
 - [ ] **Step 6: Commit**
@@ -580,7 +582,7 @@ git commit -m "track: add the eta, turn, pace, context and code trackers"
 
 **Interfaces:**
 - Consumes: `Crew`, `Ui`, `LoopPlan` from Task 4.
-- Produces: `export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 8 }` (one ring at most: `LoopPlan.ring` is a single id) and `export const pickLoops: (crew: Crew, ui: Ui, busy: boolean, armed: boolean) => LoopPlan`. Rules: design §10, exactly. The tests read `BUDGET`; they never repeat its numbers, so Task 20 can change them.
+- Produces: `export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 12 }` (`max` measured 2026-11-21, ANIMATION-LIMIT.md "Measured") (one ring at most: `LoopPlan.ring` is a single id) and `export const pickLoops: (crew: Crew, ui: Ui, busy: boolean, armed: boolean) => LoopPlan`. Rules: design §10, exactly. The tests read `BUDGET`; they never repeat its numbers, so Task 20 can change them.
 
 - [ ] **Step 1: Write the failing tests** (crews are built by hand from the `CrewAgent` type)
 
@@ -776,9 +778,9 @@ test('takeover: with the atom unset savvy draws as before', …)
 test('takeover: autoOpen stands down on both of its paths, a new plan and a subagent spawn', …)   // the check sits inside autoOpen() itself
 ```
 
-- [ ] **Step 2: Run** `claude plugin test plugins/savvy-progress`. Expected: the 8 new tests fail; the existing 179 pass (the count includes the 5 tests of the git-excluded `tests/zz.preview.test.ts`, which the run copies into each worktree).
+- [ ] **Step 2: Run** `claude plugin test plugins/savvy-progress`. Expected: the 8 new tests fail; the existing tests pass.
 - [ ] **Step 3: Apply the diff in design §15.**
-- [ ] **Step 4: Run** `claude plugin validate plugins/savvy-progress && claude plugin test plugins/savvy-progress`. Expected: no validate error; `187 pass`, `0 fail`.
+- [ ] **Step 4: Run** `claude plugin validate plugins/savvy-progress && claude plugin test plugins/savvy-progress`. Expected: no validate error; `0 fail`.
 - [ ] **Step 5: Commit** on the local branch, with no push
 
 ```bash
@@ -829,7 +831,7 @@ test('panel: the failed chip pulses only while armed', () => { /* armed false ->
 test('panel: wording', () => { /* chip '3/5 · ~2m left'; struggling '1/4 · ~4m left · 3 failed tries'; slow '… · slower'; failed 'failed · Could not reach Postgres on :5432'; folded 'next: savvy-progress implement · ~2m left'; plan '2/7 tasks · ~9m left'; codeColumns at bodyColumns 96 (at 60 cells the four columns are taken, so neither shows): 'col-reuse' says '72%' and '18 used · 7 new', 'col-callers' says '2 open' in warn and 'hooks/band.ts:41, tests/fold.test.ts:12' */ })
 test('panel: a hostile chip title still yields well-formed svg', () => { /* title '<b>&"\u0000' -> every source parses with the test's tiny tag-balance check, and contains '&lt;b&gt;' */ })
 test('panel: every image has an alt and every client is under the size cap', () => {})
-test('panel: forty agents collapse into a +N more chip within maxRows', () => {})
+test('panel: forty agents collapse into a +N more chip on the two chip rows (CHIP_ROWS)', () => {})
 ```
 
 - [ ] **Step 2: Run** `claude plugin test plugin`. Expected: `panel-draw.test.ts` fails.
@@ -1133,7 +1135,7 @@ An operations task with the maintainer present; clawpit's repo is not changed.
 
 - [ ] **Step 1 (maintainer): install upstream** `data-goblin/claude-code-filetree` from its own marketplace, pinned at tag `v0.8.5`.
 - [ ] **Step 2 (maintainer): set** `start=off`, `work=off`, `shimmer=on` in its settings. Confirm the three option names in its manifest first; they were not verified for this plan.
-- [ ] **Step 3 (maintainer): uninstall** `filetree@nati-mods`.
+- [ ] **Step 3 (maintainer): uninstall** the maintainer's fork of filetree (installed from the fork's own marketplace).
 - [ ] **Step 4: Archive the fork.** In the fork's checkout: tag the head `archive/2026-11-21`, add one line to its README saying it is archived in favour of upstream, commit locally. Do not delete the checkout. Archiving the remote repository is the maintainer's click.
 - [ ] **Step 5: Drop the fork from the maintainer's local mods-check list** and add `clawpit`.
 - [ ] **Step 6: App check**, task name `filetree`: the Files tab and the Agents tab, with an agent running; dark and light; then the idle check.
@@ -1208,7 +1210,7 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 - [ ] **Step 6: The app diff, every task's states.** Re-capture every state of `panel`, `sizes`, `pane`, `retire` and `filetree` (the app check procedure, steps 2 to 4), then `for t in panel sizes pane retire filetree; do npm run app-diff -- $t && npm run app-diff -- $t --idle; done`. Expected: every row `pass`, exit 0.
 - [ ] **Step 7: The leak check.** `bash scripts/leak-check.sh`. Expected: `leak-check: clean`. Also `git status --short artifacts` prints nothing tracked.
 - [ ] **Step 8: The previews.** `bash scripts/preview.sh`, then `git status --short design`. Expected: no change, or only the two PNGs if the design changed since Task 21; commit them if so.
-- [ ] **Step 9: The savvy checkout.** `claude plugin test plugins/savvy-progress` in the claude-kit checkout. Expected: `187 pass`, `0 fail`. `git branch -r --contains clawpit/step-fields` prints nothing: the branch is on no remote.
+- [ ] **Step 9: The savvy checkout.** `claude plugin test plugins/savvy-progress` in the claude-kit checkout. Expected: `0 fail`. `git branch -r --contains clawpit/step-fields` prints nothing: the branch is on no remote.
 - [ ] **Step 10: Write the "not checked" list** for the PR description, from design §19 and whatever the app checks left unsure. Open the PR only on the maintainer's go.
 
 ---

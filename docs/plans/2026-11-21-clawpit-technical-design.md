@@ -68,7 +68,7 @@ The repo root is the dev workspace; the plugin lives in `plugin/`, so Node tooli
 package.json                         dev only: Playwright, pixelmatch, pngjs (exact pins)
 playwright.config.ts
 plugin/
-  .claude-plugin/plugin.json         name "clawpit", types "./types/index.d.ts", no userConfig
+  .claude-plugin/plugin.json         name "clawpit", types "./types/index.d.ts", userConfig `bench` and `animations`
   hooks/hooks.json                   { "modules": ["./register.tsx"] }
   hooks/register.tsx                 atoms, observers, the two render hooks, ui.message
   hooks/tokens.ts                    colour, type, size, motion tokens; cssOf(used)
@@ -463,7 +463,7 @@ The hook ignores a message whose `press` is not a string of one of these forms, 
 `loops.ts` is the only place that decides what moves. `pickLoops(crew, ui, busy, armed): LoopPlan`:
 
 ```
-BUDGET = { walkers: 3, walkersOnBeat: 2, rings: 1, max: 8 }     // provisional until measured
+BUDGET = { walkers: 3, walkersOnBeat: 2, max: 12 }     // measured 2026-11-21 (ANIMATION-LIMIT.md, "Measured"); one ring at most: LoopPlan.ring is one id
 
 working = busy || crew has an agent in 'running' or 'need'
 beat    = crew has 'need' || (crew has 'failed' && armed)
@@ -488,7 +488,7 @@ count     = looping drawings on screen:
 - Idle means no main turn and no running or waiting agent. Idle, the only thing that may loop is the armed failed pulse (chip, or the folded crab's stagger), for at most 10 minutes.
 - Every loop is `steps()`. One-shot keyframes (needle settle, bar fill, drawer reveal, the done flag's 6 waves) are not loops.
 - Both draw modules take the `LoopPlan`; neither chooses a loop on its own. Tests assert it at two levels: on `LoopPlan.count`, and in the rendered page by counting running infinite animations (section 12).
-- The numbers in `BUDGET` are finalized by the measurement task (ANIMATION-LIMIT, "Measurement") before the build is called done.
+- The numbers in `BUDGET` were set by the measurement on 2026-11-21: `max` 12 (ANIMATION-LIMIT.md, "Measured").
 
 ## 11. Text and engine-size budgets
 
@@ -498,7 +498,7 @@ count     = looping drawings on screen:
 | An Svg source | 131,072 characters (`d.ts:13811-13814`) | the same builder |
 | The pane tree, host side | 200,000 characters of JSON | `paneLayout` budget (savvy's `HOST_MAX`) |
 | The pane tree, engine side | 90,000 counted characters: a Client's props, an Svg's alt, keys, labels, strings (savvy's `engineChars`, `ENGINE_MAX`) | `paneLayout` budget |
-| The panel | `maxRows` rows (`d.ts:11399-11410`); the same two character bounds | chips collapse to `+N more` |
+| The panel | two chip rows (`CHIP_ROWS = 2` in `panel/draw.ts`); the same two character bounds | chips collapse to `+N more` |
 | Any outside string | `oneLine`, then `clip`: title 60, activity target 48, question and reason 160, error line 200, log line 120, task name 24 | `text.ts` |
 | Per agent | 30 log lines, 50 files | trackers |
 | Crew | the newest 200 runs (savvy's own cap) | savvy |
@@ -512,7 +512,7 @@ Unit tests under everything, then three visual layers: Playwright on the render 
 1. **Unit** (`claude plugin test plugin`): every pure module, plus `register.tsx` against the engine's mock (`claude-code/testing`): observers, atoms, `ui.message`, the two render hooks mounted on `desktop`.
 2. **Visual** (Playwright, `tests/visual/`):
    - **The harness** (`tests/visual/harness.ts`, test-only) turns a `RenderElement` tree into an HTML page: Box → flex container (`width` × 9.2px per cell, `height` × 18.4px per row, vertical gaps half a row), Text → span, Button → button, Svg → its markup **inline inside a shadow root** (so one image's `<style>` cannot touch another's), Client → its props drawn as an Svg (every clawpit Client's props are `ImageProps`). The panel sits on the measured surfaces `#252424` / `#faf9f5`, the pane on the same, at fixed widths.
-   - **Stills**: `toHaveScreenshot` with `maxDiffPixelRatio: 0.01`, `animations: 'disabled'`, and `reducedMotion: 'reduce'` emulated. Dark and light come from `colorScheme` emulation, which the SVGs' own media queries answer.
+   - **Stills**: `toHaveScreenshot` with `maxDiffPixelRatio: 0.002`, `animations: 'disabled'`, and `reducedMotion: 'reduce'` emulated. Dark and light come from `colorScheme` emulation, which the SVGs' own media queries answer.
    - **Fixtures** (`plugin/tests/fixtures/states.ts`): idle, busy, hydra, needs-you, failed, both, context-90, limit-ahead, the three sizes, pane with the drawer open, helpers, empty pane; each at a narrow and a wide width; each in dark and light.
    - **Motion**: with motion allowed, count the shadow roots holding at least one animation with infinite iterations. Idle must be 0. Each busy fixture must equal its `LoopPlan.count` and stay within `BUDGET.max`, and no infinite animation may use a non-`steps` timing function.
    - **Accessibility**: each text token against both surfaces from the ALIGNMENT table (4.5:1 for text, 3:1 for bare marks; the crab body and the role fills are the two exceptions ALIGNMENT lists under "Left as is"); every Svg and every `image` Client in every fixture has a non-empty `alt`.
@@ -599,7 +599,7 @@ Without these fields the row and chip can only say "failed after m:ss" and "N fa
 |---|---|---|
 | ponytail's band | its band hook returns nothing while the file `.ponytail-band` in the user's Claude config folder holds `off` (ponytail 5.3.3 `hooks/band/register.tsx:89`; its own command writes the file) | session cost, last turn, tokens, turns, agent time: the `session`, `tokens`, `agent` and `tests` columns; reuse and callers-open in the `reuse` and `callers` columns, read from ponytail's atom, which updates with the band off |
 | skins' usage footer | drawn only while the active skin's `prefs.band` is true (skins `hooks/register.tsx:737`; the toggle is in its settings) | context, 5h, 7d with pace: the gauge columns. skins keeps styling the transcript rows |
-| the filetree fork | uninstall `filetree@nati-mods`, archive the fork's checkout, install upstream `data-goblin/claude-code-filetree` pinned at v0.8.5 with `start=off`, `work=off`, `shimmer=on` | upstream's own pane |
+| the filetree fork | uninstall the maintainer's fork (from the fork's own marketplace), archive the fork's checkout, install upstream `data-goblin/claude-code-filetree` pinned at v0.8.5 with `start=off`, `work=off`, `shimmer=on` | upstream's own pane |
 
 All three are operations with the maintainer present. The filetree option names were not verified against upstream's manifest here.
 
@@ -627,7 +627,7 @@ All three are operations with the maintainer present. The filetree option names 
 | Hook order between clawpit and other `AbovePrompt` plugins | medium | clawpit draws only its own row and never nests `next(e)`; checked in the app |
 | The pane cannot know it is the front tab | certain | `paneOpen` counts an open pane as visible; hidden images pause themselves in Chromium |
 | The engine-size bound at 30+ agents | medium | the budget test at 80 agents; `+N more` |
-| The loop budget is unmeasured | certain | the measurement task finalizes `BUDGET`; tests read the constant |
+| The loop budget | measured 2026-11-21 | `max` 12 (ANIMATION-LIMIT.md, "Measured"); tests read the constant |
 | Monospace error line: Menlo may not resolve inside an image | unknown | checked in the app; falls back to the system face |
 | savvy and clawpit drift (a renamed field in the fork) | low | `SavvyRun` lists exactly the fields read; a unit test feeds savvy's real fixture shape |
 | Playwright baselines depend on the machine's fonts | certain | baselines are made and compared on the maintainer's Mac; CI runs the motion and accessibility specs only |

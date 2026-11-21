@@ -181,7 +181,7 @@ Also checked in headless Chrome: no console errors; the page's own loop check pa
 ## Not checked
 
 - Nothing here was seen in the real app. Every render is headless Chrome.
-- The loop budget is still the provisional one from `ANIMATION-LIMIT.md`; no CPU measurement exists.
+- The loop budget was measured on 2026-11-21: `max` 12 (`ANIMATION-LIMIT.md`, "Measured").
 - The states not shown in the composite: failed, context at 90%, plain subagents, idle, empty pane, and the one-line size (it is reachable by clicking the toggle, but was not screenshotted).
 - Widths other than 880px for the panel and 400px for the pane.
 - The file tree is redrawn from one light screenshot and upstream's constants. Its dark look is inferred.

@@ -24,7 +24,7 @@ Two independent research passes were made. Both were read-only; nothing was inst
    - `start=off`, so it doesn't take the side-pane front tab from the Agents pane at session start.
    - `work=off`, so it doesn't `/cd` on its own.
    - `shimmer=on`. The shimmer runs only while Claude works and stops on its own when idle.
-3. Uninstall `filetree@nati-mods`, and archive the fork: no deletion, keep the repo.
+3. Uninstall the maintainer's fork (from the fork's own marketplace), and archive it: no deletion, keep the repo.
 4. After 0.9.0: write a small **skins theme-sync module** for upstream, using the fork's skins tests as the spec. Offer it upstream as a PR, which needs the maintainer's OK before it goes out. Until then the pane uses the app's colours, not the skin's.
 5. By eye in the app: the Agents pane and filetree share the side pane without stealing the front tab, light mode is readable, and nothing moves when idle.
 
