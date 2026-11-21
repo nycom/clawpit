@@ -6,7 +6,7 @@ import type { Activity, SavvyFlow, SavvyRun, Stats, Ui } from '../../types'
 export const NOW = 1_800_000_000_000
 
 export type StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead'
-  | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents'
+  | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns'
 export type Fixture = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>
   stats: Stats; ui: Ui; busy: boolean; armed: boolean }
 
@@ -47,6 +47,7 @@ const STATS: Stats = {
   turn: { startedAt: NOW - 102_000, added: 38, removed: 6, costUsd: 0.42 },
   tests: { passed: 179, failed: 0, at: NOW - 180_000 },
   session: { costUsd: 267, lastTurnUsd: 2.46, turns: 44, tokens: 441_000_000, agentMs: 39_000_000 },
+  code: { reusePct: 72, reused: 18, created: 7, callers: ['hooks/band.ts:41', 'tests/fold.test.ts:12'] },
 }
 const UI: Ui = { size: 'full', open: null, shut: ['ended'], paneOpen: true }
 
@@ -77,6 +78,9 @@ export const STATES: Record<StateName, Fixture> = {
   drawerOpen: base({ ui: { ...UI, open: 'imp' } }),
   helpers: base({ ui: { ...UI, shut: ['ended', 'rev'] } }),
   emptyPane: base({ flow: null, runs: [], parents: {}, activity: {}, stats: IDLE_STATS, busy: false, armed: false }),
+  // Few enough columns that the two lowest (reuse, callers) have room: idle, under three turns.
+  codeColumns: base({ flow: null, runs: [], parents: {}, activity: {}, busy: false, armed: false,
+    stats: { ...IDLE_STATS, session: { costUsd: 4.1, lastTurnUsd: 1.9, turns: 2, tokens: 9_400_000, agentMs: 380_000 } } }),
   manyAgents: base({
     flow: null, parents: {}, activity: {},
     runs: Array.from({ length: 80 }, (_, i) => run(`m${i}`, 'general-purpose', `worker ${i + 1}`, 'claude-sonnet-5-5', 10_000 + i * 1_000,

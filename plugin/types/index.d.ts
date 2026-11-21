@@ -40,10 +40,11 @@ export type ContextStat = { pct: number; msgsPct: number | null; turnsLeft: numb
 export type LimitStat = { kind: 'five_hour' | 'seven_day'; pct: number; pacePct: number | null; projected: number | null; ahead: boolean; hot: boolean }
 export type TurnStat = { startedAt: number; added: number; removed: number; costUsd: number | null }
 export type TestStat = { passed: number; failed: number; at: number }
+export type CodeStat = { reusePct: number | null; reused: number; created: number; callers: string[] }   // from ponytail's band atom
 export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number }
-export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat }
+export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat; code: CodeStat | null }
 
-export type ColumnKey = 'context' | 'turn' | '5h' | '7d' | 'plan' | 'session' | 'tests' | 'tokens' | 'agent' | 'agents'
+export type ColumnKey = 'context' | 'turn' | '5h' | '7d' | 'plan' | 'session' | 'tests' | 'tokens' | 'agent' | 'reuse' | 'callers' | 'agents'
 export type Column = { key: ColumnKey; priority: number }
 export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean }
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
@@ -58,11 +59,14 @@ export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
   stepDone?: number; stepTotal?: number; stepNote?: string
   failedAttempts?: number; blocked?: string; heldDone?: boolean
   failNote?: string; failLine?: string }
+/** The fields of ponytail's `band` atom that clawpit reads (ponytail 5.3.3 `hooks/band/types.d.ts`). */
+export type PonytailBand = { reused: string[]; created: string[]; openCallers: string[] }
 export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[] }
 
 declare module 'claude-code' {
   interface PluginState {
     clawpit: { takeover: boolean; stats: Stats; ui: Ui; tick: number; idleSince: number | null }
     'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[] }
+    ponytail: { band: PonytailBand }
   }
 }
