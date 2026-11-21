@@ -13,6 +13,7 @@ An instrument panel above the prompt and a crew pane beside it, for the Claude C
 
 ## Docs
 
+- [`AGENTS.md`](AGENTS.md): the rules for working in this repo. Read it before changing anything.
 - [`docs/decisions/`](docs/decisions/): the locked design decisions, the animation budget, and the file tree decision.
 - [`docs/plans/`](docs/plans/): build plans.
 - [`design/`](design/): the interactive mockup. Open `design/mockups-all.html` in a browser; add `?theme=dark` or `?theme=light`.
