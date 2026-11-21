@@ -106,3 +106,4 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Cuts keep meaning:** a note never takes an ellipsis, a cut never splits a number, and a helper row keeps its title over its reason.
 - **Cost list:** amounts right-aligned in the reading column, only the total bold, under a 'Last N turns' header.
 - **Empty pane:** the title in fg, the hint muted.
+- **Column widths follow need:** columns share the row by what their text needs; warnings claim spare width first; the Compact button takes its room from the column with the most slack.
