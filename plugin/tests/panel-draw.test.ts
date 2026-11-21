@@ -154,15 +154,17 @@ test('panel: past forty tasks the plan bar is three proportional parts', () => {
   expect(src.match(/<rect /g)!.length).toBe(3); expect(words(src)).toBe('')
 })
 
-test('panel: many alert chips stay within the width and the rest count into +N more', () => {
+test('panel: many alert chips stay within the width; the alerts left out go red, the normal chips left out count into +N more', () => {
   for (const n of [3, 8, 12]) for (const bodyColumns of [60, 96]) {
     const v = viewOf('manyAgents'), agents = v.crew.agents.slice(0, 20).map((a, i): CrewAgent => (i < n ? { ...a, state: 'need', question: `Which schema should worker ${i + 1} use?` } : a))
     const t = panelTree({ ...v, crew: { ...v.crew, agents }, bodyColumns }), W = bodyColumns * 8.5
     const rows = find(t, 'chips')!.children as El[], chips = rows.flatMap(r => r.children as El[])
     for (const r of rows) expect((r.children as El[]).reduce((w, c) => w + propsOf(c).width, 0)).toBeLessThanOrEqual(W)
-    const shown = chips.filter(c => keyOf(c) !== 'chip-more').reduce((s, c) => s + propsOf(c).alt.split('; ').length, 0)
+    const alerts = propsOf(find(t, 'chips-alert')!).alt.split('; '), over = Number(alerts.at(-1)!.match(/^(\d+) more need you$/)?.[1] ?? 0)
+    expect(alerts.length - (over ? 1 : 0) + over).toBe(n)
+    const shown = chips.filter(c => keyOf(c) !== 'chip-more' && keyOf(c) !== 'chips-alert').length
     const more = find(t, 'chip-more')
-    expect(more ? words(propsOf(more).source) : '').toBe(shown < 20 ? `+${20 - shown} more` : '')
+    expect(more ? words(propsOf(more).source) : '').toBe(shown < 20 - n ? `+${20 - n - shown} more` : '')
   }
 })
 
@@ -236,4 +238,48 @@ test('panel: a test run under a minute ago reads "<1m ago"', () => {
   const v = viewOf('hydra')
   const t = panelTree(viewOf('hydra', { stats: { ...v.stats, tests: { passed: 179, failed: 0, at: NOW - 42_000 } }, busy: false, bodyColumns: 140 }))
   expect(sourceOf(t, 'col-tests')).toContain('&lt;1m ago')
+})
+
+// Twenty workers, the first `need` waiting on you and the next `failed` failed, at 60 cells.
+const alertCrowd = (need: number, failed: number, over: Partial<ReturnType<typeof viewOf>> = {}) => {
+  const v = viewOf('manyAgents'), agents = v.crew.agents.slice(0, 20).map((a, i): CrewAgent =>
+    (i < need ? { ...a, state: 'need', question: `Which schema should worker ${i + 1} use?` } : i < need + failed ? { ...a, state: 'failed', reason: `worker ${i + 1} broke` } : a))
+  const crew = { ...v.crew, agents, counts: { ...v.crew.counts, need, failed, running: 20 - need - failed } }
+  return viewOf('manyAgents', { crew, bodyColumns: 60, ...over })
+}
+const alertRow = (t: El) => {
+  const img = find(t, 'chips-alert')!, p = propsOf(img), alts = p.alt.split('; ')
+  return { img, p, alts, shown: alts.length - 1, last: alts.at(-1)! }
+}
+
+test('panel: alerts past one row collapse into a red +N need you chip, never into +N more', () => {
+  const t = panelTree(alertCrowd(6, 0)), W = 60 * 8.5, { p, shown, last } = alertRow(t)
+  const n = 6 - shown
+  expect(shown).toBeGreaterThan(0); expect(n).toBeGreaterThan(0)
+  expect(words(p.source).endsWith(`+${n} need you`)).toBe(true)
+  expect(p.source).toMatch(new RegExp(`class="red"/><text fill="#fff"[^>]*>\\+${n} need you</text>`))
+  expect(last).toBe(`${n} more need you`)
+  expect(p.width).toBeLessThanOrEqual(W)
+  const rows = find(t, 'chips')!.children as El[]
+  for (const r of rows) expect((r.children as El[]).reduce((w, c) => w + propsOf(c).width, 0)).toBeLessThanOrEqual(W)
+  // The muted '+N more' counts only the normal chips left out.
+  const normal = rows.flatMap(r => r.children as El[]).filter(c => keyOf(c) !== 'chips-alert' && keyOf(c) !== 'chip-more').length
+  expect(words(propsOf(find(t, 'chip-more')!).source)).toBe(`+${20 - 6 - normal} more`)
+})
+
+test('panel: the red overflow chip reads +N failed only when no agent in it needs you', () => {
+  const mix = alertRow(panelTree(alertCrowd(3, 3, { armed: true })))
+  expect(words(mix.p.source).endsWith(`+${6 - mix.shown} need you`)).toBe(true)
+  expect(mix.last).toMatch(/^\d+ more need you, 3 failed$/)
+  const failed = alertRow(panelTree(alertCrowd(1, 5, { armed: true })))
+  expect(words(failed.p.source).endsWith(`+${6 - failed.shown} failed`)).toBe(true)
+  expect(failed.last).toBe(`${6 - failed.shown} more failed`)
+})
+
+test('panel: the red overflow chip pulses inside the alert chips client, and the loop count still matches', () => {
+  const v = alertCrowd(6, 0), t = panelTree(v), { img, p } = alertRow(t)
+  expect(v.loops.chipPulse).toBe(true)
+  expect(img.type).toBe('Client'); expect(alertRow(t).last).toMatch(/^\d+ more need you$/)
+  expect(p.source.match(/class="s-halo35 pulse"/g)!.length).toBe(alertRow(t).alts.length)
+  expect(panelLoopCount(v)).toBe(images(t).filter(e => propsOf(e).source.includes('infinite')).length)
 })

@@ -253,6 +253,14 @@ const chipImage = (key: string, arts: { w: number; body: string; alt: string }[]
   const w = +(x - CHIP_GAP + CHIP_PAD).toFixed(2), h = CHIP_H + 2 * CHIP_PAD
   return image(key, { source: doc(w, h, body + style, animated), alt: arts.map(c => c.alt).join('; '), width: w, height: h }, loop)
 }
+// The alerts past one row: a red chip of their own, never the muted '+N more'.
+const alertMoreArt = (over: CrewAgent[], pulse: boolean) => {
+  const need = over.filter(a => a.state === 'need').length, failed = over.length - need
+  const say = `+${over.length} ${need ? 'need you' : 'failed'}`, w = +(widthOf(say, 12, 600) + 20).toFixed(2)
+  const body = (pulse ? `<rect class="s-halo35 pulse" x="-1.5" y="-1.5" width="${w + 3}" height="${CHIP_H + 3}" rx="9.5" fill="none" stroke-width="3" opacity="0"/>` : '')
+    + `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="red"/>` + text(10, 17, say, 12, '#fff', { w: 600 })
+  return { w, body, alt: need ? `${need} more need you${failed ? `, ${failed} failed` : ''}` : `${failed} more failed` }
+}
 const moreChip = (n: number): El => {
   const say = `+${n} more`, w = widthOf(say, 12) + 20
   return chipImage('chip-more', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + text(10, 17, say, 12, 'muted'), alt: `${n} more agents` }], false, false)
@@ -268,23 +276,28 @@ const CHIP_ROWS = 2
 const chipRows = (v: PanelView, W: number): El | null => {
   const { crew, loops } = v
   if (!crew.agents.length) return null
-  // The alert chips share one row: as many as keep ALERT_MIN px each; the rest count into '+N more'.
-  const fitAlerts = Math.max(1, Math.floor((W - 2 * CHIP_PAD + CHIP_GAP) / (ALERT_MIN + CHIP_GAP)))
+  // The alert chips share one row: as many as keep ALERT_MIN px each; the rest go into a red overflow chip at the row's end.
+  const fitAlerts = (w: number) => Math.max(1, Math.floor((w - 2 * CHIP_PAD + CHIP_GAP) / (ALERT_MIN + CHIP_GAP)))
   // Need first, a helper that waits on you included; a failed helper gets no chip, only the crab and the dot.
-  const allAlerts = [...withHelpers(crew.agents).filter(a => a.state === 'need'), ...crew.agents.filter(a => a.state === 'failed')], alerts = allAlerts.slice(0, fitAlerts), rest = crew.agents.filter(a => !isAlert(a))
+  const allAlerts = [...withHelpers(crew.agents).filter(a => a.state === 'need'), ...crew.agents.filter(a => a.state === 'failed')], rest = crew.agents.filter(a => !isAlert(a))
   const pulses = (a: CrewAgent) => loops.chipPulse && (a.state === 'need' || v.armed)
   const items: { el: El; agents: number }[] = []
-  if (alerts.length) {
-    const room = (W - 2 * CHIP_PAD - CHIP_GAP * (alerts.length - 1)) / alerts.length
-    const anim = alerts.some(pulses)
-    items.push({ el: chipImage('chips-alert', alerts.map(a => chipArt(a, false, pulses(a), room)), anim, true, anim ? PULSE : ''), agents: alerts.length })
+  if (allAlerts.length) {
+    // Room for the overflow chip at the widest count it could show, rounded up so the chips' rounded widths still fit.
+    const overW = allAlerts.length > fitAlerts(W) ? Math.ceil(alertMoreArt(allAlerts.slice(1), false).w + CHIP_GAP) : 0
+    const alerts = allAlerts.slice(0, overW ? fitAlerts(W - overW) : allAlerts.length), over = allAlerts.slice(alerts.length)
+    const room = (W - overW - 2 * CHIP_PAD - CHIP_GAP * (alerts.length - 1)) / alerts.length
+    const anim = allAlerts.some(pulses)
+    const arts = alerts.map(a => chipArt(a, false, pulses(a), room))
+    if (over.length) arts.push(alertMoreArt(over, over.some(pulses)))
+    items.push({ el: chipImage('chips-alert', arts, anim, true, anim ? PULSE : ''), agents: allAlerts.length })
   }
   for (const a of rest) {
     const walk = loops.walkers.includes(a.id)
     items.push({ el: chipImage(`chip-${a.id}`, [chipArt(a, walk, false, W - 2 * CHIP_PAD)], walk, walk), agents: 1 })
   }
   let shown = items
-  if (alerts.length < allAlerts.length || !fitsIn(items.map(i => width(i.el)), W, CHIP_ROWS)) {
+  if (!fitsIn(items.map(i => width(i.el)), W, CHIP_ROWS)) {
     let k = items.length
     const total = allAlerts.length + rest.length, more = (k: number) => moreChip(total - items.slice(0, k).reduce((s, i) => s + i.agents, 0))
     while (k > 1 && !fitsIn([...items.slice(0, k).map(i => width(i.el)), width(more(k))], W, CHIP_ROWS)) k--
