@@ -445,7 +445,7 @@ Why one module: a Svg is an image with no events, a Button holds only text, and 
 |---|---|
 | `size` | `ui.size = nextSize(ui.size)`; `$.store.set('size', …)` |
 | `open` | `$.ui.open({ id: 'clawpit-agents', title: 'Agents' })` |
-| `open:<id>` | `ui.open = id`, then the same `$.ui.open` |
+| `open:<id>` | `ui.open = id`, `ui.view = 'crew'`, then the same `$.ui.open` |
 | `usage`, `context` | `$.command.run({ command })`, not awaited |
 | `row:<id>` | `ui.open = ui.open === id ? null : id` |
 | `kids:<id>` | toggle `<id>` in `ui.shut` |

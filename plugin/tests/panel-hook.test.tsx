@@ -375,6 +375,11 @@ test('panel hook: a chip press opens the Agents pane with that agent\'s drawer o
   await ui.resize({ columns: cols, rows: 2, in: 'chips-alert' })
   expect(await press('chips-alert', 0)).toEqual({ opened: ['clawpit-agents'], open: 'a0' })
   expect(await press('chips-alert', cols - 1)).toEqual({ opened: ['clawpit-agents'], open: 'a1' })
+  // From the cost list, a chip press brings the crew back, so the drawer shows.
+  await ui.post({ press: 'costs' }, { in: 'toggle' })
+  expect((w.last('ui') as { view?: string }).view).toBe('costs')
+  await press('chip-r1')
+  expect(w.last('ui')).toMatchObject({ open: 'r1', view: 'crew' })
   // An empty id is not a press.
   const before = w.mine()
   await ui.post({ press: 'open:' }, { in: 'toggle' })
