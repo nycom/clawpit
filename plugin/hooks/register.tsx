@@ -133,8 +133,7 @@ const liveOf = ($: EngineInterface, e: RenderInput, onCompact?: () => void) => {
     const p = n.props ?? {}
     if (n.type === 'Client') return <Client key={String(p.key)} module="./client/image.tsx" props={p.props} />
     const tag = (table as unknown as Record<string, (props: never) => RenderNode>)[n.type]
-    const { interactive, ...rest } = p
-    const props = n.type === 'Button' && p.key === COMPACT_KEY ? { ...rest, onPress: onCompact } : interactive ? { ...rest, isInteractive: true } : rest
+    const props = n.type === 'Button' && p.key === COMPACT_KEY ? { ...p, onPress: onCompact } : p
     return h(tag, props, ...(n.children ?? []).map(live)) as RenderNode
   }
   return live

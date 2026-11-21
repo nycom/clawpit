@@ -223,7 +223,7 @@ const planBar = (plan: Plan, W: number): El => {
 const CHIP_PAD = 3, CHIP_H = SIZE.chip, CHIP_GAP = 6, TITLE_MAX = 180, READ_MAX = 300, ALERT_MIN = 160
 const PULSE = `<style>.pulse{animation:pulse ${MOTION.beat} infinite}@keyframes pulse{50%{opacity:1}}</style>`
 const isAlert = (a: CrewAgent) => a.state === 'need' || a.state === 'failed'
-// A cut chip's full text, as a tooltip; it shows only when its image is interactive.
+// A cut chip's full text, as a tooltip. The desktop draws a pressable chip as an image, where it does not show yet.
 const TIP_MAX = 300
 const withTip = (tip: string | undefined, g: string) => (tip === undefined ? g : `<g><title>${xml(clean(tip, TIP_MAX))}</title>${g}</g>`)
 type ChipArt = { w: number; body: string; alt: string; tip?: string }
@@ -251,12 +251,12 @@ const chipArt = (a: CrewAgent, walk: boolean, pulse: boolean, room: number): Chi
     + (rw ? text(35.5 + tw + 6, 17, shownSay, 12, tone) : '')
   return { w, body, alt: `${title}: ${say}`, tip }
 }
-const chipImage = (key: string, arts: ChipArt[], animated: boolean, loop: boolean, style = ''): El => {
+// Every chip opens the Agents pane, so every chip is a Client; that alone makes none loop.
+const chipImage = (key: string, arts: ChipArt[], animated: boolean, style = ''): El => {
   let x = CHIP_PAD
   const body = arts.map(c => { const g = withTip(c.tip, at(x, CHIP_PAD, c.body)); x += c.w + CHIP_GAP; return g }).join('')
   const w = +(x - CHIP_GAP + CHIP_PAD).toFixed(2), h = CHIP_H + 2 * CHIP_PAD
-  const interactive = arts.some(c => c.tip !== undefined) ? { interactive: true } : {}
-  return image(key, { source: doc(w, h, body + style, animated), alt: arts.map(c => c.alt).join('; '), width: w, height: h, ...interactive }, loop)
+  return image(key, { source: doc(w, h, body + style, animated), alt: arts.map(c => c.alt).join('; '), width: w, height: h, press: 'open' }, false)
 }
 // The alerts past one row: a red chip of their own, never the muted '+N more'.
 const alertMoreArt = (over: CrewAgent[], pulse: boolean): ChipArt => {
@@ -268,7 +268,7 @@ const alertMoreArt = (over: CrewAgent[], pulse: boolean): ChipArt => {
 }
 const moreChip = (n: number): El => {
   const say = `+${n} more`, w = widthOf(say, 12) + 20
-  return chipImage('chip-more', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + text(10, 17, say, 12, 'muted'), alt: `${n} more agents` }], false, false)
+  return chipImage('chip-more', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + text(10, 17, say, 12, 'muted'), alt: `${n} more agents` }], false)
 }
 const width = (e: El) => (e.type === 'Client' ? (e.props!.props as ImageProps) : (e.props as ImageProps)).width
 // Greedy rows of `avail` px; how many of `ws` fit in `rows` rows.
@@ -295,11 +295,11 @@ const chipRows = (v: PanelView, W: number): El | null => {
     const anim = allAlerts.some(pulses)
     const arts = alerts.map(a => chipArt(a, false, pulses(a), room))
     if (over.length) arts.push(alertMoreArt(over, over.some(pulses)))
-    items.push({ el: chipImage('chips-alert', arts, anim, true, anim ? PULSE : ''), agents: allAlerts.length })
+    items.push({ el: chipImage('chips-alert', arts, anim, anim ? PULSE : ''), agents: allAlerts.length })
   }
   for (const a of rest) {
     const walk = loops.walkers.includes(a.id)
-    items.push({ el: chipImage(`chip-${a.id}`, [chipArt(a, walk, false, W - 2 * CHIP_PAD)], walk, walk), agents: 1 })
+    items.push({ el: chipImage(`chip-${a.id}`, [chipArt(a, walk, false, W - 2 * CHIP_PAD)], walk), agents: 1 })
   }
   let shown = items
   if (!fitsIn(items.map(i => width(i.el)), W, CHIP_ROWS)) {

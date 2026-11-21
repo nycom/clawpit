@@ -26,7 +26,8 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: unknown; s
   on('turn.complete', () => ({ text: '' }))
   let agent = 0
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `w${++agent}` }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  const opens: string[] = []
+  on('ui.open', (_$, e) => { opens.push(e.id); return { value: { isPlaced: true } } })
   const commands: string[] = []
   on('command.run', (_$, e) => { commands.push(e.command); return { text: '' } })
   const writes: { plugin: string; key: string; value: unknown }[] = []
@@ -35,7 +36,7 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: unknown; s
   const last = (key: string) => writes.filter(w => w.plugin === 'clawpit' && w.key === key).at(-1)?.value
   // The engine's own drawing of the band, keyed so a test can tell whether it is kept.
   on('ui.render', (h, e) => h.ui.resolve(e).Box({ key: 'beneath', children: [] }))
-  return { clock, store, storeSets, commands, mine, last }
+  return { clock, store, storeSets, commands, mine, last, opens }
 }
 
 const start = ($: $T, surface: 'desktop' | 'terminal' = 'desktop') => $.session.start({ cwd: '/', surface, isInteractive: true })
@@ -301,16 +302,26 @@ test('image: a left press posts its press; no press prop posts nothing', async (
   await ui.unmount()
 })
 
-test('panel hook: interactive reaches the engine Svg as isInteractive', { plugins: [savvy] }, async ($, on) => {
-  setup(on)
+test('panel hook: pressing a chip opens the Agents pane', { plugins: [savvy] }, async ($, on) => {
+  const { opens } = setup(on), closes: string[] = []
+  on('ui.close', (_$, e) => { closes.push(e.id); return { value: undefined } as never })
   await start($)
-  // Three walkers are Clients; the fourth chip and the rest are plain Svgs.
-  for (const d of ['one', 'two', 'three', 'fix']) await spawn($, d)
-  await spawn($, 'rewrite the whole release pipeline so that every channel ships from one tagged build')
-  const ui = await band($)
-  const svgs = (await all(ui)).filter(n => n.type === 'Svg'), chip = (title: string) => svgs.find(n => String(n.props.alt).startsWith(title))!
-  expect(chip('rewrite the whole').props.isInteractive).toBe(true)
-  expect('isInteractive' in chip('fix:').props).toBe(false)
-  expect(svgs.some(n => 'interactive' in n.props)).toBe(false)
+  const run = (id: string, o: Record<string, unknown> = {}) =>
+    ({ id, agentId: id, type: 'implementer', description: `worker ${id}`, model: 'm', status: 'running', startedAt: T0, contextTokens: 0, contextMax: 1, costUsd: 0, ...o })
+  // An alert, three walkers, still chips, and more than two rows hold, so a '+N more' chip.
+  const runs = [run('a0', { blocked: 'Which schema?' }), ...Array.from({ length: 40 }, (_, i) => run(`r${i}`))]
+  await $.tool.call({ tool: 'savvy-set', runs } as never)
+  const ui = await band($, 'desktop', { bodyColumns: 60 })
+  const chips = (await all(ui)).filter(n => n.key === 'chips-alert' || n.key === 'chip-more' || n.key?.startsWith('chip-r'))
+  expect(chips.map(n => n.key)).toEqual(expect.arrayContaining(['chips-alert', 'chip-more']))
+  // Two walkers while someone needs you, so still chips are there too.
+  expect(chips.filter(n => n.key?.startsWith('chip-r')).length).toBeGreaterThan(2)
+  expect(chips.every(n => n.type === 'Client')).toBe(true)
+  for (const n of chips) {
+    const before = opens.length
+    await ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: n.key! })
+    expect(opens.slice(before)).toEqual(['clawpit-agents'])
+  }
+  expect(closes).toEqual([])
   await ui.unmount()
 })
