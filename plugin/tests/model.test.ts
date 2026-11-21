@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import type { SavvyRun } from '../types'
-import { crewOf, roleOf, type CrewInput } from '../hooks/model'
+import { alertsOf, crewOf, roleOf, type CrewInput } from '../hooks/model'
 import { ETA, NOW, STATES, USUALLY } from './fixtures/states'
 
 const input = (s: keyof typeof STATES, over: Partial<CrewInput> = {}): CrewInput =>
@@ -89,4 +89,28 @@ test('planOf: a run belongs to its longest matching task only', () => {
   const run = { ...failedRun, id: 'k2', description: 'kit-pr2 review', status: 'running', startedAt: NOW - 1_000, endedAt: undefined, heldDone: false } as SavvyRun
   const flow = { ...STATES.hydra.flow!, done: 0, tasks: [{ title: 'kit' }, { title: 'kit-pr2' }] } as typeof STATES.hydra.flow
   expect(crewOf(input('hydra', { flow, runs: [run] })).plan!.tasks.map(t => t.state)).toEqual(['todo', 'live'])
+})
+
+// Built by hand, no fixture: p runs; h helps p; g helps h; d helps g, one level past what nests.
+const live = (id: string, o: Partial<SavvyRun> = {}) => ({ id, type: 'Explore', description: id, model: 'm', status: 'running', startedAt: 0, contextTokens: 0, contextMax: 1, costUsd: 0, ...o }) as SavvyRun
+const handCrew = (runs: SavvyRun[], parents: Record<string, string>) =>
+  crewOf({ flow: null, runs, parents, activity: {}, logs: {}, etaOf: () => ({ kind: 'none' }), usuallyOf: () => null, now: 0 })
+
+test('crewOf: a helper of a live helper nests one more level under it, not at the top', () => {
+  const c = handCrew([live('p'), live('h'), live('g'), live('d')], { h: 'p', g: 'h', d: 'g' })
+  const p = c.agents.find(a => a.id === 'p')!, h = p.helpers[0], g = h.helpers[0]
+  expect(c.agents.map(a => a.id).sort()).toEqual(['d', 'p']); expect(p.helpers.map(a => a.id)).toEqual(['h'])
+  expect(h.helpers.map(a => a.id)).toEqual(['g']); expect(g.parentId).toBe('h'); expect(g.helpers).toEqual([])
+  expect(c.agents.find(a => a.id === 'd')!.parentId).toBeUndefined()
+  // a helper whose own parent ended is top level, so its helpers nest one level under it
+  const ended = handCrew([live('p', { status: 'done', endedAt: 1 }), live('h'), live('g')], { h: 'p', g: 'h' })
+  expect(ended.agents.map(a => a.id)).toEqual(['h']); expect(ended.agents[0].helpers.map(a => a.id)).toEqual(['g'])
+  expect(handCrew([live('a'), live('b')], { a: 'b', b: 'a' }).agents.map(a => a.helpers.length)).toEqual([0, 0])
+})
+
+test('crewOf and alertsOf: a helper that waits on you needs you, at either depth; the sections stay top level', () => {
+  const c = handCrew([live('p'), live('h', { blocked: 'Which key?' }), live('g', { blocked: 'Keep it?' }), live('f', { status: 'failed', heldDone: true, endedAt: 1 })], { h: 'p', g: 'h', f: 'h' })
+  expect(c.agents.map(a => a.id)).toEqual(['p']); expect(c.counts).toEqual({ need: 0, failed: 0, running: 1, done: 0 })
+  expect(alertsOf(c)).toEqual({ need: 2, failed: 1 })
+  expect(alertsOf(handCrew([live('p', { blocked: 'Go?' }), live('h')], { h: 'p' }))).toEqual({ need: 1, failed: 0 })
 })
