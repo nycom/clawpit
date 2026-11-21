@@ -5,7 +5,7 @@ export type Facts = { activity: Record<string, Activity>; files: Record<string, 
 
 // Stands in for oneLine and clip until the kit is wired in.
 export const clean = (v: unknown, max: number): string =>
-  (typeof v === 'string' ? v : '').replace(/[\t\n\r\f\v]/g, ' ').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, max)
+  (typeof v === 'string' ? v : '').replace(/[\t\n\r\f\v]/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').replace(/\s+/g, ' ').trim().slice(0, max)
 
 export const emptyFacts = (): Facts => ({ activity: {}, files: {}, lines: { added: 0, removed: 0 } })
 
@@ -21,7 +21,7 @@ export const linesOf = (tool: string, result: unknown): { added: number; removed
   if (tool === 'Write' && r.type === 'create') {
     const adds = rec(r.gitDiff).additions
     if (typeof adds === 'number') return { added: adds, removed: 0 }
-    return { added: typeof r.content === 'string' && r.content ? r.content.split('\n').length : 0, removed: 0 }
+    return { added: typeof r.content === 'string' && r.content ? r.content.split('\n').length - (r.content.endsWith('\n') ? 1 : 0) : 0, removed: 0 }
   }
   let added = 0, removed = 0
   if (Array.isArray(r.structuredPatch))

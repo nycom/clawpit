@@ -12,3 +12,6 @@ test('tests: counts fall back to stderr, and one missing count is zero', () => {
 test('tests: a command that is not a test run, or output with no counts, records nothing', () => {
   expect(parseTests('ls', '3 passed', '', 5)).toBeNull(); expect(parseTests('npm test', 'done', '', 5)).toBeNull()
 })
+test('tests: stdout counts win over stderr when both carry them', () => {
+  expect(parseTests('npm test', '5 passed', '9 passed', 5)).toEqual({ passed: 5, failed: 0, at: 5 })
+})

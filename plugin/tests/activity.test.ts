@@ -24,6 +24,7 @@ test('activity: Edit counts plus and minus lines from structuredPatch', () =>
 test('activity: a Write that creates a file counts gitDiff additions, else content lines', () => {
   expect(linesOf('Write', { type: 'create', structuredPatch: [], content: 'a\nb\nc', gitDiff: { additions: 7, deletions: 0 } })).toEqual({ added: 7, removed: 0 })
   expect(linesOf('Write', { type: 'create', structuredPatch: [], content: 'a\nb\nc' })).toEqual({ added: 3, removed: 0 })
+  expect(linesOf('Write', { type: 'create', structuredPatch: [], content: 'a\nb\nc\n' })).toEqual({ added: 3, removed: 0 })
 })
 test('activity: a staged edit counts nothing', () => expect(linesOf('Edit', { staged: true, structuredPatch: [{ lines: ['+a'] }] })).toEqual({ added: 0, removed: 0 }))
 test('activity: junk results change nothing and do not throw', () => {
@@ -44,3 +45,5 @@ test('activity: files are capped at 50 per agent', () => {
 })
 test('activity: control characters never reach a target', () =>
   expect(onTool(emptyFacts(), { tool: 'Bash', input: { command: 'echo \u0007\nhi' }, at: 1 }).activity[''].target).toBe('echo hi'))
+test('activity: C1 control characters are stripped from stored targets', () =>
+  expect(onTool(emptyFacts(), { tool: 'Bash', input: { command: 'a\u0085b\u009bc' }, at: 1 }).activity[''].target).toBe('abc'))
