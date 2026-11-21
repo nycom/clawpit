@@ -102,7 +102,14 @@ test('loops: a struggling agent never pulses', () => {
 test('loops: a helper that needs you beats like a top-level waiter', () => {
   const p = pickLoops(crewOf(agent('running', { helpers: [agent('need')] })), ui('gauges', false), true, true)
   expect(p.mascot).toBe('hop')
-  expect(pickLoops(crewOf(agent('running', { helpers: [agent('failed')] })), ui('full', false), true, true).chipPulse).toBe(true)
+  // A failed helper gets no chip: at full size nothing pulses and the walkers keep their full count; folded, the crab still sways.
+  const failedHelper = crewOf(agent('running', { helpers: [agent('failed')] }), agent('running'), agent('running'))
+  const full = pickLoops(failedHelper, ui('full', false), true, true)
+  expect(full.chipPulse).toBe(false); expect(full.walkers.length).toBe(BUDGET.walkers)
+  for (const size of ['gauges', 'line'] as const) {
+    const p = pickLoops(failedHelper, ui(size, false), true, true)
+    expect(p.mascot).toBe('sway'); expect(p.walkers.length).toBe(BUDGET.walkersOnBeat)
+  }
 })
 
 test('loops: a nested helper walks like a helper; a waiting nested helper beats but never rings', () => {

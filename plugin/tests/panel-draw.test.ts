@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import type { CrewAgent, PlanTask } from '../types'
 import { COMPACT_KEY, image, panelTree, type El } from '../hooks/panel/draw'
 import { NOW, type StateName } from './fixtures/states'
-import { viewOf } from './build'
+import { panelLoopCount, viewOf } from './build'
 
 const all = (e: El | string): El[] => (typeof e === 'string' ? [] : [e, ...(e.children ?? []).flatMap(all)])
 const keyOf = (e: El) => e.props?.key as string | undefined
@@ -217,4 +217,7 @@ test('panel: a helper that failed dresses the crab and dots the toggle, but gets
   }
   const full = at('full')
   expect(find(full, 'chips-alert')).toBeUndefined(); expect(find(full, 'chip-k1')).toBeUndefined()
+  // No phantom pulse: the loops the view counts are the looping drawings the tree carries.
+  const fv = viewOf('hydra', { crew: { ...v.crew, agents }, ui: { ...v.ui, paneOpen: false, size: 'full' } })
+  expect(panelLoopCount(fv)).toBe(images(panelTree(fv)).filter(e => propsOf(e).source.includes('infinite')).length)
 })
