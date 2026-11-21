@@ -379,20 +379,56 @@ const oneLineRow = (v: PanelView): El => {
   return { type: 'Box', props: { key: 'line', flexDirection: 'row', alignItems: 'center', gap: 1 }, children }
 }
 
+// ---------- the column widths ----------
+// What a column needs to show its label, value and whole so-what, in cells. `claims`: its so-what drops whole clauses, so it
+// may claim spare cells (a cut so-what and the agents column only give theirs away); `warn`: that so-what is a warning.
+type Need = { cells: number; claims: boolean; warn: boolean; priority: number }
+const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
+  if (!c) return { cells: Infinity, claims: false, warn: false, priority }
+  const x0 = first ? 0 : 12, head = (c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + (c.small ? 4 + widthOf(c.small, 12) : 0)
+  const px = Math.max(widthOf(c.label, 11), head, runsWidth(c.so, 11))
+  return { cells: Math.ceil((x0 + 4 + px) / CELL_PX), claims: !!c.whole, warn: c.so.some(([, p]) => p === 'warn' || p === 'er'), priority }
+}
+// An even share each; then the Compact button's cells, taken even when no column has slack; then the warnings, then the
+// other clause columns left to right, each met whole from spare cells and the most slack, or not at all. With no slack
+// anywhere, the Compact button's cells come from the widest column, one without a warning first, the lowest priority first.
+const shareCells = (needs: Need[], avail: number, ctxMin: number) => {
+  const w = needs.map(() => Math.floor(avail / needs.length))
+  let spare = avail - w.reduce((a, b) => a + b, 0)
+  const slack = (j: number) => Math.max(0, w[j] - needs[j].cells)
+  const take = (i: number, n: number) => {
+    for (; n > 0; n--) {
+      const j = spare ? -1 : needs.map((_, j) => j).filter(j => j !== i)
+        .sort((a, b) => slack(b) - slack(a) || w[b] - w[a] || +needs[a].warn - +needs[b].warn || needs[a].priority - needs[b].priority)[0]
+      if (j === undefined) return
+      if (j < 0) spare--; else w[j]--
+      w[i]++
+    }
+  }
+  take(0, ctxMin - w[0])
+  const order = needs.map((_, i) => i).filter(i => needs[i].claims).sort((a, b) => +needs[b].warn - +needs[a].warn || a - b)
+  for (const i of order) {
+    const short = needs[i].cells - w[i], room = spare + needs.reduce((s, _, j) => s + (j === i ? 0 : slack(j)), 0)
+    if (short > 0 && short <= room) take(i, short)
+  }
+  return w
+}
+
 // ---------- the tree ----------
 const TOGGLE_CELLS = 4
 export const panelTree = (v: PanelView): El => {
   const root = (children: El[]): El => ({ type: 'Box', props: { key: 'clawpit-panel', flexDirection: 'column', gap: 1 }, children })
   if (v.ui.size === 'line') return root([oneLineRow(v)])
-  const keys = fit(candidates(v.stats, v.crew, v.ui.size, v.busy), maxColumns(v.bodyColumns))
-  // The context column (always first) widens by what its Button needs, only when it needs it; the others share the rest.
-  const avail = v.bodyColumns - TOGGLE_CELLS, base = Math.floor(avail / keys.length), compact = compactOf(v, cellOf('context', v)!)
-  const ctxCells = compact && keys.length > 1 ? Math.max(base, compact.cells) : base
-  const cells = ctxCells === base ? base : Math.floor((avail - ctxCells) / (keys.length - 1))
+  const cands = candidates(v.stats, v.crew, v.ui.size, v.busy), keys = fit(cands, maxColumns(v.bodyColumns))
+  // Columns share the row by need; the context column (always first) holds the Compact button when there is one.
+  const cells = keys.map(k => (k === 'agents' ? null : cellOf(k, v))), compact = compactOf(v, cells[0]!)
+  const needs = keys.map((k, i) => needOf(cells[i], i === 0, cands.find(c => c.key === k)!.priority))
+  if (compact) needs[0].cells = Math.max(needs[0].cells, compact.cells)
+  const widths = shareCells(needs, v.bodyColumns - TOGGLE_CELLS, compact && keys.length > 1 ? compact.cells : 0)
   const columns = keys.flatMap((k, i): El[] => {
-    const n = k === 'context' ? ctxCells : cells, w = n * CELL_PX
+    const n = widths[i], w = n * CELL_PX
     if (k === 'agents') return [{ type: 'Box', props: { key: 'col-agents', width: n }, children: [agentsColumn(v, w)] }]
-    const c = cellOf(k, v)
+    const c = cells[i]
     return c ? [{ type: 'Box', props: { key: `col-${k}`, width: n }, children: [columnImage(k, c, w, i === 0), ...(k === 'context' && compact ? [compact.el] : [])] }] : []
   })
   const out: El[] = [{ type: 'Box', props: { key: 'cols', flexDirection: 'row' }, children: [...columns, spacer, toggle(v)] }]
