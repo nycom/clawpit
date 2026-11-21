@@ -1,6 +1,6 @@
 # The "≤ 3 loops" animation limit: root cause (research, 2026-11-21)
 
-**Verdict: an unmeasured guess.** The app enforces no animation cap. "Nothing moves when idle" is well-founded; the number 3 is not.
+**Verdict (before measuring): an unmeasured guess**; see "Measured (2026-11-21)" below for the numbers and the budget now in force. The app enforces no animation cap. "Nothing moves when idle" is well-founded; the number 3 is not.
 
 ## History
 | Date | Commit | What happened |

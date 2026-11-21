@@ -24,7 +24,7 @@ An instrument panel above the prompt and a crew pane beside it, for the Claude C
 
 clawpit needs savvy-progress installed: it reads savvy's crew data, and savvy's own band stands down while clawpit runs on the desktop.
 
-Use the savvy-progress release after 1.3.0 that includes the clawpit stand-down: it carries the step `reason` and `error` fields clawpit reads, and stands its band down on the desktop. Update savvy-progress first, then install or update clawpit.
+Use savvy-progress from nycom/claude-kit main once its clawpit change has merged (nycom/claude-kit#9): it carries the step `reason` and `error` fields clawpit reads, and stands its band down on the desktop. Update savvy-progress first, then install or update clawpit.
 
 ## How it is tested
 
