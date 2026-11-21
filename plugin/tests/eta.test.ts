@@ -17,6 +17,7 @@ test('eta: record keeps the last twenty at all three levels', () => {
   for (const k of keys) { expect(h[k].length).toBe(20); expect(h[k][0]).toBe(6); expect(h[k][19]).toBe(25) }
 })
 test('eta: stageOf finds the first stage word', () => { expect(stageOf('cache-tax review c1')).toBe('review'); expect(stageOf('plan the release')).toBe('') })
+test('eta: stageOf ignores case, as the role does', () => { expect(stageOf('Implement auth')).toBe('implement'); expect(stageOf('REVIEW the fold')).toBe('review') })
 test('eta: usually is the median in whole minutes, or null', () => {
   expect(usually({ k: [60_000, 180_000, 240_000, 300_000] }, ['k'])).toBe(4)
   expect(usually({ k: [60_000] }, ['k'])).toBeNull()
