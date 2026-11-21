@@ -409,8 +409,7 @@ function spec(c){const f=A.find(a=>a.prop==='fail'),h=A.find(hard),F={a:f,txt:`$
  +fig('<b>Idle for 10 minutes.</b> Solid red and still. A new turn starts the pulse again.',two(0))
  +fig('<b>After your next prompt.</b> The run leaves Failed and the chips, and stays in Ended.',`<div class="demo" style="display:block">${ended({t:f.t,role:f.role,took:f.took,fail:1},c)}</div>`)
  +fig('<b>3 failed tries, still running.</b> Amber words on a normal chip. It keeps its tool and may recover. No red, no pulse.',`<div class="demo">${chip({...h,walk:0},c,0)}</div><div class="demo">${mascot({...H,a:{...h,walk:0}},c,M,n,0)}<span style="${faceStyle(H,c)}">${H.txt}</span></div>`)
- +fig('<b>A, recommended: the pane row stays still.</b> The chip and the folded crab carry the beat; in the pane, a pulsing ring keeps one meaning: answer me.',one(0))
- +fig('<b>B: the pane row shares the beat.</b> The same inset ring as needs-you, under the same 10-minute limit.',one(1))}
+ +fig('<b>Decided 2026-11-21: the pane row stays still.</b> The chip and the folded crab carry the beat; in the pane, a pulsing ring keeps one meaning: answer me.',one(0))}
 function draw(w){const c=TH[w.th],el=w.el;
  el.style.cssText=vars(c,w.th)+(FAILED?';height:840px':''); /* ALIGN F12: taller window in the failed state so the open failed log and Running both show; the real pane scrolls */
  el.innerHTML=`<div class="tbar-os"><i></i><i></i><i></i><span>claude-kit · feat/fold-contract</span></div><div class="body">
