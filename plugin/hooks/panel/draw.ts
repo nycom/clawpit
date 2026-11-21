@@ -146,15 +146,16 @@ const faceOf = (crew: Crew): Face => {
   const n = nextUp(as)
   return { a: n, say: `next: ${title(n)}${n.eta.kind === 'left' ? ` · ${fmtLeft(n.eta.minutes)}` : ''}`, tone: 'fg', w: 400, alert: false }
 }
-// The crab with its count badge at the bottom corner (N1). Returns the drawing and its box.
+// The crab with its count badge at the bottom corner (N1), from two agents up: one needs no number. Returns the drawing and its box.
 const BADGE_TEXT = `.bt{fill:${SURFACE.light}}@media (prefers-color-scheme: dark){.bt{fill:${SURFACE.dark}}}`
 const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
   const f = faceOf(crew), move = loops.mascot === 'hop' || loops.mascot === 'sway' ? loops.mascot : undefined, pad = move ? 3 : 0
   const [cw, ch] = SIZE.crab[size], n = String(crew.agents.length), bw = Math.max(15, widthOf(n, 10, 700) + 6)
   const bx = cw + 7 - bw, by = ch + 3 - 15
-  const badge = `<rect x="${bx}" y="${by}" width="${bw}" height="15" rx="7.5" class="${f.alert ? 'red' : 'fg'}"/>`
+  const badge = crew.agents.length < 2 ? '' : `<rect x="${bx}" y="${by}" width="${bw}" height="15" rx="7.5" class="${f.alert ? 'red' : 'fg'}"/>`
     + `<text ${f.alert ? 'fill="#fff"' : 'class="bt"'} x="${bx + bw / 2}" y="${by + 11}" font-size="10" font-weight="700" text-anchor="middle">${n}</text>`
-  const body = at(-pad, -pad, crab({ role: f.a.role, prop: f.a.prop, walk: loops.mascot === 'walk', size, move })) + badge + (f.alert ? '' : `<style>${BADGE_TEXT}</style>`)
+    + (f.alert ? '' : `<style>${BADGE_TEXT}</style>`)
+  const body = at(-pad, -pad, crab({ role: f.a.role, prop: f.a.prop, walk: loops.mascot === 'walk', size, move })) + badge
   return { f, body, w: cw + 7, h: ch + 3, animated: loops.mascot !== 'still' }
 }
 
