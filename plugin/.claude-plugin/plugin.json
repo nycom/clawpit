@@ -1,0 +1,20 @@
+{
+  "name": "clawpit",
+  "description": "An instrument panel above the prompt and a crew pane beside it, for the Claude Code desktop app.",
+  "types": "./types/index.d.ts",
+  "license": "MIT",
+  "userConfig": {
+    "bench": {
+      "type": "boolean",
+      "title": "Loop bench",
+      "description": "Adds /clawpit-bench, which draws n looping crabs in the Agents pane to measure what loops cost. Off for normal use.",
+      "default": false
+    },
+    "animations": {
+      "type": "boolean",
+      "title": "Animations",
+      "description": "Off stops every walking crab, pulse and needle settle in the panel and the Agents pane.",
+      "default": true
+    }
+  }
+}

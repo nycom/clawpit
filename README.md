@@ -7,13 +7,28 @@ An instrument panel above the prompt and a crew pane beside it, for the Claude C
 - **Three sizes**, switched by one icon: everything, agents folded, or one line.
 - **Calm by rule:** nothing moves while idle, motion uses stepped loops only, and colours are fixed and contrast-checked in light and dark.
 
-> **Status:** design locked, build not started. The preview below is the design mockup, not the running mod.
+> **Status:** in development, not released. The preview below is the design mockup.
 
 <!-- preview: refreshed after every visual change, see AGENTS.md -->
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="design/preview-light.png">
   <img alt="clawpit mockup: the panel above the prompt with gauges, the Hydra plan and agent chips, beside the Agents pane of pixel crabs" src="design/preview-dark.png">
 </picture>
+
+## Install
+
+```
+/plugin marketplace add nycom/clawpit
+/plugin install clawpit@clawpit
+```
+
+clawpit needs savvy-progress installed: it reads savvy's crew data, and savvy's own band stands down while clawpit runs on the desktop.
+
+Use savvy-progress from nycom/claude-kit main once its clawpit change has merged (nycom/claude-kit#9): it carries the step `reason` and `error` fields clawpit reads, and stands its band down on the desktop. Update savvy-progress first, then install or update clawpit.
+
+## How it is tested
+
+Unit tests run under the engine's mock (`claude plugin test plugin`). Playwright stills and motion counts run on a render harness (`npm run test:visual`). The helper scripts have their own tests (`npm run test:scripts`). In-app checks capture the app window and diff it pixel by pixel (`scripts/app-capture.sh`, `npm run app-diff`); the screenshots stay out of the repo.
 
 ## Docs
 

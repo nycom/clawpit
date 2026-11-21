@@ -1,6 +1,6 @@
-# The "≤ 3 loops" animation limit: root cause (Fable research, 2026-11-21)
+# The "≤ 3 loops" animation limit: root cause (research, 2026-11-21)
 
-**Verdict: an unmeasured guess.** The app enforces no animation cap. "Nothing moves when idle" is well-founded; the number 3 is not.
+**Verdict (before measuring): an unmeasured guess**; see "Measured (2026-11-21)" below for the numbers and the budget now in force. The app enforces no animation cap. "Nothing moves when idle" is well-founded; the number 3 is not.
 
 ## History
 | Date | Commit | What happened |
@@ -69,3 +69,21 @@
 - Whether identical `data:` sources share one document.
 - Whether Electron 45's Chromium matches `main`.
 - Whether skins' context-ring chase loops while idle (its lowest tier starts at 0%; if so, it already breaks the idle rule).
+
+## Measured (2026-11-21)
+Desktop app, MacBook Pro, dark mode. `/clawpit-bench n` drew n M-size walking crab Clients in the Agents pane; CPU sampled every ~4 s with `top` on the main window's Renderer and the GPU process, averaged per 45 s window after a 10 s settle.
+
+| Loops | Renderer CPU | GPU CPU |
+|---|---|---|
+| 0 | 0.9% | 0.3% |
+| 1 | 8.9% | 3.4% |
+| 3 | 11.9% | 4.7% |
+| 6 | 14.2% | 5.1% |
+| 12 | 14.7% | 7.1% |
+| 3, eased | 13.8% | 7.9% |
+
+- The cost is a step, then a slope, as predicted: the first loop costs ~8 points (the window keeps producing frames), each further stepped loop under a point.
+- Eased loops cost more than stepped ones, mostly on the GPU (+3 points at 3 loops). Stepped loops only, 0 eased, stays.
+- Typing in the prompt at 6 loops: no stutter (maintainer).
+- **Budget, maintainer's call:** `max` 12 loops window-wide (was 8); walkers 3, or 2 while someone needs you, unchanged.
+- Not measured: Energy, the paint-flash trace, and whether some of the 12 crabs were scrolled out of view (paused), which would undercount that row. Other sessions were running during the measurement.

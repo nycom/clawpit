@@ -1,0 +1,12 @@
+{
+  "name": "clawpit",
+  "description": "An instrument panel above the prompt and a crew pane beside it, for the Claude Code desktop app.",
+  "owner": { "name": "nycom", "url": "https://github.com/nycom" },
+  "plugins": [
+    {
+      "name": "clawpit",
+      "source": "./plugin",
+      "description": "An instrument panel above the prompt and a crew pane beside it, for the Claude Code desktop app."
+    }
+  ]
+}

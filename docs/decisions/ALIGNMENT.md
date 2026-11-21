@@ -150,7 +150,7 @@ It is upstream's and stays that way, so these are observations, not fixes.
 
 ## Detector
 
-`impeccable detect --json` exited 0 with `[]` (no findings) on all three files:
+A design lint run found nothing on all three files:
 
 | File | Findings |
 |---|---|
@@ -181,7 +181,7 @@ Also checked in headless Chrome: no console errors; the page's own loop check pa
 ## Not checked
 
 - Nothing here was seen in the real app. Every render is headless Chrome.
-- The loop budget is still the provisional one from `ANIMATION-LIMIT.md`; no CPU measurement exists.
+- The loop budget was measured on 2026-11-21: `max` 12 (`ANIMATION-LIMIT.md`, "Measured").
 - The states not shown in the composite: failed, context at 90%, plain subagents, idle, empty pane, and the one-line size (it is reachable by clicking the toggle, but was not screenshotted).
 - Widths other than 880px for the panel and 400px for the pane.
 - The file tree is redrawn from one light screenshot and upstream's constants. Its dark look is inferred.
@@ -216,7 +216,7 @@ Red stays reserved for "it is over" and "it is blocked on you". A struggling age
 | Folded agents column, one-line size | Dizzy crab (M in the column, S on the line), red count badge, "e2e tests failed" in `er` 600. The toggle carries its red dot. While armed the crab staggers 2px sideways on the beat | Costume order gains one step: needs you, failed, **struggling**, finishing next. The crab keeps its tool and walks; the line reads "cache-tax review c1 · 3 failed tries" in `warn` |
 | Ended row (after the next prompt) | 30px row: dizzy crab S, name, then the cross icon and "failed after 2:10" in `er` | n/a |
 
-Wording: "failed after m:ss" is a stopped clock, so m:ss. Log ages stay Ns or Nm. Every failed mark carries the word "failed", or the cross icon next to a name; none is colour alone. Bar segments get it from their `aria-label` and from the summary line under them.
+Wording: "failed after m:ss" is a stopped clock, so m:ss. Log ages read `<1m` or `Nm`, per LOCKED "Build decisions: decided 2026-11-21". Every failed mark carries the word "failed", or the cross icon next to a name; none is colour alone. Bar segments get it from their `aria-label` and from the summary line under them.
 
 ### Pulse and timer
 
@@ -239,7 +239,7 @@ Wording: "failed after m:ss" is a stopped clock, so m:ss. Log ages stay Ns or Nm
 
 ### Detector and screenshots
 
-`impeccable detect --json mockups-all.html` exits 0 with `[]`. No console errors in headless Chrome in the default, failed and both states.
+A design lint run on `mockups-all.html` finds nothing. No console errors in headless Chrome in the default, failed and both states.
 
 Screenshots: run `bash scripts/preview.sh` for the README previews; other states render from the URL params above.
 
