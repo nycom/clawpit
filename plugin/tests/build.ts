@@ -10,8 +10,8 @@ export const viewOf = (state: StateName, over: Partial<PanelView> = {}): PanelVi
   const f = STATES[state], now = over.now ?? NOW, ui = over.ui ?? f.ui, busy = over.busy ?? f.busy, armed = over.armed ?? f.armed
   const crew = over.crew ?? crewOf({ ...f, etaOf: (r: SavvyRun) => ETA[r.id] ?? { kind: 'none' }, usuallyOf: (r: SavvyRun) => USUALLY[r.id] ?? null, now })
   const settles: Record<string, Settle> = {}
-  if (f.stats.context) settles.context = settle(undefined, f.stats.context.pct)
-  for (const l of f.stats.limits) settles[l.kind === 'five_hour' ? '5h' : '7d'] = settle(undefined, l.pct)
+  if (f.stats.context) settles.context = settle(undefined, f.stats.context.pct, now)
+  for (const l of f.stats.limits) settles[l.kind === 'five_hour' ? '5h' : '7d'] = settle(undefined, l.pct, now)
   return { stats: f.stats, crew, ui, loops: pickLoops(crew, ui, busy, armed), busy, armed, bodyColumns: 96, now, settles, ...over }
 }
 

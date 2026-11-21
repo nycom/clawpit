@@ -3,7 +3,7 @@ import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode,
 import type { SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
 import { crewOf } from './model'
 import { pickLoops } from './loops'
-import { nextSize, parseSize, settle } from './panel/fold'
+import { moving, nextSize, parseSize, settle } from './panel/fold'
 import { panelTree, type PanelView } from './panel/draw'
 import type { El } from './draw'
 import { benchTree, paneTree, type PaneView } from './pane/draw'
@@ -368,11 +368,11 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   const crew = crewOf({ flow: f, runs: Array.isArray(runs) ? runs : [], parents, activity: facts.activity, logs, now,
     etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)) })
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
-  if (s.context) settles.context = settle(settles.context, s.context.pct)
-  for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct) }
+  if (s.context) settles.context = settle(settles.context, s.context.pct, now)
+  for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct, now) }
   const loops = pickLoops(crew, u, busy, armed, animations)
   return {
-    panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? { ...settles } : {}, still: !animations },
+    panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations },
     pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations },
   }
 }

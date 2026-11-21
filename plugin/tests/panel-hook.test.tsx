@@ -310,6 +310,23 @@ test('wiring: ten minutes after the turn ends the view is no longer armed', { pl
   await ui.unmount()
 })
 
+test('wiring: the needle sweeps on the draw after the context moves, and a redraw past the sweep draws it still', async ($, on) => {
+  const usage = { ...USAGE, context: { window: 200_000, percent: 30 } }
+  const w = setup(on, { usage })
+  on('session.measure', (_$, e) => ({ changed: e.changed }))
+  await start($)
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)   // the 1 Hz tick keeps redrawing
+  const ui = await band($)
+  const needle = async () => (await image(ui, 'col-context'))!.source
+  expect(await needle()).not.toContain('animation:')
+  usage.context.percent = 58
+  await $.session.measure({ changed: ['context'] } as never)
+  expect(await needle()).toContain('animation:')
+  await w.clock.advance(1_000)
+  expect(await needle()).not.toContain('animation:')
+  await ui.unmount()
+})
+
 test('image: a left press posts its press; no press prop posts nothing', async ($, on) => {
   const w = setup(on)
   await start($)

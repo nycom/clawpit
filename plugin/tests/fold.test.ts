@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { Crew } from '../types'
-import { nextSize, parseSize, hasDot, settle } from '../hooks/panel/fold'
+import { nextSize, parseSize, hasDot, moving, settle } from '../hooks/panel/fold'
+import { MOTION } from '../hooks/tokens'
 
 const crew = (counts: Partial<Crew['counts']>): Crew => ({
   title: 'Subagents', agents: [], ended: [], counts: { need: 0, failed: 0, running: 0, done: 0, ...counts },
@@ -21,7 +22,12 @@ test('fold: the dot shows only while folded with a waiter or a failure', () => {
   expect(hasDot('line', crew({ running: 2, done: 1 }))).toBe(false)
 })
 test('fold: settle keeps its object while the value holds', () => {
-  const a = settle(undefined, 58); expect(a).toEqual({ from: 58, to: 58 }); expect(settle(a, 58)).toBe(a); expect(settle(a, 61)).toEqual({ from: 58, to: 61 })
+  const a = settle(undefined, 58, 1); expect(a).toEqual({ from: 58, to: 58, at: 1 }); expect(settle(a, 58, 2)).toBe(a); expect(settle(a, 61, 3)).toEqual({ from: 58, to: 61, at: 3 })
+})
+test('fold: a settle reaches the dial only inside its sweep', () => {
+  const s = { context: { from: 40, to: 58, at: 1_000 }, '5h': { from: 10, to: 21, at: 0 } }
+  expect(moving(s, 1_000 + MOTION.settleMs - 1)).toEqual({ context: s.context })
+  expect(moving(s, 1_000 + MOTION.settleMs)).toEqual({})
 })
 test('fold: a waiting or failed helper shows the dot too', () => {
   const parent = (state: 'need' | 'failed') => ({ helpers: [{ state }] }) as unknown as Crew['agents'][number]

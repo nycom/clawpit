@@ -49,7 +49,7 @@ export type Column = { key: ColumnKey; priority: number }
 export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean; view?: 'crew' | 'costs' }   // view: the pane's; absent is crew
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
-export type Settle = { from: number; to: number }
+export type Settle = { from: number; to: number; at: number }   // at: when the value moved, so the sweep runs once
 export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; zones?: { to: number; press: string }[] }   // zones: presses by x, each up to `to` px
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
