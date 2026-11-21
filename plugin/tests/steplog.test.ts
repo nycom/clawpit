@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import type { SavvyRun } from 'claude-code'
+import type { SavvyRun } from '../types'
 import { diff } from '../hooks/track/steplog'
 
 test('steplog: a new note, a failed try, a question and a failure each add one line', () => {

@@ -13,3 +13,5 @@ test('code: ponytail absent or malformed', () => {
   for (const b of [undefined, null, 5, 'x']) expect(codeOf(b)).toBeNull()
   expect(codeOf({ reused: 'x' })).toEqual({ reusePct: null, reused: 0, created: 0, callers: [] })
 })
+test('code: callers lose C1 control characters too', () =>
+  expect(codeOf({ reused: [], created: [], openCallers: ['a:4\u0085\u009bx'] })!.callers).toEqual(['a:4x']))

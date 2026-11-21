@@ -1,4 +1,4 @@
-import type { LogLine, SavvyRun } from 'claude-code'
+import type { LogLine, SavvyRun } from '../../types'
 import { clean } from './activity'
 
 export type Logs = Record<string, LogLine[]>  // by run id

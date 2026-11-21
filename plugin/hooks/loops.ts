@@ -1,4 +1,5 @@
 import type { Crew, CrewAgent, LoopPlan, Mascot, Ui } from '../types'
+import { alertsOf } from './model'
 
 export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 8 }
 
@@ -6,7 +7,7 @@ const newestFirst = (a: CrewAgent, b: CrewAgent) => b.startedAt - a.startedAt
 const waited = (a: CrewAgent) => a.waitingSince ?? a.startedAt
 
 export const pickLoops = (crew: Crew, ui: Ui, busy: boolean, armed: boolean): LoopPlan => {
-  const { need, failed, running } = crew.counts
+  const { running } = crew.counts, { need, failed } = alertsOf(crew)
   const beat = need > 0 || (failed > 0 && armed)
   if (!(busy || running > 0 || need > 0) && !beat) return { walkers: [], chipPulse: false, ring: null, mascot: 'still', count: 0 }
 

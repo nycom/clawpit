@@ -80,6 +80,12 @@ export const crewOf = (i: CrewInput): Crew => {
   }
 }
 
+// Needs you and failed over the agents and their helpers: a helper that waits on you needs you as much as its parent would.
+export const alertsOf = (crew: Crew): { need: number; failed: number } => {
+  const hs = crew.agents.flatMap(a => a.helpers)
+  return { need: crew.counts.need + hs.filter(h => h.state === 'need').length, failed: crew.counts.failed + hs.filter(h => h.state === 'failed').length }
+}
+
 // savvy-progress's own normalisation, so a task matches the runs savvy matched it to.
 const norm = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 

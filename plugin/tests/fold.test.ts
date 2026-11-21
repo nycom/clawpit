@@ -23,3 +23,8 @@ test('fold: the dot shows only while folded with a waiter or a failure', () => {
 test('fold: settle keeps its object while the value holds', () => {
   const a = settle(undefined, 58); expect(a).toEqual({ from: 58, to: 58 }); expect(settle(a, 58)).toBe(a); expect(settle(a, 61)).toEqual({ from: 58, to: 61 })
 })
+test('fold: a waiting or failed helper shows the dot too', () => {
+  const parent = (state: 'need' | 'failed') => ({ helpers: [{ state }] }) as unknown as Crew['agents'][number]
+  expect(hasDot('gauges', { ...crew({ running: 1 }), agents: [parent('need')] })).toBe(true)
+  expect(hasDot('line', { ...crew({ running: 1 }), agents: [parent('failed')] })).toBe(true)
+})

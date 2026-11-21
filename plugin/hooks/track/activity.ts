@@ -1,4 +1,4 @@
-import type { Activity } from 'claude-code'
+import type { Activity } from '../../types'
 
 export type ToolEvent = { tool: string; agentId?: string; input: Record<string, unknown>; result?: unknown; isError?: boolean; at: number }
 export type Facts = { activity: Record<string, Activity>; files: Record<string, string[]>; lines: { added: number; removed: number } }  // key '' is the main loop

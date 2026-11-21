@@ -98,3 +98,9 @@ test('loops: a struggling agent never pulses', () => {
   const p = pickLoops(crewOf(agent('running', { struggling: true, tries: 3 })), ui('full', true), true, true)
   expect(p.chipPulse).toBe(false); expect(p.ring).toBeNull()
 })
+
+test('loops: a helper that needs you beats like a top-level waiter', () => {
+  const p = pickLoops(crewOf(agent('running', { helpers: [agent('need')] })), ui('gauges', false), true, true)
+  expect(p.mascot).toBe('hop')
+  expect(pickLoops(crewOf(agent('running', { helpers: [agent('failed')] })), ui('full', false), true, true).chipPulse).toBe(true)
+})

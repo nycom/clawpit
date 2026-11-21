@@ -1,4 +1,4 @@
-import type { TestStat } from 'claude-code'
+import type { TestStat } from '../../types'
 
 const RUNNER = /\b(vitest|jest|pytest|playwright|mocha|ava|go test|cargo test|mvn\b.*\btest|gradle\b.*\btest|(npm|pnpm|yarn|bun)( run)? test|claude plugin test)\b/
 
