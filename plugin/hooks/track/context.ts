@@ -32,6 +32,7 @@ export const contextOf = (c: CtxInput, history: number[]): ContextStat | null =>
 export const contextText = (c: ContextStat | null, turns: number): string => {
   if (!c) return 'no reading yet'
   if (c.alarm) return c.autoPct === null ? 'context nearly full' : `auto-compacts at ${c.autoPct}%`
-  if (turns < 3 || c.turnsLeft === null) return 'learning your pace'
-  return `~${c.turnsLeft} turns${c.msgsPct === null ? '' : ` · ${c.msgsPct}% msgs`}`
+  if (turns < 3) return 'learning your pace'
+  const msgs = c.msgsPct === null ? '' : `${c.msgsPct}% msgs`
+  return c.turnsLeft === null ? msgs : `~${c.turnsLeft} turns${msgs && ` · ${msgs}`}`
 }

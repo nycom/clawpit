@@ -25,3 +25,8 @@ test('context: the so-what line', () => {
   expect(contextText({ pct: 92, msgsPct: 34, turnsLeft: 1, autoPct: 97, alarm: true }, 44)).toBe('auto-compacts at 97%')
   expect(contextText({ pct: 92, msgsPct: null, turnsLeft: null, autoPct: null, alarm: true }, 44)).toBe('context nearly full')
 })
+test('context: past three turns with no estimate, only the msgs share, or nothing', () => {
+  expect(contextText({ pct: 58, msgsPct: 34, turnsLeft: null, autoPct: 97, alarm: false }, 3)).toBe('34% msgs')
+  expect(contextText({ pct: 58, msgsPct: null, turnsLeft: null, autoPct: 97, alarm: false }, 44)).toBe('')
+  expect(contextText({ pct: 58, msgsPct: 34, turnsLeft: 7, autoPct: 97, alarm: false }, 2)).toBe('learning your pace')
+})
