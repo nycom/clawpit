@@ -185,7 +185,7 @@ const NAME_MIN = 6
 const sayFit = (f: Face, max: number, size: number) => {
   if (!f.tail || !f.name || widthOf(f.say, size, f.w) <= max) return fitTo(f.say, max, size, f.w)
   const name = fitTo(f.name, max - widthOf(f.tail, size, f.w), size, f.w)
-  return name.replace(/…$/, '').length >= NAME_MIN ? name + f.tail : fitTo(f.tail.trim(), max, size, f.w)
+  return name.replace(/…$/, '').length >= NAME_MIN ? name + f.tail : fitTo(f.tail.replace(/^ · /, '').trim(), max, size, f.w)
 }
 // The crab with its count badge at the bottom corner (N1), from two agents up: one needs no number. Returns the drawing and its box.
 const BADGE_TEXT = `.bt{fill:${SURFACE.light}}@media (prefers-color-scheme: dark){.bt{fill:${SURFACE.dark}}}`

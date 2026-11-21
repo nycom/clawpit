@@ -578,7 +578,8 @@ test('panel: one folded agent shows its name, not "1 agents", and its state unde
 
 const lineOf = (s: StateName, bodyColumns: number) => { const v = viewOf(s, { bodyColumns }); return panelTree({ ...v, ui: { ...v.ui, size: 'line' } }) }
 test('panel: at the one-line size a lone running agent reads its name and state; "next:" is for two or more', () => {
-  expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).not.toMatch(/^next:/)
+  // Too tight for 6 characters of the name: the state alone, with no separator left over.
+  expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).toBe('~2m left')
   expect(lastText(sourceOf(lineOf('oneRunning', 96), 'mascot'))).toBe('savvy-progress implement · ~2m left')
   expect(lastText(sourceOf(lineOf('hydra', 96), 'mascot'))).toMatch(/^next: /)
   // Two or more agents: the alert reads its name too, where the row has room for it.
