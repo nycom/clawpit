@@ -1,0 +1,19 @@
+name: ci
+on:
+  pull_request:
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run test:scripts
+      # Screenshot comparisons (@shot) and `claude plugin test` are local gates: baselines depend on the machine's fonts.
+      - run: npm run test:visual -- --grep-invert @shot
+      - run: bash scripts/leak-check.sh
