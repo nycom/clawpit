@@ -221,3 +221,19 @@ test('panel: a helper that failed dresses the crab and dots the toggle, but gets
   const fv = viewOf('hydra', { crew: { ...v.crew, agents }, ui: { ...v.ui, paneOpen: false, size: 'full' } })
   expect(panelLoopCount(fv)).toBe(images(panelTree(fv)).filter(e => propsOf(e).source.includes('infinite')).length)
 })
+
+test('panel: every animated drawing ends with the reduced-motion rule, the needle settles included', () => {
+  const settles = { context: { from: 40, to: 58 }, '5h': { from: 10, to: 21 }, '7d': { from: 50, to: 63 } }
+  for (const size of ['full', 'gauges', 'line'] as const) {
+    const v = viewOf('hydra', { settles }), t = panelTree(viewOf('hydra', { settles, ui: { ...v.ui, size } }))
+    const animated = images(t).map(e => propsOf(e).source).filter(s => s.includes('animation:'))
+    expect(animated.some(s => s.includes('@keyframes nd'))).toBe(true)
+    for (const s of animated) expect(s).toContain('prefers-reduced-motion')
+  }
+})
+
+test('panel: a test run under a minute ago reads "<1m ago"', () => {
+  const v = viewOf('hydra')
+  const t = panelTree(viewOf('hydra', { stats: { ...v.stats, tests: { passed: 179, failed: 0, at: NOW - 42_000 } }, busy: false, bodyColumns: 140 }))
+  expect(sourceOf(t, 'col-tests')).toContain('&lt;1m ago')
+})

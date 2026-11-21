@@ -45,8 +45,9 @@ const runs = (x: number, y: number, size: number, parts: Run[], max: number, end
   return `<text x="${x}" y="${y}" font-size="${size}"${end ? ' text-anchor="end"' : ''}>${spans.join('')}</text>`
 }
 const runsWidth = (parts: Run[], size: number) => parts.reduce((w, [s, , wt]) => w + widthOf(s, size, wt), 0)
+// A dial's needle settle is an inline animation, so any animated body gets the reduced-motion rule.
 const doc = (w: number, h: number, body: string, animated = false) =>
-  svg(w, h, `<g font-family="${FONT}" style="font-variant-numeric:tabular-nums">${body}</g>`, animated)
+  svg(w, h, `<g font-family="${FONT}" style="font-variant-numeric:tabular-nums">${body}</g>`, animated || body.includes('animation:'))
 const at = (x: number, y: number, body: string) => `<g transform="translate(${x} ${y})">${body}</g>`
 
 // ---------- the columns ----------
@@ -100,7 +101,7 @@ const cellOf = (key: ColumnKey, v: PanelView): Cell | null => {
       const t = stats.tests
       if (!t) return null
       const bad = t.failed > 0
-      return { label: 'tests', value: String(bad ? t.failed : t.passed), valueTone: bad ? 'er' : 'okText', small: bad ? 'failed' : 'passed', so: [[`${fmtAge(now - t.at)} ago`, 'muted']] }
+      return { label: 'tests', value: String(bad ? t.failed : t.passed), valueTone: bad ? 'er' : 'okText', small: bad ? 'failed' : 'passed', so: [[`${now - t.at < 60_000 ? '<1m' : fmtAge(now - t.at)} ago`, 'muted']] }
     }
     case 'tokens': return { label: 'tokens', value: fmtTokens(s.tokens), valueTone: 'fg', so: [[`${s.turns} turns`, 'muted']] }
     case 'agent': return { label: 'agent time', value: fmtDuration(s.agentMs), valueTone: 'fg', so: [[s.turns ? `avg ${fmtDuration(s.agentMs / s.turns)} per turn` : '', 'muted']] }
