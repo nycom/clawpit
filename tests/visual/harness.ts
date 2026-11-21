@@ -11,8 +11,9 @@ const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 
 function boxStyle(p: Record<string, unknown>): string {
-  const css: string[] = ['display:flex', `flex-direction:${typeof p.flexDirection === 'string' ? p.flexDirection : 'row'}`, 'box-sizing:border-box']
+  const css: string[] = ['display:flex', `flex-direction:${typeof p.flexDirection === 'string' ? p.flexDirection : 'row'}`, 'box-sizing:border-box', `position:${p.position === 'absolute' ? 'absolute' : 'relative'}`]
   const px = (prop: string, v: unknown, unit: number) => { const n = num(v); if (n !== undefined) css.push(`${prop}:${n * unit}px`) }
+  px('left', p.left, CELL_W); px('right', p.right, CELL_W); px('top', p.top, ROW_H); px('bottom', p.bottom, ROW_H)
   px('width', p.width, CELL_W); px('height', p.height, ROW_H)
   px('min-width', p.minWidth, CELL_W)
   px('column-gap', p.gap ?? p.columnGap, CELL_W); px('row-gap', p.gap ?? p.rowGap, ROW_H / 2)

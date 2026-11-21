@@ -39,7 +39,7 @@ export type Crew = {
 export type ContextStat = { pct: number; msgsPct: number | null; turnsLeft: number | null; autoPct: number | null; alarm: boolean }
 export type LimitStat = { kind: 'five_hour' | 'seven_day'; pct: number; pacePct: number | null; projected: number | null; ahead: boolean; hot: boolean }
 export type TurnStat = { startedAt: number; added: number; removed: number; costUsd: number | null }
-export type TestStat = { passed: number; failed: number; at: number }
+export type TestStat = { passed: number; failed: number; at: number; failedNames?: string[] }   // failedNames: up to 5, only when the run named any
 export type CodeStat = { reusePct: number | null; reused: number; created: number; callers: string[] }   // from ponytail's band atom
 export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number }
 export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat; code: CodeStat | null }
@@ -50,7 +50,7 @@ export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: bo
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
 export type Settle = { from: number; to: number }
-export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean }
+export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; zones?: { to: number; press: string }[] }   // zones: presses by x, each up to `to` px
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
   id: string; agentId?: string; type: string; description: string; model: string

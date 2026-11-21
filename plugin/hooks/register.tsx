@@ -305,6 +305,9 @@ export const register: Register = on => {
       if (typeof press !== 'string') return {}
       if (press === 'size') await $.store.set('size', (await update($, ui, u => ({ ...u, size: nextSize(u.size) }))).size)
       else if (press === 'open') await openPane($)
+      else if (press.startsWith('open:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, open: id })); await openPane($) }
+      // Queued until the session is idle, so not awaited: the press answers at once.
+      else if (press === 'usage' || press === 'context') void $.command.run({ command: press }).catch(() => { errors += 1 })
       else if (press === 'ended') await update($, ui, u => ({ ...u, shut: toggle(u.shut, 'ended') }))
       else if (press.startsWith('row:') && press.length > 4) { const id = press.slice(4); await update($, ui, u => ({ ...u, open: u.open === id ? null : id })) }
       else if (press.startsWith('kids:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, shut: toggle(u.shut, id) })) }

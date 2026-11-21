@@ -180,7 +180,7 @@ export type Crew = {
 export type ContextStat = { pct: number; msgsPct: number | null; turnsLeft: number | null; autoPct: number | null; alarm: boolean }
 export type LimitStat = { kind: 'five_hour' | 'seven_day'; pct: number; pacePct: number | null; projected: number | null; ahead: boolean; hot: boolean }
 export type TurnStat = { startedAt: number; added: number; removed: number; costUsd: number | null }
-export type TestStat = { passed: number; failed: number; at: number }
+export type TestStat = { passed: number; failed: number; at: number; failedNames?: string[] }   // up to 5, only when the run named any
 export type CodeStat = { reusePct: number | null; reused: number; created: number; callers: string[] }
 export type SessionStat = { costUsd: number | null; lastTurnUsd: number | null; turns: number; tokens: number; agentMs: number }
 export type Stats = { context: ContextStat | null; limits: LimitStat[]; turn: TurnStat | null; tests: TestStat | null; session: SessionStat; code: CodeStat | null }
@@ -191,7 +191,7 @@ export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: bo
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
 export type Settle = { from: number; to: number }
-export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; interactive?: boolean }
+export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; interactive?: boolean; zones?: { to: number; press: string }[] }
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
   id: string; agentId?: string; type: string; description: string; model: string
@@ -285,7 +285,8 @@ On a Bash result (`stdout`, `stderr`, `d.ts:22871-22875`) from any loop:
 
 1. The command must match `/\b(vitest|jest|pytest|playwright|mocha|ava|go test|cargo test|mvn\b.*\btest|gradle\b.*\btest|(npm|pnpm|yarn|bun)( run)? test|claude plugin test)\b/`.
 2. In `stdout` then `stderr`, take the last match of `/(\d+)\s+pass(?:ed|ing)?\b/i` and of `/(\d+)\s+fail(?:ed|ing|ures?)?\b/i`. Maven's `Tests run: A, Failures: B, Errors: C` gives passed `A - B - C`, failed `B + C`.
-3. With neither count found, nothing is recorded. Otherwise `tests = { passed, failed, at }`.
+3. With neither count found, nothing is recorded. Otherwise `tests = { passed, failed, at }`. node:test's `ℹ pass N` / `ℹ fail N` count too.
+4. When `failed > 0`, `failedNames` keeps up to 5 failing test names, one per line, stdout then stderr, deduplicated, each `oneLine`d and cut to 80: `(fail) <name>` (bun, `claude plugin test`), `✖ <name>` (node:test), `FAILED <id>` (pytest), `✕` or `× <name>` (jest, vitest), `✘ … › <name>` (playwright); a trailing duration is dropped.
 
 **Valid until the next edit**: any successful `edit`-kind tool call from any loop sets `tests = null`. The column shows only while `tests` is non-null. An edit made through Bash is not seen; that is a known gap.
 
@@ -315,7 +316,7 @@ hot      = percentUsed >= 50 || ahead
 
 - **`pct`**: the breakdown's `percentage` when a breakdown is held, so the dial and the threshold share one scale; else `context.percent`; else the column reads "—" with "no reading yet".
 - **Auto-compact %**: `autoPct = round(autoCompactThreshold / rawMaxTokens * 100)` when `isAutoCompactEnabled` and the threshold is present, else `null`.
-- **Alarm**: `pct >= min(90, (autoPct ?? 97) - 7)`. In alarm the value turns `er`, the so-what reads `auto-compacts at N%` (or `context nearly full` when `autoPct` is `null`), and "Compact now" appears.
+- **Alarm**: `pct >= min(90, (autoPct ?? 97) - 7)`. In alarm the value turns `er`, the so-what reads `auto-compacts at N%` (or `context nearly full` when `autoPct` is `null`), and the Compact Button reads "Compact now".
 - **Turns left**: at each main `turn.complete`, record `totalTokens`. With fewer than 3 recorded turns the so-what reads `learning your pace`; after that, with `turnsLeft` null, the so-what is only `M% msgs`, or empty when the Messages row is missing. Otherwise `growth` = the median of the positive deltas over the last 10 turns, and `turnsLeft = floor((limit - totalTokens) / growth)` with `limit = autoCompactThreshold ?? rawMaxTokens`, floored at 0; no positive delta → `null`. A drop in `totalTokens` (a compaction) clears the history.
 - **Msgs share**: `msgsPct = round(tokens of the 'used' row named "Messages" / rawMaxTokens * 100)`. The engine stamps no kind for that row (`ContextCategoryKind`, `d.ts:2226-2232`), so the name is the only handle; when the row is missing the "· M% msgs" part is dropped.
 - So-what, calm: `~N turns · M% msgs`.
@@ -376,12 +377,13 @@ The toggle shows the `er` dot when `size !== 'full'` and any agent is `need` or 
 
 ### 7.3 The tree (`panel/draw.ts`)
 
-`panelTree(view): RenderElement`. Everything coloured is an SVG; the only host element with text is the "Compact now" Button.
+`panelTree(view): RenderElement`. Everything coloured is an SVG; the only host element with text is the Compact Button.
 
 - **Row 1**: a Box row. Each column is a Box `width` in cells holding one image (label 11px, value 16/600 with its dial, so-what 11px). Images are drawn at `cells * 8.5` px, which is under the real cell width, so an image never shrinks; text is left-aligned, so the slack is padding. Dials are `image` Clients (the needle settle is a one-shot keyframe, 900 ms, with its start baked in from `settle`); every other cell is a plain Svg. The toggle is an `image` Client, 24×24, `press: 'size'`.
-- **Compact now**: in alarm, a `Button` after the columns, never `dimColor`, `onPress` runs the engine's own `/compact` through `$.command.run`.
+- **Compact**: from `pct >= 50`, a `Button` labelled "Compact" ("Compact now" in alarm) in an absolute Box inside the context column, right of the value on its line; never `dimColor`; `onPress` runs the engine's own `/compact` through `$.command.run`. When the column is narrower than the value plus the Button (guessed at its label plus one cell), the context column widens to fit it and the other columns share the rest.
+- **Presses**: the context image presses `context`, the 5h and 7d images `usage`, the session image `costs`, so each is an `image` Client. A so-what of ` · `-joined clauses (context, this turn, session, limits) drops whole clauses right to left; a clause that does not fit goes whole.
 - **Plan row** (`full`, with a plan): one image for the line (title, phase stepper, `N/M tasks · ~Xm left`), one for the segmented bar and names. The bar's fills grow by a 600 ms one-shot, so the bar is an `image` Client. Names show while each segment is at least 56px wide and there are at most 8 tasks; past 40 tasks the bar is three proportional parts (done, live, rest).
-- **Chips** (`full`): the panel's helpers are every nested helper (`helpersOf`), so a helper of a helper that waits on you gets an alert chip and dresses the folded crab like a direct helper. One image per top-level agent, sorted need, failed, rest. All alert chips share one `image` Client (one clock for the pulse, one looping drawing); the image has 3px of padding for the halo. A walking chip is an `image` Client; a still chip is a plain Svg. Chips that do not fit two rows collapse into a `+N more` chip.
+- **Chips** (`full`): the panel's helpers are every nested helper (`helpersOf`), so a helper of a helper that waits on you gets an alert chip and dresses the folded crab like a direct helper. One image per top-level agent, sorted need, failed, rest. All alert chips share one `image` Client (one clock for the pulse, one looping drawing); the image has 3px of padding for the halo. A walking chip is an `image` Client; a still chip is a plain Svg. Chips that do not fit two rows collapse into a `+N more` chip. A chip presses `open:<id>`; the shared alert image carries `zones` (each chip's right edge in px and its press) and presses the first alert by key; `+N more` and `+N need you` press `open`.
 - **Folded agents column and one-line crab**: an `image` Client with `press: 'open'`; the crab's costume and motion come from `LoopPlan.mascot`, with 3px of padding for the hop and the stagger.
 - On `hasSurvey` the hook returns `next(e)`. clawpit draws its own tree and does not nest what `next(e)` returns; other plugins' rows are stacked by the band itself (`AbovePromptList`, `d.ts:11453-11462`).
 
@@ -425,7 +427,7 @@ One module serves every Client in both surfaces.
 | Behaviour | Rule |
 |---|---|
 | Draws | `h('Svg', { source, alt, width, height })`, with `isInteractive: true` when `interactive` (a cut chip's `<title>` tooltip shows only then), wrapped in a Box when `hover` |
-| Pointer | on a left `down`, when `press` is set, `surface.post({ press })` (`d.ts:1655`, `d.ts:1662-1671`); on `enter`/`leave` with `hover`, `setState({ isHover })` |
+| Pointer | on a left `down`, when `press` is set, `surface.post({ press })`; with `zones`, the press of the zone under the pointer (its column scaled by `width / surface.columns`) (`d.ts:1655`, `d.ts:1662-1671`); on `enter`/`leave` with `hover`, `setState({ isHover })` |
 | Keys | Enter or Space while focused posts the same press |
 | Timers | none; `surface.every` is never called |
 
@@ -437,6 +439,8 @@ Why one module: a Svg is an image with no events, a Button holds only text, and 
 |---|---|
 | `size` | `ui.size = nextSize(ui.size)`; `$.store.set('size', …)` |
 | `open` | `$.ui.open({ id: 'clawpit-agents', title: 'Agents' })` |
+| `open:<id>` | `ui.open = id`, then the same `$.ui.open` |
+| `usage`, `context` | `$.command.run({ command })`, not awaited |
 | `row:<id>` | `ui.open = ui.open === id ? null : id` |
 | `kids:<id>` | toggle `<id>` in `ui.shut` |
 | `ended` | toggle `'ended'` in `ui.shut` |

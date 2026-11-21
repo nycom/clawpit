@@ -122,6 +122,37 @@ test('panel hook: Compact now runs /compact once per press', async ($, on) => {
   await ui.unmount()
 })
 
+test('panel hook: from 50% context a Compact button runs /compact once per press; below 50 there is none', async ($, on) => {
+  const w = setup(on, { usage: { ...USAGE, context: { window: 200_000, percent: 60 } } })
+  await start($)
+  const ui = await band($)
+  const button = (await ui.find({ key: COMPACT_KEY })) as unknown as Node
+  expect(button.type).toBe('Button'); expect(button.text).toBe('Compact'); expect('dimColor' in button.props).toBe(false)
+  await ui.press({ key: COMPACT_KEY })
+  expect(w.commands).toEqual(['compact'])
+  await ui.unmount()
+})
+
+test('panel hook: below 50% context there is no Compact button', async ($, on) => {
+  setup(on, { usage: { ...USAGE, context: { window: 200_000, percent: 49 } } })
+  await start($)
+  const ui = await band($)
+  expect(await ui.find({ key: COMPACT_KEY })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('panel hook: a press on the 5h or 7d column runs /usage, on the context column /context; nothing else changes', async ($, on) => {
+  const limits = [{ kind: 'five_hour', percentUsed: 60, resetsAt: new Date(T0 + 3_600_000).toISOString() }, { kind: 'seven_day', percentUsed: 60 }]
+  const w = setup(on, { usage: { ...USAGE, context: { window: 200_000, percent: 30 }, rateLimits: limits } })
+  await start($)
+  const ui = await band($)
+  const before = { writes: w.mine(), sets: w.storeSets.length }
+  for (const key of ['col-5h', 'col-7d', 'col-context']) await ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: key })
+  expect(w.commands).toEqual(['usage', 'usage', 'context'])
+  expect({ writes: w.mine(), sets: w.storeSets.length }).toEqual(before)
+  await ui.unmount()
+})
+
 test('panel hook: a throwing draw shows the failure line, not a blank', async ($, on) => {
   setup(on)
   // A ui atom no version of clawpit writes: the drawing throws on it.
@@ -294,11 +325,12 @@ test('image: a left press posts its press; no press prop posts nothing', async (
   await ui.key({ key: ' ', in: 'toggle' })
   await ui.key({ key: 'a', in: 'toggle' })
   expect(await sizeOf(ui)).toBe('everything')
-  // The context dial is a Client with no press: pointer and keys on it change nothing.
+  // The context dial presses /context: pointer and key run it and change no state.
   const writes = w.mine(), sets = w.storeSets.length
   await ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'col-context' })
   await ui.key({ key: 'return', in: 'col-context' })
   expect([w.mine(), w.storeSets.length]).toEqual([writes, sets])
+  expect(w.commands).toEqual(['context', 'context'])
   await ui.unmount()
 })
 
@@ -322,6 +354,31 @@ test('panel hook: pressing a chip opens the Agents pane', { plugins: [savvy] }, 
     await ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: n.key! })
     expect(opens.slice(before)).toEqual(['clawpit-agents'])
   }
+  expect(closes).toEqual([])
+  await ui.unmount()
+})
+
+test('panel hook: a chip press opens the Agents pane with that agent\'s drawer open; the alert image presses the chip under the pointer', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on), closes: string[] = []
+  on('ui.close', (_$, e) => { closes.push(e.id); return { value: undefined } as never })
+  await start($)
+  const run = (id: string, o: Record<string, unknown> = {}) =>
+    ({ id, agentId: id, type: 'implementer', description: `worker ${id}`, model: 'm', status: 'running', startedAt: T0, contextTokens: 0, contextMax: 1, costUsd: 0, ...o })
+  await $.tool.call({ tool: 'savvy-set', runs: [run('a0', { blocked: 'Which schema?' }), run('a1', { blocked: 'Which port?' }), run('r1')] } as never)
+  const ui = await band($)
+  const press = async (key: string, x = 0) => { const n = w.opens.length; await ui.pointer({ type: 'down', x, y: 0, button: 'left', in: key }); return { opened: w.opens.slice(n), open: (w.last('ui') as { open: string | null } | undefined)?.open } }
+  expect(await press('chip-r1')).toEqual({ opened: ['clawpit-agents'], open: 'r1' })
+  // The shared alert image: its left edge is the first alert, its right end the second.
+  expect(await press('chips-alert', 0)).toEqual({ opened: ['clawpit-agents'], open: 'a0' })
+  // Laid out as the desktop lays the image out: its pixels in cells of about 9.2 px.
+  const cols = Math.ceil((((await all(ui)).find(n => n.key === 'chips-alert')!.props.props as { width: number }).width) / 9.2)
+  await ui.resize({ columns: cols, rows: 2, in: 'chips-alert' })
+  expect(await press('chips-alert', 0)).toEqual({ opened: ['clawpit-agents'], open: 'a0' })
+  expect(await press('chips-alert', cols - 1)).toEqual({ opened: ['clawpit-agents'], open: 'a1' })
+  // An empty id is not a press.
+  const before = w.mine()
+  await ui.post({ press: 'open:' }, { in: 'toggle' })
+  expect(w.mine()).toBe(before)
   expect(closes).toEqual([])
   await ui.unmount()
 })

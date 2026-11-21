@@ -88,3 +88,12 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Count badge:** the folded agents crab shows its count badge only for 2 or more agents; one agent needs no number.
 - **Chips open the Agents pane:** a press on any chip opens it, as the folded agents column does.
 - **Pointer:** asked for over chips, the folded agents column and the toggle; not buildable in this app build. The desktop gives plugin elements no cursor setting, and draws its own buttons with the arrow, not the pointer. Unframed chips should show the arrow, not the text cursor (unchecked in the app).
+- **Compact button:** from 50% context a small "Compact" Button sits right of the context value, on its line, inside the context column (no extra row); in alarm it reads "Compact now" and the value and so-what turn `er`. A press runs `/compact`, once per press. Never `dimColor`. Below 50%, no Button. Where the column is too narrow to hold it, the context column widens by what the Button needs and the other columns share the rest. This replaces "Compact now appears" (alarm only, after the columns) above.
+- **Chip opens its agent:** a chip press opens the Agents pane with that agent's row drawer open. The shared alert-chip image presses the chip under the pointer (a press zone per chip); a key press on it opens the first alert. "+N more" and "+N need you" open the pane only, as the folded agents column does.
+- **Limit columns run /usage:** a press on the 5h or 7d column runs `/usage`.
+- **Context column runs /context:** a press on the context dial and value runs `/context`.
+- **Session column opens the cost list:** a press on the session column opens the Agents pane on its per-turn cost list.
+- **Failed tests named:** after a failed test run the tests column's so-what reads the first failing test's name; its alt and its tooltip list up to 5. The column is not pressable.
+- **Plan bar names its tasks:** the plan bar and the folded mini bars carry each task and its state ("schema done, api done, … merge not started") in their alt and tooltip.
+- **Alert line keeps its words:** the folded agents column's alert line cuts only the agent's name and keeps " needs you" or " failed" whole; with under 6 name characters left it reads only "needs you" or "failed".
+- **So-whats drop whole clauses:** a so-what of clauses joined by " · " (context, this turn, session, the limits) drops whole clauses right to left; a clause that does not fit goes whole, so a number is never cut.

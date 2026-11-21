@@ -15,8 +15,8 @@ const propsOf = (e: El) => (e.type === 'Client' ? e.props!.props : e.props) as {
 // The first image at or under a key: a column is a Box holding its image, a chip is the image itself.
 const imgOf = (t: El, key: string) => { const e = find(t, key); return e ? all(e).find(isImage) : undefined }
 const sourceOf = (t: El, key: string) => { const e = imgOf(t, key); return e ? propsOf(e).source : '' }
-// The words a drawing shows: its markup without the styles and the tags.
-const words = (src: string) => src.replace(/<style>[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, '')
+// The words a drawing shows: its markup without the styles, the tooltips and the tags.
+const words = (src: string) => src.replace(/<style>[\s\S]*?<\/style>/g, '').replace(/<title>[\s\S]*?<\/title>/g, '').replace(/<[^>]+>/g, '')
 const cols = (t: El) => keys(find(t, 'cols')).filter(k => k.startsWith('col-'))
 const gauges = (s: StateName) => { const v = viewOf(s); return viewOf(s, { ui: { ...v.ui, size: 'gauges' } }) }
 
@@ -26,7 +26,7 @@ const wellFormed = (src: string): boolean => {
   for (const m of src.replace(/<style>[\s\S]*?<\/style>/g, '').matchAll(/<(\/?)([a-zA-Z][\w:-]*)[^<>]*?(\/?)>/g)) {
     if (m[1]) { if (stack.pop() !== m[2]) return false } else if (!m[3]) stack.push(m[2])
   }
-  const text = words(src)
+  const text = src.replace(/<style>[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, '')
   return stack.length === 0 && !/[<>]/.test(text) && !/&(?!(amp|lt|gt|quot|apos);)/.test(text)
 }
 const SHOTS: StateName[] = ['idle', 'busy', 'hydra', 'needsYou', 'failed', 'both', 'context90', 'limitAhead', 'sizeGauges', 'sizeLine', 'codeColumns', 'manyAgents']
@@ -64,13 +64,29 @@ test('panel: no plan and line size shows the session cost', () => {
 test('panel: the column count follows the cells', () => {
   expect(cols(panelTree(viewOf('hydra', { bodyColumns: 46 }))).length).toBe(3)
   expect(cols(panelTree(viewOf('hydra', { bodyColumns: 88 }))).length).toBe(6)
-  const box = find(panelTree(viewOf('hydra', { bodyColumns: 88 })), 'col-context')!
+  // Below 50% context, so no Compact button widens the context column.
+  const v = viewOf('hydra'), box = find(panelTree(viewOf('hydra', { bodyColumns: 88, stats: { ...v.stats, context: { ...v.stats.context!, pct: 40 } } })), 'col-context')!
   expect(box.props!.width).toBe(14); expect(propsOf(imgOf(box, 'col-context')!).width).toBe(14 * 8.5)
 })
 
-test('panel: Compact now appears only in alarm and is never dim', () => {
-  const b = find(panelTree(viewOf('context90')), COMPACT_KEY)!; expect(b.type).toBe('Button'); expect(b.props!.label).toBe('Compact now'); expect(b.props!.dimColor).toBeUndefined()
-  expect(find(panelTree(viewOf('hydra')), COMPACT_KEY)).toBeUndefined()
+const atContext = (pct: number, alarm = false) => { const v = viewOf('hydra'); return panelTree(viewOf('hydra', { stats: { ...v.stats, context: { ...v.stats.context!, pct, alarm } } })) }
+test('panel: from 50% context a Compact button sits in the context column; in alarm it reads Compact now; never dim', () => {
+  expect(find(atContext(49), COMPACT_KEY)).toBeUndefined()
+  for (const [t, label] of [[atContext(50), 'Compact'], [panelTree(viewOf('hydra')), 'Compact'], [panelTree(viewOf('context90')), 'Compact now']] as const) {
+    const col = find(t, 'col-context')!, b = find(col, COMPACT_KEY)!
+    expect(b.type).toBe('Button'); expect(b.props!.label).toBe(label); expect('dimColor' in b.props!).toBe(false)
+    // No extra row; the image fills the column and the Button is placed over its free right part, on the value's line.
+    expect(keys(t)).not.toContain('compact')
+    expect(propsOf(imgOf(col, 'col-context')!).width).toBe((col.props!.width as number) * 8.5)
+    expect(find(col, 'compact-at')!.props).toMatchObject({ position: 'absolute', top: 1 })
+  }
+  // The context column widens only by what the Button needs; the columns still fit the body beside the toggle.
+  for (const bodyColumns of [46, 60, 88, 96, 140]) for (const s of ['hydra', 'context90'] as const) {
+    const t = panelTree(viewOf(s, { bodyColumns })), ws = keys(find(t, 'cols')).filter(k => k.startsWith('col-')).map(k => find(t, k)!.props!.width as number)
+    const at = find(find(t, 'col-context')!, 'compact-at')!.props!.left as number, label = find(t, COMPACT_KEY)!.props!.label as string
+    expect(ws[0]).toBeGreaterThanOrEqual(at + label.length + 1)
+    expect(ws.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(bodyColumns - 4)
+  }
   const ctx = sourceOf(panelTree(viewOf('context90')), 'col-context')
   expect(words(ctx)).toContain('auto-compacts at 97%'); expect(ctx).toMatch(/class="er"[^>]*>92%</)
 })
@@ -89,7 +105,113 @@ test('panel: alert chips share one client; every chip, still ones too, is a Clie
   const v = viewOf('hydra'), h = panelTree(v)
   const still = v.crew.agents.find(a => a.state === 'running' && !v.loops.walkers.includes(a.id))!
   for (const id of [still.id, ...v.loops.walkers]) expect(find(h, `chip-${id}`)!.type).toBe('Client')
-  for (const c of [alert, find(h, `chip-${still.id}`)!]) expect(propsOf(c).press).toBe('open')
+  expect(propsOf(alert).press).toBe(`open:${viewOf('both').crew.agents.find(a => a.state === 'need')!.id}`)
+  expect(propsOf(find(h, `chip-${still.id}`)!).press).toBe(`open:${still.id}`)
+})
+
+test('panel: a chip presses open:<its id>; in the shared alert image each chip has its own zone; +N more opens the pane', () => {
+  const v = viewOf('hydra'), t = panelTree(v)
+  for (const a of v.crew.agents) expect(propsOf(find(t, `chip-${a.id}`)!).press).toBe(`open:${a.id}`)
+  const b = viewOf('both'), alerts = [...b.crew.agents.filter(a => a.state === 'need'), ...b.crew.agents.filter(a => a.state === 'failed')]
+  const p = propsOf(find(panelTree(b), 'chips-alert')!) as ReturnType<typeof propsOf> & { zones: { to: number; press: string }[] }
+  expect(p.press).toBe(`open:${alerts[0].id}`)
+  expect(p.zones.map(z => z.press)).toEqual(alerts.map(a => `open:${a.id}`))
+  expect(p.zones.at(-1)!.to).toBe(p.width)
+  expect(p.zones.every((z, i) => i === 0 || z.to > p.zones[i - 1].to)).toBe(true)
+  // The red overflow chip and the muted '+N more' keep the plain open.
+  const crowd = propsOf(find(panelTree(alertCrowd(6, 0)), 'chips-alert')!) as typeof p
+  expect(crowd.zones.at(-1)!.press).toBe('open')
+  const many = viewOf('manyAgents')
+  expect(propsOf(find(panelTree({ ...many, crew: { ...many.crew, agents: many.crew.agents.slice(0, 40) }, bodyColumns: 60 }), 'chip-more')!).press).toBe('open')
+  expect(propsOf(find(panelTree(gauges('hydra')), 'mascot')!).press).toBe('open')
+})
+
+test('panel: the limit columns press usage and the context column presses context, in every size; tests has no press', () => {
+  for (const v of [viewOf('hydra'), gauges('hydra'), viewOf('sizeLine'), viewOf('limitAhead')]) {
+    const t = panelTree(v)
+    expect(propsOf(imgOf(t, 'col-context')!).press).toBe('context')
+    for (const k of ['col-5h', 'col-7d']) { const e = imgOf(t, k); if (e) expect(propsOf(e).press).toBe('usage') }
+    expect(imgOf(t, 'col-5h') ?? imgOf(t, 'col-7d')).toBeDefined()
+  }
+  const v = viewOf('hydra'), tests = imgOf(panelTree(viewOf('hydra', { busy: false, bodyColumns: 140, stats: { ...v.stats, tests: { passed: 1, failed: 2, at: NOW, failedNames: ['a'] } } })), 'col-tests')!
+  expect(tests.type).toBe('Svg'); expect(propsOf(tests).press).toBeUndefined()
+})
+
+test('panel: the session column presses costs and is a still Client; no other column gains a press', () => {
+  const PRESS: Record<string, string> = { 'col-context': 'context', 'col-5h': 'usage', 'col-7d': 'usage', 'col-session': 'costs' }
+  for (const s of SHOTS) for (const t of [panelTree(viewOf(s)), panelTree(gauges(s)), panelTree(viewOf(s, { bodyColumns: 140 }))]) {
+    for (const k of keys(find(t, 'cols')).filter(k => k.startsWith('col-') && k !== 'col-agents')) expect([k, propsOf(imgOf(t, k)!).press]).toEqual([k, PRESS[k]])
+    const ses = imgOf(t, 'col-session')
+    if (ses) { expect(ses.type).toBe('Client'); expect(propsOf(ses).source).not.toContain('infinite') }
+  }
+  // The one-line size's session item too.
+  const v = viewOf('busy'), line = panelTree(viewOf('busy', { ui: { ...v.ui, size: 'line' } }))
+  expect(propsOf(imgOf(line, 'col-session')!).press).toBe('costs')
+})
+
+test('panel: a failed test run names its failing tests: the so-what the first, the alt and the title all', () => {
+  const v = viewOf('hydra'), names = ['panel: wording', 'tests: keeps the names', 'a <b> & c']
+  const at = (failedNames: string[]) => propsOf(imgOf(panelTree(viewOf('hydra', { busy: false, bodyColumns: 140, stats: { ...v.stats, tests: { passed: 3, failed: 3, at: NOW - 42_000, failedNames } } })), 'col-tests')!)
+  const p = at(names)
+  expect(p.source).toMatch(/>panel: wording</)
+  expect(p.source).toContain('<title>panel: wording, tests: keeps the names, a &lt;b&gt; &amp; c</title>')
+  expect(p.alt).toBe('tests: 3 failed, <1m ago. Failing: panel: wording, tests: keeps the names, a <b> & c')
+  expect(wellFormed(p.source)).toBe(true)
+  // A long first name is cut to the column with an ellipsis.
+  const long = at([`${'very long test name '.repeat(6)}end`])
+  expect(words(long.source)).toMatch(/very long test.*…/); expect(long.alt).toContain('end')
+  // No names: the age, as before, and no title.
+  expect(at([]).source).not.toContain('<title>')
+})
+
+test('panel: the plan bar and the folded mini bars name each task and its state', () => {
+  const list = 'schema done, api done, savvy-progress implement in progress, e2e tests in progress, cache-tax review c1 in progress, plan the release in progress, merge not started'
+  const bar = propsOf(find(panelTree(viewOf('hydra')), 'plan-bar')!)
+  expect(bar.alt).toBe(`tasks: ${list}`); expect(bar.source).toContain(`<title>${list}</title>`)
+  for (const t of [panelTree(gauges('hydra')), panelTree(viewOf('sizeLine'))]) {
+    const p = propsOf(imgOf(t, 'col-plan')!)
+    expect(p.alt).toContain(`. Tasks: `); expect(p.source).toContain('<title>schema done, api done, ')
+    expect('interactive' in p).toBe(false)
+  }
+  const f = propsOf(find(panelTree(viewOf('failed')), 'plan-bar')!)
+  expect(f.alt).toMatch(/e2e tests failed/)
+})
+
+// The words of the last <text> in a drawing: the folded column's alert line.
+const lastText = (src: string) => words([...src.matchAll(/<text[^>]*>(.*?)<\/text>/g)].at(-1)![1])
+test('panel: the folded alert line keeps " needs you" and " failed" whole and cuts only the title', () => {
+  const v = viewOf('needsYou'), need = v.crew.agents.find(a => a.state === 'need')!
+  const say = (title: string, state: 'need' | 'failed', bodyColumns: number) => {
+    const agents = v.crew.agents.map((a): CrewAgent => (a.id === need.id ? { ...a, title, state, reason: 'broke' } : a))
+    return lastText(propsOf(find(panelTree(viewOf('needsYou', { crew: { ...v.crew, agents }, ui: { ...v.ui, size: 'gauges' }, bodyColumns })), 'mascot')!).source)
+  }
+  const long = 'rewrite the whole release pipeline'
+  const seen = new Set<string>()
+  for (const cols of [46, 60, 74, 88, 96, 140]) for (const state of ['need', 'failed'] as const) {
+    const tail = state === 'need' ? 'needs you' : 'failed', s = say(long, state, cols)
+    const m = s.match(new RegExp(`^(.+)… ${tail}$`))
+    if (s === `${long} ${tail}`) seen.add('whole')
+    else if (m) { expect(m[1].length).toBeGreaterThanOrEqual(6); seen.add('cut') }
+    else { expect(s).toBe(tail); seen.add('tail') }
+  }
+  expect([...seen].sort()).toEqual(['cut', 'tail'])
+  expect(say('docs', 'need', 60)).toBe('docs needs you')
+})
+
+test('panel: a two-clause so-what drops whole clauses right to left, never cutting a number', () => {
+  const v = viewOf('hydra'), soOf = (t: El, key: string) => lastText(sourceOf(t, key))
+  const ctx = panelTree(viewOf('hydra', { stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789 } } }))
+  expect(soOf(ctx, 'col-context')).toBe('~123456789 turns')
+  const ses = panelTree(viewOf('hydra', { bodyColumns: 88, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
+  // One clause that does not fit goes whole: never 'last turn $12…' nor 'last turn…'.
+  expect(soOf(ses, 'col-session')).toBe('')
+  const turn = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, turn: { ...v.stats.turn!, costUsd: 123_456.78 } } }))
+  expect(soOf(turn, 'col-turn')).toBe('+38 −6')
+  const whole = ['~7 turns · 34% msgs', '~7 turns', 'auto-compacts at 97%', 'last turn $2.46', 'on pace for 58%', 'on pace for 131%', '+38 −6 · ≈$0.42', '+38 −6', '']
+  for (const s of ['hydra', 'context90', 'limitAhead'] as const) for (const bodyColumns of [46, 60, 88, 96]) {
+    const t = panelTree(viewOf(s, { bodyColumns }))
+    for (const k of ['col-context', 'col-turn', 'col-session', 'col-5h', 'col-7d']) if (find(t, k)) expect([k, whole.includes(soOf(t, k))]).toEqual([k, true])
+  }
 })
 
 test('panel: the failed chip pulses only while armed', () => {

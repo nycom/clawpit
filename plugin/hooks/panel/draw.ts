@@ -31,14 +31,20 @@ const clean = (s: unknown, max: number) => clip(oneLine(s), max)
 const text = (x: number, y: number, s: string, size: number, p: string, o: { w?: Weight; max?: number; end?: boolean } = {}) =>
   `<text ${paint(p)} x="${x}" y="${y}" font-size="${size}"${weight(o.w)}${o.end ? ' text-anchor="end"' : ''}>${xml(o.max === undefined ? s : fitTo(s, o.max, size, o.w))}</text>`
 // Runs on one baseline; the last run is fitted to whatever width is left.
-const runs = (x: number, y: number, size: number, parts: Run[], max: number, end = false) => {
+const runs = (x: number, y: number, size: number, parts: Run[], max: number, end = false, fitLast = fitTo) => {
   let left = max
   const spans = parts.map(([s, p, w], i) => {
-    const t = i === parts.length - 1 ? fitTo(s, Math.max(0, left), size, w) : s
+    const t = i === parts.length - 1 ? fitLast(s, Math.max(0, left), size, w) : s
     left -= widthOf(t, size, w)
     return `<tspan ${paint(p)}${weight(w)}>${xml(t)}</tspan>`
   })
   return `<text x="${x}" y="${y}" font-size="${size}"${end ? ' text-anchor="end"' : ''}>${spans.join('')}</text>`
+}
+// Whole clauses go right to left; a clause is never cut, so neither is a number ('on pace for…' says nothing).
+const fitWhole = (s: string, max: number, size: number, w?: Weight) => {
+  const fits = (t: string) => widthOf(t, size, w) <= max, clauses = s.split(' · ')
+  while (clauses.length && !fits(clauses.join(' · '))) clauses.pop()
+  return clauses.join(' · ')
 }
 const runsWidth = (parts: Run[], size: number) => parts.reduce((w, [s, , wt]) => w + widthOf(s, size, wt), 0)
 // A dial's needle settle is an inline animation, so any animated body gets the reduced-motion rule.
@@ -48,7 +54,8 @@ const at = (x: number, y: number, body: string) => `<g transform="translate(${x}
 
 // ---------- the columns ----------
 const COL_H = 58, LINE_H = 28
-type Cell = { label: string; value: string; valueTone: string; small?: string; so: Run[]; art?: { body: string; w: number; client: boolean } }
+// whole: the so-what drops whole clauses, never cutting one. tip: a <title>; alt: replaces the alt built from the text.
+type Cell = { label: string; value: string; valueTone: string; small?: string; so: Run[]; art?: { body: string; w: number; client: boolean }; press?: string; whole?: true; tip?: string; alt?: string }
 
 const limitOf = (stats: Stats, key: '5h' | '7d') => stats.limits.find(l => l.kind === (key === '5h' ? 'five_hour' : 'seven_day'))
 const limitTone = (l: LimitStat) => (l.ahead || l.pct >= 80 ? 'warn' : 'accent')
@@ -69,35 +76,37 @@ const cellOf = (key: ColumnKey, v: PanelView): Cell | null => {
   switch (key) {
     case 'context': {
       const c = stats.context
-      return { label: 'context', value: c ? pctOf(c.pct) : '—', valueTone: c?.alarm ? 'er' : 'fg', so: [[contextText(c, s.turns), c?.alarm ? 'er' : 'muted']], art: { body: contextDial(v), w: 34, client: true } }
+      return { label: 'context', value: c ? pctOf(c.pct) : '—', valueTone: c?.alarm ? 'er' : 'fg', so: [[contextText(c, s.turns), c?.alarm ? 'er' : 'muted']], art: { body: contextDial(v), w: 34, client: true }, press: 'context', whole: true }
     }
     case 'turn': {
       const t = stats.turn
       if (!t) return { label: 'this turn', value: '—', valueTone: 'fg', so: [['no reading yet', 'muted']] }
       return { label: 'this turn', value: fmtClock(now - t.startedAt), valueTone: 'fg',
-        so: [[`+${t.added}`, 'okText'], [` −${t.removed}${t.costUsd === null ? '' : ` · ${fmtCost(t.costUsd)}`}`, 'muted']] }
+        so: [[`+${t.added}`, 'okText'], [` −${t.removed}${t.costUsd === null ? '' : ` · ${fmtCost(t.costUsd)}`}`, 'muted']], whole: true }
     }
     case '5h': case '7d': {
       const l = limitOf(stats, key)
       if (!l) return null
       const tone = limitTone(l)
-      return { label: `${key} limit`, value: pctOf(l.pct), valueTone: tone === 'warn' ? 'warn' : 'fg', so: [[paceText(l), l.ahead ? 'warn' : 'muted']], art: { body: limitDial(v, key, l), w: 34, client: true } }
+      return { label: `${key} limit`, value: pctOf(l.pct), valueTone: tone === 'warn' ? 'warn' : 'fg', so: [[paceText(l), l.ahead ? 'warn' : 'muted']], art: { body: limitDial(v, key, l), w: 34, client: true }, press: 'usage', whole: true }
     }
     case 'plan': {
       const p = crew.plan
       if (!p) return null
-      return { label: `plan · ${p.phase}`, value: `${p.done}/${p.total}`, valueTone: 'fg',
+      const cell: Cell = { label: `plan · ${p.phase}`, value: `${p.done}/${p.total}`, valueTone: 'fg',
         so: [[`${clean(p.title, 60)}${crew.leftMin === null ? '' : ` · ${fmtLeft(crew.leftMin)}`}`, 'muted']],
-        art: { body: at(0, 8, segBar(planSegs(p), 58, 'compact')), w: 58, client: false } }
+        art: { body: at(0, 8, segBar(planSegs(p), 58, 'compact')), w: 58, client: false }, tip: taskList(p) }
+      return { ...cell, alt: `${altOf(cell)}. Tasks: ${taskList(p)}` }
     }
     case 'session':
       return { label: 'session', value: usd(s.costUsd), valueTone: 'fg',
-        so: [[s.costUsd === null ? 'no reading yet' : !s.turns ? 'no turns yet' : s.lastTurnUsd === null ? '' : `last turn ${usd(s.lastTurnUsd)}`, 'muted']] }
+        so: [[s.costUsd === null ? 'no reading yet' : !s.turns ? 'no turns yet' : s.lastTurnUsd === null ? '' : `last turn ${usd(s.lastTurnUsd)}`, 'muted']], whole: true, press: 'costs' }
     case 'tests': {
       const t = stats.tests
       if (!t) return null
-      const bad = t.failed > 0
-      return { label: 'tests', value: String(bad ? t.failed : t.passed), valueTone: bad ? 'er' : 'okText', small: bad ? 'failed' : 'passed', so: [[`${now - t.at < 60_000 ? '<1m' : fmtAge(now - t.at)} ago`, 'muted']] }
+      const bad = t.failed > 0, age = `${now - t.at < 60_000 ? '<1m' : fmtAge(now - t.at)} ago`, names = bad ? t.failedNames ?? [] : []
+      const cell: Cell = { label: 'tests', value: String(bad ? t.failed : t.passed), valueTone: bad ? 'er' : 'okText', small: bad ? 'failed' : 'passed', so: [[names[0] ?? age, 'muted']] }
+      return names.length ? { ...cell, tip: names.join(', '), alt: `tests: ${t.failed} failed, ${age}. Failing: ${names.join(', ')}` } : cell
     }
     case 'tokens': return { label: 'tokens', value: fmtTokens(s.tokens), valueTone: 'fg', so: [[`${s.turns} turns`, 'muted']] }
     case 'agent': return { label: 'agent time', value: fmtDuration(s.agentMs), valueTone: 'fg', so: [[s.turns ? `avg ${fmtDuration(s.agentMs / s.turns)} per turn` : '', 'muted']] }
@@ -124,12 +133,22 @@ const columnImage = (key: ColumnKey, c: Cell, w: number, first: boolean): El => 
     + (c.art ? at(x0, 18, c.art.body) : '')
     + text(vx, 35, c.value, 16, c.valueTone, { w: 600 })
     + (c.small ? text(vx + widthOf(c.value, 16, 600) + 4, 35, c.small, 12, 'muted') : '')
-    + runs(x0, 54, 11, c.so, max)
-  return image(`col-${key}`, { source: doc(w, COL_H, body), alt: altOf(c), width: w, height: COL_H }, !!c.art?.client)
+    + runs(x0, 54, 11, c.so, max, false, c.whole ? fitWhole : fitTo)
+  return image(`col-${key}`, { source: doc(w, COL_H, c.tip ? withTip(c.tip, body, Infinity) : body), alt: c.alt ?? altOf(c), width: w, height: COL_H, ...(c.press ? { press: c.press } : {}) }, !!c.art?.client)
+}
+// From 50% context, a Button right of the value on the value's line, placed over the column's free part so
+// the image and its baseline stay as they are. In alarm it reads "Compact now". Never dimColor.
+// `cells`: how wide the column must be to hold it. shortcut: the Button is guessed at its label plus one cell; tune it with the app check.
+const compactOf = (v: PanelView, c: Cell): { el: El; cells: number } | null => {
+  const ctx = v.stats.context
+  if (!ctx || ctx.pct < 50) return null
+  const label = ctx.alarm ? 'Compact now' : 'Compact', left = Math.ceil(((c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + 2) / CELL_PX)
+  return { cells: left + label.length + 1, el: { type: 'Box', props: { key: 'compact-at', position: 'absolute', left, top: 1 }, children: [{ type: 'Button', props: { key: COMPACT_KEY, label } }] } }
 }
 
 // ---------- the agents crab: who it dresses as, and what it says ----------
-type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean }
+// An alert's say is its name and a tail (" needs you", " failed") that is never cut.
+type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean; name?: string; tail?: string }
 // The top-level agents, then their helpers: a helper that waits on you or failed still dresses the crab.
 const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(helpersOf)]
 const nextUp = (agents: CrewAgent[]) => {
@@ -140,11 +159,18 @@ const nextUp = (agents: CrewAgent[]) => {
 const faceOf = (crew: Crew): Face => {
   const as = crew.agents, all = withHelpers(as), title = (a: CrewAgent) => clean(a.title, 60)
   const need = all.find(a => a.state === 'need'), failed = all.find(a => a.state === 'failed'), hard = as.find(a => a.struggling)
-  if (need) return { a: need, say: `${title(need)} needs you`, tone: 'er', w: 600, alert: true }
-  if (failed) return { a: failed, say: `${title(failed)} failed`, tone: 'er', w: 600, alert: true }
+  if (need) return { a: need, say: `${title(need)} needs you`, tone: 'er', w: 600, alert: true, name: title(need), tail: ' needs you' }
+  if (failed) return { a: failed, say: `${title(failed)} failed`, tone: 'er', w: 600, alert: true, name: title(failed), tail: ' failed' }
   if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false }
   const n = nextUp(as)
   return { a: n, say: `next: ${title(n)}${n.eta.kind === 'left' ? ` · ${fmtLeft(n.eta.minutes)}` : ''}`, tone: 'fg', w: 400, alert: false }
+}
+// Cuts only the name of an alert; under 6 name characters left, the tail alone.
+const NAME_MIN = 6
+const sayFit = (f: Face, max: number, size: number) => {
+  if (!f.tail || !f.name || widthOf(f.say, size, f.w) <= max) return fitTo(f.say, max, size, f.w)
+  const name = fitTo(f.name, max - widthOf(f.tail, size, f.w), size, f.w)
+  return name.replace(/…$/, '').length >= NAME_MIN ? name + f.tail : fitTo(f.tail.trim(), max, size, f.w)
 }
 // The crab with its count badge at the bottom corner (N1), from two agents up: one needs no number. Returns the drawing and its box.
 const BADGE_TEXT = `.bt{fill:${SURFACE.light}}@media (prefers-color-scheme: dark){.bt{fill:${SURFACE.dark}}}`
@@ -160,10 +186,10 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
 }
 
 const agentsColumn = (v: PanelView, w: number): El => {
-  const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6
+  const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
   const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'agents', 11, 'muted', { max })
-    + at(x0, 15, m.body) + text(vx, 35, String(n), 16, 'fg', { w: 600 }) + text(vx + widthOf(String(n), 16, 600) + 4, 35, 'agents', 12, 'muted')
-    + text(x0, 54, m.f.say, 11, m.f.tone, { w: m.f.w, max })
+    + at(x0, 15, m.body) + text(vx, 35, String(n), 16, 'fg', { w: 600 }) + text(ux, 35, fitWhole('agents', w - 4 - ux, 12), 12, 'muted')
+    + text(x0, 54, sayFit(m.f, max, 11), 11, m.f.tone, { w: m.f.w })
   return image('mascot', { source: doc(w, COL_H, body, m.animated), alt: `Agents: show them all. ${n} agents, ${m.f.say}`, width: w, height: COL_H, press: 'open' }, true)
 }
 
@@ -199,14 +225,17 @@ const planLine = (plan: Plan, crew: Crew, W: number): El => {
   return image('plan-line', { source: doc(W, 22, body), alt: `${title}, phase ${plan.phase}, ${plan.done} of ${plan.total} tasks${left}`, width: W, height: 22 }, false)
 }
 
+const STATE_WORD = { done: 'done', live: 'in progress', need: 'needs you', failed: 'failed', todo: 'not started' } as const
+// shortcut: capped at 4,000 characters so a huge plan stays under the props cap; list fewer if plans grow past ~60 tasks.
+const taskList = (plan: Plan) => clip(plan.tasks.map(t => `${clean(t.name, 60)} ${STATE_WORD[t.state]}`).join(', '), 4000)
 const NAME_MIN_PX = 56, NAME_MAX_TASKS = 8, PARTS_PAST = 40
 const planBar = (plan: Plan, W: number): El => {
   const n = plan.tasks.length, count = (s: string) => plan.tasks.filter(t => t.state === s).length
-  const alt = `tasks: ${count('done')} done, ${count('failed') ? `${count('failed')} failed, ` : ''}${count('live') + count('need')} in progress, ${count('todo')} not started`
+  const list = taskList(plan), alt = `tasks: ${list}`
   if (n > PARTS_PAST) {
     const live = n - count('done') - count('todo'), ws = [count('done'), live, count('todo')].map(k => (W * k) / n)
     const body = ['ok', 'accent', 'track'].map((c, i) => `<rect x="${+ws.slice(0, i).reduce((a, b) => a + b, 0).toFixed(2)}" y="0" width="${+ws[i].toFixed(2)}" height="8" rx="3" class="${c}"/>`).join('')
-    return image('plan-bar', { source: doc(W, 8, body), alt, width: W, height: 8 }, true)
+    return image('plan-bar', { source: doc(W, 8, withTip(list, body, Infinity)), alt, width: W, height: 8 }, true)
   }
   const gap = Math.min(2, W / (n || 1) / 2), sw = (W - gap * (n - 1)) / (n || 1), names = n <= NAME_MAX_TASKS && sw >= NAME_MIN_PX
   const label = plan.tasks.map((t, i) => {
@@ -216,7 +245,7 @@ const planBar = (plan: Plan, W: number): El => {
     return text(x, 22, name, 10, t.state === 'need' ? 'er' : t.state === 'live' ? 'fg' : 'muted', { w: t.state === 'need' ? 600 : 400, max })
   }).join('')
   const h = names ? 26 : 8
-  return image('plan-bar', { source: doc(W, h, segBar(planSegs(plan), W, 'full', true) + (names ? label : ''), true), alt, width: W, height: h }, true)
+  return image('plan-bar', { source: doc(W, h, withTip(list, segBar(planSegs(plan), W, 'full', true) + (names ? label : ''), Infinity), true), alt, width: W, height: h }, true)
 }
 
 // ---------- the chips ----------
@@ -225,8 +254,8 @@ const PULSE = `<style>.pulse{animation:pulse ${MOTION.beat} infinite}@keyframes 
 const isAlert = (a: CrewAgent) => a.state === 'need' || a.state === 'failed'
 // A cut chip's full text, as a tooltip. The desktop draws a pressable chip as an image, where it does not show yet.
 const TIP_MAX = 300
-const withTip = (tip: string | undefined, g: string) => (tip === undefined ? g : `<g><title>${xml(clean(tip, TIP_MAX))}</title>${g}</g>`)
-type ChipArt = { w: number; body: string; alt: string; tip?: string }
+const withTip = (tip: string | undefined, g: string, max = TIP_MAX) => (tip === undefined ? g : `<g><title>${xml(clean(tip, max))}</title>${g}</g>`)
+type ChipArt = { w: number; body: string; alt: string; tip?: string; press: string }
 
 const reading = (a: CrewAgent, max = 160): Run => {
   if (a.state === 'need') return [clean(a.question, max), '#fff']
@@ -249,14 +278,17 @@ const chipArt = (a: CrewAgent, walk: boolean, pulse: boolean, room: number): Chi
     + at(4, 2.5, crab({ role: a.role, prop: a.prop, walk: walk && !alert, size: 'S', onRed: alert }))
     + text(35.5, 17, shownTitle, 12, alert ? '#fff' : 'fg', { w: 600 })
     + (rw ? text(35.5 + tw + 6, 17, shownSay, 12, tone) : '')
-  return { w, body, alt: `${title}: ${say}`, tip }
+  return { w, body, alt: `${title}: ${say}`, tip, press: `open:${a.id}` }
 }
 // Every chip opens the Agents pane, so every chip is a Client; that alone makes none loop.
+// Several chips in one image press by where the pointer lands (zones); a key press opens the first.
 const chipImage = (key: string, arts: ChipArt[], animated: boolean, style = ''): El => {
   let x = CHIP_PAD
-  const body = arts.map(c => { const g = withTip(c.tip, at(x, CHIP_PAD, c.body)); x += c.w + CHIP_GAP; return g }).join('')
+  const zones: { to: number; press: string }[] = []
+  const body = arts.map(c => { const g = withTip(c.tip, at(x, CHIP_PAD, c.body)); x += c.w + CHIP_GAP; zones.push({ to: +(x - CHIP_GAP / 2).toFixed(2), press: c.press }); return g }).join('')
   const w = +(x - CHIP_GAP + CHIP_PAD).toFixed(2), h = CHIP_H + 2 * CHIP_PAD
-  return image(key, { source: doc(w, h, body + style, animated), alt: arts.map(c => c.alt).join('; '), width: w, height: h, press: 'open' }, false)
+  zones[zones.length - 1].to = w
+  return image(key, { source: doc(w, h, body + style, animated), alt: arts.map(c => c.alt).join('; '), width: w, height: h, press: arts[0].press, ...(arts.length > 1 ? { zones } : {}) }, false)
 }
 // The alerts past one row: a red chip of their own, never the muted '+N more'.
 const alertMoreArt = (over: CrewAgent[], pulse: boolean): ChipArt => {
@@ -264,11 +296,11 @@ const alertMoreArt = (over: CrewAgent[], pulse: boolean): ChipArt => {
   const say = `+${over.length} ${need ? 'need you' : 'failed'}`, w = +(widthOf(say, 12, 600) + 20).toFixed(2)
   const body = (pulse ? `<rect class="s-halo35 pulse" x="-1.5" y="-1.5" width="${w + 3}" height="${CHIP_H + 3}" rx="9.5" fill="none" stroke-width="3" opacity="0"/>` : '')
     + `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="red"/>` + text(10, 17, say, 12, '#fff', { w: 600 })
-  return { w, body, alt: need ? `${need} more need you${failed ? `, ${failed} failed` : ''}` : `${failed} more failed`, tip: over.map(a => oneLine(a.title)).join(', ') }
+  return { w, body, alt: need ? `${need} more need you${failed ? `, ${failed} failed` : ''}` : `${failed} more failed`, tip: over.map(a => oneLine(a.title)).join(', '), press: 'open' }
 }
 const moreChip = (n: number): El => {
   const say = `+${n} more`, w = widthOf(say, 12) + 20
-  return chipImage('chip-more', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + text(10, 17, say, 12, 'muted'), alt: `${n} more agents` }], false)
+  return chipImage('chip-more', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + text(10, 17, say, 12, 'muted'), alt: `${n} more agents`, press: 'open' }], false)
 }
 const width = (e: El) => (e.type === 'Client' ? (e.props!.props as ImageProps) : (e.props as ImageProps)).width
 // Greedy rows of `avail` px; how many of `ws` fit in `rows` rows.
@@ -315,31 +347,31 @@ const chipRows = (v: PanelView, W: number): El | null => {
 }
 
 // ---------- the one-line size ----------
-const lineItem = (key: string, art: string, artW: number, parts: Run[], alt: string, client: boolean): El => {
-  const w = +(artW + 6 + runsWidth(parts, 13)).toFixed(2)
-  return image(key, { source: doc(w, LINE_H, at(0, 5, art) + runs(artW + 6, 18, 13, parts, w - artW - 6 + 1)), alt, width: w, height: LINE_H }, client)
+const lineItem = (key: string, art: string, artW: number, parts: Run[], alt: string, client: boolean, o: { press?: string; tip?: string } = {}): El => {
+  const w = +(artW + 6 + runsWidth(parts, 13)).toFixed(2), body = at(0, 5, art) + runs(artW + 6, 18, 13, parts, w - artW - 6 + 1)
+  return image(key, { source: doc(w, LINE_H, o.tip ? withTip(o.tip, body, Infinity) : body), alt, width: w, height: LINE_H, ...(o.press ? { press: o.press } : {}) }, client)
 }
 const oneLineRow = (v: PanelView): El => {
   const { stats, crew } = v, W = v.bodyColumns * CELL_PX, items: El[] = []
   for (const part of lineParts(stats, crew)) {
     if (part === 'context') {
       const c = stats.context, value = c ? pctOf(c.pct) : '—'
-      items.push(lineItem('col-context', contextDial(v, true), 25.5, [[value, c?.alarm ? 'er' : 'fg', 600], [' context', 'muted']], `context: ${value}`, true))
+      items.push(lineItem('col-context', contextDial(v, true), 25.5, [[value, c?.alarm ? 'er' : 'fg', 600], [' context', 'muted']], `context: ${value}`, true, { press: 'context' }))
     } else if (part === '5h' || part === '7d') {
       const l = limitOf(stats, part)!
-      items.push(lineItem(`col-${part}`, limitDial(v, part, l, true), 25.5, [[pctOf(l.pct), limitTone(l) === 'warn' ? 'warn' : 'fg', 600], [` ${part}`, 'muted']], `${part} limit: ${pctOf(l.pct)}`, true))
+      items.push(lineItem(`col-${part}`, limitDial(v, part, l, true), 25.5, [[pctOf(l.pct), limitTone(l) === 'warn' ? 'warn' : 'fg', 600], [` ${part}`, 'muted']], `${part} limit: ${pctOf(l.pct)}`, true, { press: 'usage' }))
     } else if (part === 'plan') {
       const p = crew.plan!
-      items.push(lineItem('col-plan', at(0, 3, segBar(planSegs(p), 48, 'compact')), 48, [[`${p.done}/${p.total}`, 'fg', 600], [` ${p.phase}`, 'muted']], `plan: ${p.done} of ${p.total} tasks, ${p.phase}`, false))
+      items.push(lineItem('col-plan', at(0, 3, segBar(planSegs(p), 48, 'compact')), 48, [[`${p.done}/${p.total}`, 'fg', 600], [` ${p.phase}`, 'muted']], `plan: ${p.done} of ${p.total} tasks, ${p.phase}. Tasks: ${taskList(p)}`, false, { tip: taskList(p) }))
     } else if (part === 'session') {
       const value = usd(stats.session.costUsd)
-      items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], `session: ${value}`, false))
+      items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], `session: ${value}`, false, { press: 'costs' }))
     }
   }
   const children: El[] = [...items, spacer]
   if (crew.agents.length) {
     const m = mascotArt(crew, v.loops, 'S'), used = items.reduce((s, e) => s + width(e) + CELL_PX, 0) + 24 + 2 * CELL_PX
-    const room = W - used - m.w - 6, say = room >= 40 ? fitTo(m.f.say, room, 13, m.f.w) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
+    const room = W - used - m.w - 6, say = room >= 40 ? sayFit(m.f, room, 13) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
     const body = at(0, 1, m.body) + (say ? text(m.w + 6, 18, say, 13, m.f.tone, { w: m.f.w }) : '')
     children.push(image('mascot', { source: doc(w, LINE_H, body, m.animated), alt: `Agents: show them all. ${crew.agents.length} agents, ${m.f.say}`, width: w, height: LINE_H, press: 'open' }, true))
   }
@@ -353,14 +385,17 @@ export const panelTree = (v: PanelView): El => {
   const root = (children: El[]): El => ({ type: 'Box', props: { key: 'clawpit-panel', flexDirection: 'column', gap: 1 }, children })
   if (v.ui.size === 'line') return root([oneLineRow(v)])
   const keys = fit(candidates(v.stats, v.crew, v.ui.size, v.busy), maxColumns(v.bodyColumns))
-  const cells = Math.floor((v.bodyColumns - TOGGLE_CELLS) / keys.length), w = cells * CELL_PX
+  // The context column (always first) widens by what its Button needs, only when it needs it; the others share the rest.
+  const avail = v.bodyColumns - TOGGLE_CELLS, base = Math.floor(avail / keys.length), compact = compactOf(v, cellOf('context', v)!)
+  const ctxCells = compact && keys.length > 1 ? Math.max(base, compact.cells) : base
+  const cells = ctxCells === base ? base : Math.floor((avail - ctxCells) / (keys.length - 1))
   const columns = keys.flatMap((k, i): El[] => {
-    if (k === 'agents') return [{ type: 'Box', props: { key: 'col-agents', width: cells }, children: [agentsColumn(v, w)] }]
+    const n = k === 'context' ? ctxCells : cells, w = n * CELL_PX
+    if (k === 'agents') return [{ type: 'Box', props: { key: 'col-agents', width: n }, children: [agentsColumn(v, w)] }]
     const c = cellOf(k, v)
-    return c ? [{ type: 'Box', props: { key: `col-${k}`, width: cells }, children: [columnImage(k, c, w, i === 0)] }] : []
+    return c ? [{ type: 'Box', props: { key: `col-${k}`, width: n }, children: [columnImage(k, c, w, i === 0), ...(k === 'context' && compact ? [compact.el] : [])] }] : []
   })
   const out: El[] = [{ type: 'Box', props: { key: 'cols', flexDirection: 'row' }, children: [...columns, spacer, toggle(v)] }]
-  if (v.stats.context?.alarm) out.push({ type: 'Box', props: { key: 'compact', flexDirection: 'row' }, children: [{ type: 'Button', props: { key: COMPACT_KEY, label: 'Compact now' } }] })
   if (v.ui.size === 'full') {
     const W = v.bodyColumns * CELL_PX
     if (v.crew.plan) out.push(planLine(v.crew.plan, v.crew, W), planBar(v.crew.plan, W))
