@@ -258,7 +258,8 @@ const planBar = (plan: Plan, W: number, grow: boolean): El => {
     const x = +(i * (sw + gap)).toFixed(2), name = clean(t.name, 24), max = sw - 2
     if (t.state === 'done') return at(x, 12, icon('check', 10, 's-ok')) + text(x + 12, 22, name, 10, 'muted', { max: max - 12 })
     if (t.state === 'failed') return at(x, 12, icon('cross', 10, 's-er')) + text(x + 12, 22, `${name} failed`, 10, 'er', { w: 600, max: max - 12 })
-    return text(x, 22, name, 10, t.state === 'need' ? 'er' : t.state === 'live' ? 'fg' : 'muted', { w: t.state === 'need' ? 600 : 400, max })
+    if (t.state === 'need') return at(x, 12, icon('ask', 10, 's-er')) + text(x + 12, 22, name, 10, 'er', { w: 600, max: max - 12 })
+    return text(x, 22, name, 10, t.state === 'live' ? 'fg' : 'muted', { max })
   }).join('')
   const h = names ? 26 : 8
   return image('plan-bar', { source: doc(W, h, withTip(list, segBar(planSegs(plan), W, 'full', grow) + (names ? label : ''), Infinity), grow), alt, width: W, height: h }, grow)

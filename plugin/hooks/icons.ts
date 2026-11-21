@@ -3,6 +3,7 @@ import type { Role, Settle, Size } from '../types'
 import { MOTION } from './tokens'
 
 const PATHS = { chev: 'M4.5 2.5 8 6l-3.5 3.5', check: 'M2.5 6.3 5 8.8l4.5-5.3', cross: 'M3 3l6 6M9 3 3 9',
+  ask: 'M4.2 4.4a1.8 1.8 0 1 1 2.6 1.6c-.5.3-.8.7-.8 1.2v.5M6 9.6v.01',
   squeeze: 'M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5M2 6h8' } as const
 const n = (v: number) => +v.toFixed(2)
 

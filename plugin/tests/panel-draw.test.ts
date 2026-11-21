@@ -2,6 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import type { CrewAgent, PlanTask } from '../types'
 import { image, panelTree, type El } from '../hooks/panel/draw'
 import { contrast, FONT, SURFACE, TOKENS } from '../hooks/tokens'
+import { icon } from '../hooks/icons'
 import { NOW, type StateName } from './fixtures/states'
 import { panelLoopCount, viewOf } from './build'
 
@@ -217,6 +218,12 @@ test('panel: the plan bar and the folded mini bars name each task and its state'
   }
   const f = propsOf(find(panelTree(viewOf('failed')), 'plan-bar')!)
   expect(f.alt).toMatch(/e2e tests failed/)
+})
+test('panel: a needs-you task on the plan bar carries a ? mark, not colour alone', () => {
+  const ask = icon('ask', 10, 's-er'), need = sourceOf(panelTree(viewOf('needsYou')), 'plan-bar')
+  expect(need).toContain(ask)
+  expect(need.indexOf(ask)).toBeLessThan(need.indexOf('>e2e tests<'))
+  expect(sourceOf(panelTree(viewOf('hydra')), 'plan-bar')).not.toContain(ask)
 })
 
 // The words of the last <text> in a drawing: the folded column's alert line.
