@@ -31,6 +31,7 @@ Nothing that lands in the repo or on GitHub says how it was written:
 After every visual change, in the same PR:
 1. Refresh `design/mockups-all.html`.
 2. Run `bash scripts/preview.sh`. It regenerates `design/preview-dark.png` and `design/preview-light.png` with headless Chrome from `design/mockups-all.html?theme=dark` and `?theme=light`.
+3. Refresh the Playwright baselines in the same change: `npm run refresh:visual` runs it together with the previews.
 
 Set `CHROME=<path>` if Chrome is not in the default macOS location.
 
@@ -46,7 +47,7 @@ The decisions are in [`docs/decisions/`](docs/decisions/). Ask before bending on
 - Never `dimColor` on AbovePrompt buttons: dim buttons fold into the "…" menu.
 
 ## Quality gate, before asking for review
-- Tests green: `claude plugin test`, plus `claude plugin validate`, once the plugin exists.
+- Tests green: `claude plugin test plugin`, `claude plugin validate plugin`, `npm run test:visual` and `npm run test:scripts`.
 - The leak check is clean.
 - The previews are refreshed if anything visual changed.
 - Every unverified item is listed in the PR.
