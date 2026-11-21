@@ -6,7 +6,8 @@
 <title>Code tab composite: panel, Agents pane, file tree</title>
 <style>
 /* Composite of the locked mockups. Drawing code is copied from panel-above-prompt.html and
-   agents-pane-roster.html; every deviation is tagged "ALIGN <id>" and listed in ALIGNMENT.md. */
+   agents-pane-roster.html; every deviation is tagged "ALIGN <id>" and listed in ALIGNMENT.md. A tag "BUILD <name>" brings
+   the drawing in line with the build: <name> is a bullet of LOCKED.md, "Build decisions", and the Playwright baselines show it. */
 :root{--page:#e9e9e8;--ink:#1f1e1d;--dim:#5f5e58;--line:#d3d2cf;color-scheme:light dark}
 @media (prefers-color-scheme:dark){:root{--page:#101010;--ink:#ecebe6;--dim:#a3a29b;--line:#37362f}}
 body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:24px 0 48px}
@@ -44,23 +45,23 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 .m{color:var(--mu)}.b{font-weight:600}.grow{flex:1}.tn{font-variant-numeric:tabular-nums}.el{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* ---------- panel above the prompt (from panel-above-prompt.html) ---------- */
-.pn{position:relative;background:var(--p);border-radius:10px;padding:10px 14px 10px;font-size:13px;line-height:18px;margin:0 auto;box-sizing:border-box;max-width:100%} /* ALIGN R1: 12 -> 10 (host container radius); bottom pad 11 -> 10 */
+.pn{position:relative;background:var(--p);border-radius:10px;padding:8px;font-size:13px;line-height:18px;margin:0 auto;box-sizing:border-box;max-width:100%} /* ALIGN R1: 12 -> 10 (host container radius). The host's 8px padding (ALIGNMENT, "Not buildable" 1) */
 .prompt{height:36px;border-radius:10px;background:var(--pb);display:flex;align-items:center;padding:0 12px;font-size:13px;color:var(--mu);margin:8px auto 0;box-sizing:border-box;max-width:100%}
 .fold{display:grid;transition:grid-template-rows .3s cubic-bezier(.2,.8,.2,1),opacity .3s cubic-bezier(.2,.8,.2,1)}.fold>div{overflow:hidden;min-height:0} /* ALIGN M3: .36s/.24s ease-out -> .3s shared curve */
 .fold.open{grid-template-rows:1fr;opacity:1}.fold.shut{grid-template-rows:0fr;opacity:0}
 .grid{display:grid;padding-right:28px}
 .cell{padding:0 12px;border-left:1px solid var(--tr);min-width:0}
-.cell:first-child{border-left:0;padding-left:0}
+.cell:first-child{border-left:0;padding-left:4px} /* BUILD First column inset */
 .lab{font-size:11px;line-height:15px;color:var(--mu)}
 .val{display:flex;align-items:center;gap:6px;height:28px} /* ALIGN S1: gap 7 -> 6 */
 .val b{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums} /* ALIGN T1: 650 -> 600 */
 .val small{font-size:12px;color:var(--mu)}
 .so{font-size:11px;line-height:15px;color:var(--mu)}
-.agentcol{cursor:pointer;border-radius:8px;outline:none}
-.agentcol:hover .lab{color:var(--fg)}
+.press{cursor:pointer;border-radius:8px;outline:none} /* a pressable column or line part */
+.press:hover .lab{color:var(--fg)}
 .line{display:flex;align-items:center;gap:12px;height:24px;white-space:nowrap;overflow:hidden;padding-right:28px} /* ALIGN S1: gap 14 -> 12 */
 .g{display:inline-flex;align-items:center;gap:6px}
-.tg{position:absolute;right:6px;top:7px;width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--mu);cursor:pointer;display:grid;place-items:center;padding:0} /* ALIGN F2: 22 -> 24px target */
+.tg{position:absolute;right:8px;top:8px;width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--mu);cursor:pointer;display:grid;place-items:center;padding:0} /* ALIGN F2: 22 -> 24px target */
 .tg:hover{background:var(--wash);color:var(--fg)}
 .tg svg rect,.tg svg circle{transition:all .3s cubic-bezier(.2,.8,.2,1)}
 .hr{height:1px;background:var(--tr);margin:10px 0 8px}
@@ -89,6 +90,11 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 4px;border-radius:8px;font-size:12px;white-space:nowrap;background:var(--wash);max-width:100%}
 .chip.alert{background:var(--red);color:#fff}
+.chips .chip{cursor:pointer} /* BUILD Chips open the Agents pane */
+/* BUILD Compact chip: from 50% context, right of the value; the icon takes the dial's tone, in alarm the word is er 600 on needTint */
+.cpt{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:6px;background:var(--wash);color:var(--mu);font-size:11px;line-height:18px;margin-left:-2px;cursor:pointer;flex:none} /* 4px after the value */
+.cpt.al{background:var(--hl);color:var(--er);font-weight:600}
+.cpt svg{display:block}
 /* ALIGN N2: one needs-you beat, 1.2s stepped, for chip, pane row and the folded crab */
 .pulse{animation:pulse 1.2s steps(2) infinite}
 @keyframes pulse{50%{box-shadow:0 0 0 3px color-mix(in srgb,var(--red) 35%,transparent)}}
@@ -111,9 +117,9 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 .sec{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--mu);margin:16px 0 6px;user-select:none} /* ALIGN S1: 18 -> 16 */
 .sec.need{color:var(--er)}
 .sec button{all:unset;display:inline-flex;align-items:center;gap:6px;cursor:pointer;border-radius:6px}
-.row{display:grid;grid-template-columns:38px minmax(0,1fr) 88px 16px;align-items:center;column-gap:10px;height:48px;border-radius:8px;padding:0 8px;margin:0 -8px;cursor:pointer;position:relative;transition:background .15s cubic-bezier(.2,.8,.2,1);outline:none} /* ALIGN R1: 10 -> 8, same as chips */
+.row{display:grid;grid-template-columns:38px minmax(0,1fr) var(--rd,88px) 16px;align-items:center;column-gap:10px;height:48px;border-radius:8px;padding:0 8px;margin:0 -8px;cursor:pointer;position:relative;transition:background .15s cubic-bezier(.2,.8,.2,1);outline:none} /* ALIGN R1: 10 -> 8, same as chips. BUILD Narrow pane: --rd is the one reading edge (widest reading + 6, 88 at most) */
 .row:hover{background:var(--wash)}
-.row.need{background:var(--hl);height:62px}
+.row.need{background:var(--hl);height:62px;grid-template-columns:38px minmax(0,1fr) 88px 16px} /* an alert row sizes its own column */
 .role{font-size:10px;font-weight:700;letter-spacing:.06em;margin-right:3px} /* ALIGN T1: 10.5 -> 10 */
 .ask{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:16px}
 .sub{font-size:12px;margin-top:2px}
@@ -129,9 +135,7 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 /* ALIGN N2/M1: was an eased 3s ring growing 6px outside the row. Stepped, inset (a Client clips its overflow), same 1.2s beat as the chip. */
 .ring{position:absolute;inset:0 -8px;border-radius:8px;animation:ring 1.2s steps(2) infinite;pointer-events:none}
 @keyframes ring{50%{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--er) 60%,transparent)}}
-.drawer{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.2,.8,.2,1)}
-.drawer>div{overflow:hidden}
-.drawer.on{grid-template-rows:1fr}
+.drawer{display:none}.drawer.on{display:block} /* BUILD Log drawer: it opens still */
 .log{margin:6px 0 12px 48px;padding:2px 0 2px 12px;border-left:1.5px solid var(--tr)}
 .li{display:grid;grid-template-columns:minmax(0,1fr) 38px;column-gap:10px;font-size:12px;line-height:17px;padding:3px 0}
 .li .ago{text-align:right;font-size:11px;color:var(--mu);font-variant-numeric:tabular-nums}
@@ -146,9 +150,11 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 .kids>div{overflow:hidden}
 .tree{position:relative;padding-left:22px}
 .tree:before{content:"";position:absolute;left:12px;top:-4px;bottom:15px;width:1.5px;background:var(--tr)}
-.kid{grid-template-columns:28px minmax(0,1fr) 72px 16px;height:32px;cursor:default}
+.kid{grid-template-columns:28px minmax(0,1fr) var(--rd,88px) 16px;height:32px;cursor:default} /* BUILD Narrow pane: helpers share the rows' reading edge */
 .kid:before{content:"";position:absolute;left:-2px;top:15.25px;width:9px;height:1.5px;background:var(--tr)}
 .kid .ttl{font-size:12px}
+.kid .ttl.two{display:flex;flex-wrap:wrap;column-gap:4px;line-height:14px} /* BUILD Cuts keep meaning: a failed helper's reason that will not fit goes to line 2 */
+.kid .ttl.two>*{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .kidtog{all:unset;display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--mu);margin:2px 0 4px 48px;cursor:pointer;border-radius:6px;padding:2px 4px}
 .kidtog:hover{color:var(--fg)}
 .kidtog svg{transition:transform .3s cubic-bezier(.2,.8,.2,1)}
@@ -168,6 +174,17 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 .li.bad>span:first-child{color:var(--er);font-weight:600}
 .errl{display:block;margin:4px 0 2px;padding:4px 8px;border-radius:6px;background:var(--wash);color:var(--fg);font:400 11px/15px ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
 .end .no{color:var(--er);display:inline-flex;align-items:center;gap:4px}
+/* BUILD Session cost board / Cost list: a back row, the total, then 'Last N turns', amounts right-aligned at the reading edge */
+.back{all:unset;display:flex;align-items:center;gap:6px;height:28px;font-size:12px;color:var(--mu);cursor:pointer;border-radius:6px}
+.back svg{transform:rotate(180deg)}
+.costs .t{font-size:13px;font-weight:600;margin-top:4px}
+.costs .tot{font-size:12px;margin:2px 0 0}
+.costs .sec{margin:14px 0 4px}
+.cl{display:grid;grid-template-columns:minmax(0,1fr) auto;padding-right:34px;font-size:12px;line-height:20px}
+.cl span:nth-child(odd){color:var(--mu)}
+/* BUILD Empty pane: the title in fg, the hint muted */
+.empty{display:flex;flex-direction:column;align-items:center;padding:24px 0;font-size:13px}
+.empty .m{font-size:12px}
 /* ALIGN F12: specimen sheet for the failed chip's timer and the A/B row. A legend, not a surface of the app. */
 .spec{width:1440px;margin:0 auto;box-sizing:border-box;border-radius:12px;border:1px solid var(--tr);background:var(--g);color:var(--fg);padding:12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;font:13px/18px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 .spec ::selection{background:color-mix(in srgb,var(--ac) 35%,transparent)}
@@ -203,7 +220,7 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 <body>
 <div class="doc">
 <h1>Code tab: the panel, the Agents pane and the file tree, together</h1>
-<p>One window per view, dark then light. Click the top-right icon to step the panel's size, the tabs to switch panes, and a row to open its log. Add <code>?theme=dark</code> or <code>?theme=light</code> to show one theme. States: <a href="?">needs you</a>, <a href="?state=failed">failed</a>, <a href="?state=both">failed and needs you together</a>.</p>
+<p>One window per view, dark then light. Click the top-right icon to step the panel's size, the tabs to switch panes, and a row to open its log. Add <code>?theme=dark</code> or <code>?theme=light</code> to show one theme. The session column opens the cost list; a chip or the folded agents column opens the Agents pane. States: <a href="?">needs you</a>, <a href="?state=failed">failed</a>, <a href="?state=both">failed and needs you together</a>, <a href="?state=costs">the cost list</a>, <a href="?state=empty">no agents yet</a>.</p>
 </div>
 <div id="root"></div>
 <script>
@@ -222,7 +239,7 @@ const TH={
 const CL='#D97757',INK='#1F1E1D';
 /* ALIGN I1: one icon set, 12-unit grid, 1.6 stroke, drawn at 12px or 10px (was 1.6 / 1.7 / 2.0 at 12 / 11 / 10 / 8px) */
 const ic=(d,s,cls)=>`<svg ${cls?`class="${cls}"`:`width="${s}" height="${s}"`} viewBox="0 0 12 12" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const ICON={chev:ic('M4.5 2.5 8 6l-3.5 3.5',12,'chev'),small:ic('M4.5 2.5 8 6l-3.5 3.5',10),check:ic('M2.5 6.3 5 8.8l4.5-5.3',10),cross:ic('M3 3l6 6M9 3 3 9',10)}; /* ALIGN F3: cross, same grid and stroke as the check */
+const ICON={chev:ic('M4.5 2.5 8 6l-3.5 3.5',12,'chev'),small:ic('M4.5 2.5 8 6l-3.5 3.5',10),check:ic('M2.5 6.3 5 8.8l4.5-5.3',10),cross:ic('M3 3l6 6M9 3 3 9',10),squeeze:ic('M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5M2 6h8',12)}; /* ALIGN F3: cross, same grid and stroke as the check. BUILD Compact chip: squeeze */
 
 /* ALIGN C2: ONE crab for chips, pane rows and the folded column. The pane's drawing (full props, done flag)
    plus the panel's failed eyes. Sizes are S .75 / M 1 / L 1.5 only (were .7 .75 .8 .9 1.1 1.6). */
@@ -245,34 +262,41 @@ function icon(mode,dot,c){const line=mode==='line',full=mode==='full';
  return `<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x=".6" y=".6" width="12.8" height="12.8" rx="3" fill="none" stroke="currentColor" stroke-opacity=".45"/>${top}${row}${dot?`<circle cx="11.8" cy="2.2" r="2" fill="${c.er}"/>`:''}</svg>`} /* ALIGN K1: dot was a hard-coded #ff6a52 */
 
 /* ---------- ALIGN D1: ONE dataset feeds the panel and the pane (the two mockups disagreed on agents, names, counts and time left) ---------- */
+/* BUILD: agents in the build's order: running newest first (rev, e2e, pln, imp; helpers k2, k1), as in plugin/tests/fixtures/states.ts */
 const seed=()=>[
- {id:'e2e',t:'e2e tests',role:'test',m:'Haiku 5.5',prop:'wait',q:'Postgres or SQLite for the fixture?',wait:'0:42',n:2,N:4,ctx:62,cost:'0.07',us:'4m',task:4,log:[['Asked: Postgres or SQLite for the fixture?','<1m'],['Seeded the fixture data.','2m'],['Wrote the login flow test.','3m']]},
- {id:'imp',t:'savvy-progress implement',role:'implement',m:'Sonnet 5.5',prop:'write',act:'Editing',tgt:'hooks/register.tsx',eta:2,n:3,N:5,ctx:38,cost:'0.31',us:'6m',walk:1,task:3,log:[['Wired the fold to isWorking. Writing the test next.','<1m'],['Read band render and the mainTurn atom.','2m'],['Started on the twinkle gate.','4m']]},
- {id:'rev',t:'cache-tax review c1',role:'review',m:'Opus 5.5',prop:'search',act:'Searching',tgt:'"UNATTENDED" in hooks/',eta:4,slow:1,n:1,N:4,ctx:21,cost:'0.18',us:'7m',walk:1,task:5,log:[['Searching for UNATTENDED across hooks/.','1m'],['Opened the cache-tax diff.','3m']],kids:[
-  {id:'k1',t:'find callers of guard',role:'explore',prop:'read',act:'Reading',tgt:'types/index.d.ts',eta:0,n:2,N:3,walk:1},
-  {id:'k2',t:'map the cache keys',role:'explore',prop:'search',act:'Searching',tgt:'"cacheKey" in src/',eta:1,n:1,N:3}]},
- {id:'pln',t:'plan the release',role:'design',m:'Fable 5.2',prop:'think',act:'Thinking',tgt:'4:10 so far',eta:9,n:1,N:6,ctx:30,cost:'0.44',us:'12m',task:6,log:[['Drafting the release order.','30s']]}]; /* ALIGN W2: "4m 10s so far" -> "4:10 so far" (a running clock is m:ss) */
-const A=seed(),ENDED=[{t:'docs pass',role:'explore',took:'1:05'}];
+ {id:'rev',t:'cache-tax review c1',role:'review',m:'Opus 5.5',prop:'search',act:'Searching',tgt:'"UNATTENDED" in hooks/',eta:4,slow:1,n:1,N:4,ctx:21,cost:'0.18',us:'7m',task:5,log:[['Searching for UNATTENDED across hooks/.','1m'],['Opened the cache-tax diff.','3m']],kids:[
+  {id:'k2',t:'map the cache keys',role:'explore',prop:'search',act:'Searching',tgt:'"cacheKey" in src/',eta:1,n:1,N:3,cost:'0.01'},
+  {id:'k1',t:'find callers of guard',role:'explore',prop:'read',act:'Reading',tgt:'types/index.d.ts',eta:0,n:2,N:3,cost:'0.02'}]},
+ {id:'e2e',t:'e2e tests',role:'test',m:'Haiku 5.5',prop:'wait',q:'Postgres or SQLite for the fixture?',wait:'<1m',n:2,N:4,ctx:62,cost:'0.07',us:'4m',task:4,log:[['Asked: Postgres or SQLite for the fixture?','<1m'],['Seeded the fixture data.','2m'],['Wrote the login flow test.','3m']]}, /* BUILD Ages, everywhere: whole minutes */
+ {id:'pln',t:'plan the release',role:'design',m:'Fable 5.2',prop:'think',act:'Thinking',tgt:'4:10 so far',eta:9,n:1,N:6,ctx:30,cost:'0.44',us:'12m',task:6,log:[['Drafting the release order.','<1m']]}, /* ALIGN W2: "4m 10s so far" -> "4:10 so far" (a running clock is m:ss) */
+ {id:'imp',t:'savvy-progress implement',role:'implement',m:'Sonnet 5.5',prop:'write',act:'Editing',tgt:'hooks/register.tsx',eta:2,n:3,N:5,ctx:38,cost:'0.31',us:'6m',task:3,log:[['Wired the fold to isWorking. Writing the test next.','<1m'],['Read band render and the mainTurn atom.','2m'],['Started on the twinkle gate.','4m']]}];
+const A=seed(),ENDED=[{t:'docs pass',role:'explore',took:'1:05',cost:'0.03'}],AG=id=>A.find(a=>a.id===id);
 /* ALIGN F7: the failed scenario (?state=failed, or ?state=both to keep a needs-you beside it). Two kinds, as in AgentRun:
    ended failed = status 'failed' (prop 'fail', held until the next prompt); struggling = still running with failedAttempts >= 3 (tries). */
 const STATE=new URLSearchParams(location.search).get('state')||'',FAILED=STATE==='failed'||STATE==='both';
 if(FAILED){
- Object.assign(A[0],{prop:'fail',q:'',took:'2:10',tries:3,why:'Could not reach Postgres on :5432',err:'connect ECONNREFUSED 127.0.0.1:5432',log:[['Failed at step 3 of 4: run the login flow test','<1m'],['Try 3 failed: still refused.','<1m'],['Try 2 failed: restarted the container.','1m'],['Try 1 failed: connection refused.','1m'],['Seeded the fixture data.','2m']]});
- Object.assign(A[2],{tries:3,slow:0,act:'Retrying',tgt:'the diff against main',log:[['Try 3 failed: 2 hunks still rejected.','20s'],['Helper "map the cache keys" failed after 0:48: no "cacheKey" in src/.','50s'],['Try 2 failed: rebased, same hunks.','1m'],['Try 1 failed: the diff does not apply.','2m'],['Opened the cache-tax diff.','3m']]});
- Object.assign(A[2].kids[1],{prop:'fail',walk:0,why:'no "cacheKey" in src/'});
- if(STATE==='both')Object.assign(A[3],{prop:'wait',q:'Ship the release notes in this PR, or after it?',wait:'0:18'})}
+ Object.assign(AG('e2e'),{prop:'fail',q:'',took:'2:10',tries:3,why:'Could not reach Postgres on :5432',err:'connect ECONNREFUSED 127.0.0.1:5432',log:[['Failed at step 3 of 4: run the login flow test','<1m'],['Try 3 failed: still refused.','<1m'],['Try 2 failed: restarted the container.','1m'],['Try 1 failed: connection refused.','1m'],['Seeded the fixture data.','2m']]});
+ Object.assign(AG('rev'),{tries:3,act:'Retrying',tgt:'the diff against main',log:[['Try 3 failed: 2 hunks still rejected.','<1m'],['Helper "map the cache keys" failed after 0:48: no "cacheKey" in src/','<1m'],['Try 2 failed: rebased, same hunks.','1m'],['Try 1 failed: the diff does not apply.','2m'],['Opened the cache-tax diff.','3m']]});
+ Object.assign(AG('rev').kids[0],{prop:'fail',why:'no "cacheKey" in src/'});
+ if(STATE==='both')Object.assign(AG('pln'),{prop:'wait',q:'Ship the release notes in this PR, or after it?',wait:'<1m'})}
+/* BUILD Empty pane (?state=empty): no agents and no plan */
+const EMPTY=STATE==='empty';if(EMPTY){A.length=0;ENDED.length=0}
 const hard=a=>a.tries>=3&&a.prop!=='fail'; /* struggling: live, may recover */
 /* ALIGN M2: walkers are capped window-wide and are the same agents in chips and rows:
-   2 while someone needs you (the needs-you beat takes the third slot), else 3. Helpers walk only if a slot is left. */
-{let cap=A.some(a=>a.prop==='wait'||a.prop==='fail')?2:3; /* ALIGN F8: the armed failed pulse takes the same one slot as the needs-you beat (they share it when both are up) */[...A,...A.flatMap(a=>a.kids||[])].forEach(a=>{a.walk=a.walk&&cap-->0?1:0})}
-const TASKS=['schema','api','fold','fixtures','review','release','merge'],PH=['plan','delegate','review','close'],DONE=2;
-const ST={busy:1,hydra:1,ctx:58,h5:21,d7:63,ahead7:1,turns:44,tests:1}; /* the panel's "Hydra, needs you" state */
+   2 while someone needs you (the needs-you beat takes the third slot), else 3. Helpers walk only if a slot is left.
+   BUILD: the newest running agents walk, then their helpers (loops.ts, pickLoops). */
+{let cap=A.some(a=>a.prop==='wait'||a.prop==='fail')?2:3; /* ALIGN F8: the armed failed pulse takes the same one slot as the needs-you beat (they share it when both are up) */const live=a=>a.prop!=='wait'&&a.prop!=='fail';[...A,...A.flatMap(a=>a.kids||[])].forEach(a=>{a.walk=live(a)&&cap-->0?1:0})}
+/* BUILD: the plan's task titles are the run descriptions they match, as savvy-progress's contract asks. DONE: BUILD Plan count, the session's accepted count */
+const TASKS=['schema','api','savvy-progress implement','e2e tests','cache-tax review c1','plan the release','merge'],PH=['plan','delegate','review','close'],DONE=2;
+const ST={busy:1,hydra:!EMPTY,ctx:58,msgs:34,h5:21,p5:36,d7:63,p7:48,turns:44,tests:1}; /* the panel's "Hydra, needs you" state; p5/p7: the on-pace points */
+/* BUILD Session cost board: the last 20 of 44 turns, newest last (the costs fixture) */
+const TURNS=[...Array.from({length:17},(_,i)=>+(0.2+i*0.03).toFixed(2)),0.85,1.1,2.46];
 const NEXT={full:'gauges',gauges:'line',line:'full'},LBL={full:'Panel: everything. Fold the agents',gauges:'Panel: agents folded. Show one line',line:'Panel: one line. Show everything'};
 const tier=(c,p)=>p>=90?c.er:p>=70?c.wa:c.ac;
 const alertOf=a=>a.prop==='wait'||a.prop==='fail';
 /* ALIGN W1: one wording for time left: "~Nm left", "<1m left". Never a bare "~Nm". */
 const etaTxt=a=>a.eta===0?'<1m':`~${a.eta}m`;
-const LEFT=`~${Math.max(1,...A.filter(a=>!alertOf(a)).map(a=>a.eta||1))}m left`; /* one number, used by the plan line, the plan column and the pane summary */
+const LEFT=`~${Math.max(1,...A.filter(a=>!alertOf(a)).map(a=>a.eta||1))}m left`,COST=[...A,...A.flatMap(a=>a.kids||[]),...ENDED].reduce((s,a)=>s+ +a.cost,0); /* one number, used by the plan line, the plan column and the pane summary */
 /* ALIGN K1: the deep red (#b3261e) is a FILL under white text only. A bare needs-you mark uses er (2.4:1 -> 6.1:1 on the dark panel). */
 /* ALIGN K3: green as TEXT uses okt (light #2e8c61 was 3.96:1; #237550 is 5.4:1). Fills keep ok. */
 const stateCol=(a,c)=>alertOf(a)?c.er:c.R[a.role];
@@ -281,35 +305,44 @@ function taskState(i,L){if(i<DONE)return{k:'d'};const a=L.find(x=>x.task===i+1);
 const seg=(t,c)=>t.k==='d'?'<span class="d"></span>':t.a&&t.a.prop==='fail'?'<span class="x"></span>':t.a?`<span class="r" style="--c:${stateCol(t.a,c)};--f:${Math.max(8,Math.round(t.a.n/t.a.N*100))}%"><i></i></span>`:'<span></span>';
 const mini=(c,L,wd)=>`<span class="mb" style="width:${wd}px" role="img" aria-label="plan, ${DONE} of ${TASKS.length} tasks done">${TASKS.map((_,i)=>{const t=taskState(i,L);return `<span style="${t.k==='d'?`background:${c.ok}`:t.a?`background:${stateCol(t.a,c)}`:''}"></span>`}).join('')}</span>`;
 /* ALIGN F4: one drawing of the agents crab for the folded column, the one-line size and the specimen. armed = the failed pulse timer is live. */
-const mascot=(F,c,s,n,armed,mr)=>`<span style="position:relative;display:inline-block${mr?';margin-right:6px':''}" class="${F.a.prop==='wait'?'hop':F.a.prop==='fail'&&armed?'sway':''}">${crab(F.a.role,F.a.prop,!F.alert,c,s)}<span class="badge" style="background:${F.alert?c.red:c.fg};color:${F.alert?'#fff':c.p}">${n}</span></span>`;
+const mascot=(F,c,s,n,armed,mr)=>`<span style="position:relative;display:inline-block${mr?';margin-right:6px':''}" class="${F.a.prop==='wait'?'hop':F.a.prop==='fail'&&armed?'sway':''}">${crab(F.a.role,F.a.prop,!F.alert,c,s)}${n>1?`<span class="badge" style="background:${F.alert?c.red:c.fg};color:${F.alert?'#fff':c.p}">${n}</span>`:''}</span>`; /* BUILD Count badge: only for 2 or more agents */
 const faceStyle=(F,c)=>F.alert?`color:${c.er};font-weight:600`:F.warn?`color:${c.wa}`:'';
 /* ALIGN F10: the failed chip says "failed" and the same reason sentence as the pane row; it pulses only while armed
    (turn running, or idle under 10 min). The struggling chip stays a normal chip with amber words. */
-const chip=(a,c,armed)=>{const al=alertOf(a),fail=a.prop==='fail',amber=hard(a)||a.slow;return `<span class="chip${al?' alert':''}${a.prop==='wait'||(fail&&armed)?' pulse':''}">${crab(a.role,a.prop,a.walk&&!al,c,S,al)}<b class="el" style="max-width:180px">${a.t}</b>${fail?`<span class="el" style="max-width:300px">failed · ${a.why}</span>`:al?`<span class="el">${a.q}</span>`:`<span class="tn" style="color:${amber?c.wa:c.mu}">${a.n}/${a.N} · ${etaTxt(a)} left${hard(a)?` · ${a.tries} failed tries`:a.slow?' · slower':''}</span>`}</span>`};
+const chip=(a,c,armed)=>{const al=alertOf(a),fail=a.prop==='fail',amber=hard(a)||a.slow;return `<span class="chip${al?' alert':''}${a.prop==='wait'||(fail&&armed)?' pulse':''}" role="button" tabindex="0" aria-label="${a.t}: open its row" data-act="open" data-id="${a.id}">${crab(a.role,a.prop,a.walk&&!al,c,S,al)}<b class="el" style="max-width:180px">${a.t}</b>${fail?`<span class="el" style="max-width:300px">failed · ${a.why}</span>`:al?`<span class="el">${a.q}</span>`:`<span class="tn" style="color:${amber?c.wa:c.mu}">${a.n}/${a.N} · ${etaTxt(a)} left${hard(a)?` · ${a.tries} failed tries`:a.slow?' · slower':''}</span>`}</span>`};
 const rank=a=>a.prop==='wait'?0:a.prop==='fail'?1:2;
-function columns(c,s,L,mode){const C=[],alarm=s.ctx>=90;
- C.push({k:'context',pr:100,lab:'context',d:dial(c,s.ctx,tier(c,s.ctx),{base:18,label:'context'}),val:`<b style="${alarm?`color:${c.er}`:''}">${s.ctx}%</b>`,so:alarm?`<span style="color:${c.er}">auto-compacts at 97%</span>`:s.turns<3?'learning your pace':`~${s.ctx>50?7:11} turns · 34% msgs`});
- if(s.busy)C.push({k:'turn',pr:95,lab:'this turn',val:'<b>1:42</b>',so:`<span style="color:${c.okt}">+38</span> −6 · ≈$0.42`});
- const h5hot=s.h5>=50||s.ahead5,d7hot=s.d7>=50||s.ahead7,h5c=s.h5>=80||s.ahead5?c.wa:c.ac,d7c=s.ahead7?c.wa:c.ac;
- C.push({k:'5h',hot:h5hot,pr:h5hot?96:40,lab:'5h limit',d:dial(c,s.h5,h5c,{ghost:Math.min(s.h5+15,62),label:'5 hour limit'}),val:`<b style="${h5c===c.wa?`color:${c.wa}`:''}">${s.h5}%</b>`,so:s.ahead5?`<span style="color:${c.wa}">full in ~1h 35m</span>`:'on pace · 3pm',pct:s.h5,col:h5c,gh:Math.min(s.h5+15,62)});
- C.push({k:'7d',hot:d7hot,pr:d7hot?90:35,lab:'7d limit',d:dial(c,s.d7,d7c,{ghost:48,label:'7 day limit'}),val:`<b style="${s.ahead7?`color:${c.wa}`:''}">${s.d7}%</b>`,so:s.ahead7?`<span style="color:${c.wa}">ahead · fills Wed</span>`:'on pace · Fri',pct:s.d7,col:d7c,gh:48});
- C.push({k:'session',pr:80,lab:'session',val:'<b>$267</b>',so:s.turns?'last turn $2.46':'no turns yet'});
- if(s.turns>=3){C.push({k:'tokens',pr:30,lab:'tokens',val:'<b>441M</b>',so:`${s.turns} turns`});C.push({k:'agent',pr:28,lab:'agent time',val:'<b>10h 50m</b>',so:'avg 14m per turn'})} /* ALIGN I2: the "⌀" glyph -> the word */
- if(s.tests)C.push({k:'tests',pr:s.busy?20:45,lab:'tests',val:`<b style="color:${c.okt}">179</b><small>passed</small>`,so:'3m ago'});
- if(mode!=='full'&&s.hydra)C.push({k:'plan',pr:97,lab:`plan · ${PH[1]}`,d:mini(c,L,58),val:`<b>${DONE}/${TASKS.length}</b>`,so:`retro fixes · ${LEFT}`});
- /* ALIGN W3: "N running" counted the waiting agent as running; the pane does not. The folded column now reads "N agents". Crab .9 -> M. */
- if(mode!=='full'&&L.length){const F=face(L);C.push({k:'agents',pr:99,click:1,lab:'agents',d:mascot(F,c,M,L.length,1,1),val:`<b>${L.length}</b><small>agents</small>`,so:`<span style="${faceStyle(F,c)}">${F.txt}</span>`})}
+/* BUILD Stable column order, the build's priorities (panel/columns.ts): the core five rank by position, so a narrow row drops
+   them from the right; the folded agents and plan rank just under context; the extras fill what is left. */
+const pace=(p,g)=>{const x=Math.round(p/g*100);return `on pace for ${x>200?'200%+':`${x}%`}`}; /* BUILD: the build's pace words */
+function columns(c,s,L,mode){const C=[],alarm=s.ctx>=90,ctc=tier(c,s.ctx);
+ const cpt=s.ctx>=50?`<span class="cpt${alarm?' al':''}" role="button" tabindex="0" aria-label="${alarm?'Compact context now':'Compact context: runs /compact'}" data-act="compact"><span style="color:${ctc};display:inline-flex">${ICON.squeeze}</span>compact</span>`:''; /* BUILD Compact chip */
+ C.push({k:'context',pr:100,lab:'context',d:dial(c,s.ctx,ctc,{base:s.ctx-s.msgs,label:'context'}),val:`<b style="${alarm?`color:${c.er}`:''}">${s.ctx}%</b>${cpt}`,so:alarm?`<span style="color:${c.er}">auto-compacts at 97%</span>`:s.turns<3?'learning your pace':`~${s.ctx>50?7:11} turns · ${s.msgs}% msgs`});
+ if(s.busy)C.push({k:'turn',pr:50,lab:'this turn',val:'<b>1:42</b>',so:`<span style="color:${c.okt}">+38</span> −6 · ≈$0.42`});
+ const h5a=s.h5>s.p5,d7a=s.d7>s.p7,h5hot=s.h5>=50||h5a,d7hot=s.d7>=50||d7a,h5c=s.h5>=80||h5a?c.wa:c.ac,d7c=s.d7>=80||d7a?c.wa:c.ac;
+ C.push({k:'5h',hot:h5hot,pr:96,lab:'5h limit',d:dial(c,s.h5,h5c,{ghost:s.p5,label:'5 hour limit'}),val:`<b style="${h5c===c.wa?`color:${c.wa}`:''}">${s.h5}%</b>`,so:`<span style="${h5a?`color:${c.wa}`:''}">${pace(s.h5,s.p5)}</span>`,pct:s.h5,col:h5c,gh:s.p5});
+ C.push({k:'7d',hot:d7hot,pr:95,lab:'7d limit',d:dial(c,s.d7,d7c,{ghost:s.p7,label:'7 day limit'}),val:`<b style="${d7c===c.wa?`color:${c.wa}`:''}">${s.d7}%</b>`,so:`<span style="${d7a?`color:${c.wa}`:''}">${pace(s.d7,s.p7)}</span>`,pct:s.d7,col:d7c,gh:s.p7});
+ /* BUILD Session column opens the cost list */
+ C.push({k:'session',pr:93,act:'costs',aria:'Session cost: open the cost list',lab:'session',val:'<b>$267</b>',so:s.turns?'last turn $2.46':'no turns yet'});
+ if(s.turns>=3){C.push({k:'tokens',pr:94,lab:'tokens',val:'<b>441M</b>',so:`${s.turns} turns`});C.push({k:'agent',pr:40,lab:'agent time',val:'<b>10h 50m</b>',so:'avg 14m per turn'})} /* ALIGN I2: the "⌀" glyph -> the word */
+ if(s.tests)C.push({k:'tests',pr:45,lab:'tests',val:`<b style="color:${c.okt}">179</b><small>passed</small>`,so:'3m ago'});
+ if(mode!=='full'&&s.hydra)C.push({k:'plan',pr:97,lab:`plan · ${PH[1]}`,d:mini(c,L,58),val:`<b>${DONE}/${TASKS.length}</b>`,so:`Hydra · retro fixes · ${LEFT}`});
+ /* ALIGN W3: "N running" counted the waiting agent as running; the pane does not. The folded column now reads "N agents". Crab .9 -> M.
+    BUILD One folded agent: its name in the value slot and only its state under it. BUILD Alert line keeps its words: the name is cut, never " needs you". */
+ if(mode!=='full'&&L.length){const F=face(L),one=L.length===1&&F.a===L[0],st=F.alert?(F.a.prop==='wait'?'needs you':'failed'):F.warn?`${F.a.tries} failed tries`:`${etaTxt(F.a)} left`;
+  const say=F.alert&&!one?`<span class="el" style="min-width:0">${F.a.t}</span><span style="flex:none;white-space:pre">${F.txt.slice(F.a.t.length)}</span>`:one?st:F.txt;
+  C.push({k:'agents',pr:99,act:'open',aria:'Agents: show them all',lab:'agents',d:mascot(F,c,M,L.length,1,1),val:one?`<b class="el" style="font-size:14px">${L[0].t}</b>`:`<b>${L.length}</b><small>agents</small>`,so:`<span style="display:flex;${faceStyle(F,c)}">${say}</span>`})}
  return C}
-const ORDER=['context','turn','5h','7d','plan','session','tests','tokens','agent','agents'];
+const ORDER=['context','5h','7d','tokens','session','turn','tests','agent','reuse','callers','plan','agents'];
 function panel(c,mode,W){const s=ST,L=A;
  const all=columns(c,s,L,mode);const max=Math.max(2,Math.min(6,Math.floor((W-28-26)/128)));
  const keep=[...all].sort((a,b)=>b.pr-a.pr).slice(0,max).sort((a,b)=>ORDER.indexOf(a.k)-ORDER.indexOf(b.k));
- const grid=`<div class="grid" style="grid-template-columns:repeat(${keep.length},minmax(0,1fr))">${keep.map(x=>`<div class="cell${x.click?' agentcol':''}"${x.click?' role="button" tabindex="0" aria-label="Agents: show them all" data-act="open"':''}><div class="lab">${x.lab}</div><div class="val">${x.d||''}${x.val}</div><div class="so el">${x.so}</div></div>`).join('')}</div>`;
+ /* BUILD Column widths follow need: auto tracks, each its content's width, the rest shared */
+ const grid=`<div class="grid" style="grid-template-columns:repeat(${keep.length},auto)">${keep.map(x=>`<div class="cell${x.act?' press':''}"${x.act?` role="button" tabindex="0" aria-label="${x.aria}" data-act="${x.act}"`:''}><div class="lab">${x.lab}</div><div class="val">${x.d||''}${x.val}</div><div class="so el">${x.so}</div></div>`).join('')}</div>`;
  const bad=L.filter(a=>a.task&&a.prop==='fail').length,live=L.filter(a=>a.task).length-bad;
  const plan=s.hydra?`<div class="hr"></div><div class="plan${W<620?' narrow':''}"><b class="el" style="min-width:0">${W<520?'Hydra':'Hydra · retro fixes'}</b>${PH.map((p,i)=>`${i?'<span class="sep"></span>':''}<span class="ph ${i<1?'done':i===1?'now':'next'}" title="${p}"><i></i><span>${p}</span></span>`).join('')}<span class="grow"></span><span class="tn"><b>${DONE}/${TASKS.length}</b><span class="m"> tasks · ${LEFT}</span></span></div><div class="tbar" role="img" aria-label="tasks: ${DONE} done, ${bad?`${bad} failed, `:''}${live} in progress, ${TASKS.length-DONE-live-bad} not started">${TASKS.map((_,i)=>seg(taskState(i,L),c)).join('')}</div><div class="tnames">${TASKS.map((n,i)=>{const t=taskState(i,L);return `<span class="${t.k}">${t.k==='d'?`<span class="ck">${ICON.check}</span>`:t.k==='x'?`<span class="ck">${ICON.cross}</span>`:''}${n}${t.k==='x'?' failed':''}</span>`}).join('')}</div>`:'';
- const chips=`${s.hydra?'<div style="height:8px"></div>':'<div class="hr"></div>'}<div class="chips">${[...L].sort((x,y)=>rank(x)-rank(y)).map(a=>chip(a,c,1)).join('')}</div>`;
- const F=face(L),hot=all.filter(x=>(x.k==='5h'||x.k==='7d')&&x.hot);
- const line=`<div class="line"><span class="g">${dial(c,s.ctx,tier(c,s.ctx),{base:18,small:1,label:'context'})}<b class="tn">${s.ctx}%</b><span class="m">context</span></span>${hot.map(x=>`<span class="g">${dial(c,x.pct,x.col,{ghost:x.gh,small:1,label:x.k})}<b class="tn" style="${x.col===c.wa?`color:${c.wa}`:''}">${x.pct}%</b><span class="m">${x.k}</span></span>`).join('')}<span class="g">${mini(c,L,48)}<b class="tn">${DONE}/${TASKS.length}</b><span class="m">${PH[1]}</span></span><span class="grow"></span><span class="g agentcol" role="button" tabindex="0" aria-label="Agents: show them all" data-act="open">${mascot(F,c,S,L.length,1,1)}<span class="tn" style="${faceStyle(F,c)}">${F.txt}</span></span></div>`;
+ const chips=!L.length?'':`${s.hydra?'<div style="height:8px"></div>':'<div class="hr"></div>'}<div class="chips">${[...L].sort((x,y)=>rank(x)-rank(y)).map(a=>chip(a,c,1)).join('')}</div>`;
+ const F=L.length&&face(L),hot=all.filter(x=>(x.k==='5h'||x.k==='7d')&&x.hot);
+ const line=`<div class="line"><span class="g">${dial(c,s.ctx,tier(c,s.ctx),{base:s.ctx-s.msgs,small:1,label:'context'})}<b class="tn">${s.ctx}%</b><span class="m">context</span></span>${hot.map(x=>`<span class="g">${dial(c,x.pct,x.col,{ghost:x.gh,small:1,label:x.k})}<b class="tn" style="${x.col===c.wa?`color:${c.wa}`:''}">${x.pct}%</b><span class="m">${x.k}</span></span>`).join('')}${s.hydra?`<span class="g">${mini(c,L,48)}<b class="tn">${DONE}/${TASKS.length}</b><span class="m">${PH[1]}</span></span>`:`<span class="g press" role="button" tabindex="0" aria-label="Session cost: open the cost list" data-act="costs"><b class="tn">$267</b><span class="m">session</span></span>`}<span class="grow"></span>${L.length?`<span class="g press" role="button" tabindex="0" aria-label="Agents: show them all" data-act="open">${mascot(F,c,S,L.length,1,1)}<span class="tn" style="${faceStyle(F,c)}">${F.txt}</span></span>`:''}</div>`;
  const dot=mode!=='full'&&L.some(alertOf);
  return `<div class="pn" style="width:${W}px"><button class="tg" data-act="size" aria-label="${LBL[mode]}" title="${LBL[mode]}">${icon(mode,dot,c)}</button><div class="fold ${mode==='line'?'open':'shut'}"${mode==='line'?'':' inert'}><div>${line}</div></div><div class="fold ${mode==='line'?'shut':'open'}"${mode==='line'?' inert':''}><div>${grid}<div class="fold ${mode==='full'?'open':'shut'}"${mode==='full'?'':' inert'}><div>${plan}${chips}</div></div></div></div></div><div class="prompt" style="width:${W}px">Type / for commands</div>`}
 
@@ -320,19 +353,27 @@ const blocks=(a,col)=>`<span class="blks" role="img" aria-label="${a.prop==='fai
    Struggling = a normal 48px row whose activity line starts with "N failed tries ·" in amber, as "slower ·" does. */
 function row(a,c,w,kid){const wait=a.prop==='wait',fail=a.prop==='fail',al=wait||fail,col=stateCol(a,c),tc=al?c.er:c.RT[a.role];
  const rd=wait?`<div class="eta" style="color:${c.er}">waiting <span class="tn">${a.wait}</span></div>`:fail?`<div class="eta" style="color:${c.er}">failed</div>${kid?'':`<div class="tn" style="font-size:12px">after ${a.took}</div>`}`:`<div class="eta" style="${a.slow?`color:${c.wa}`:''}">${etaTxt(a)}<small> left</small></div>`;
- if(kid)return `<div class="row kid${fail?' tint':''}"><div>${crab(a.role,a.prop,a.walk,c,S)}</div><div class="el ttl"><b class="b">${a.t}</b> ${fail?`<span style="color:${c.er};font-weight:600">${a.why}</span>`:`<span class="m">${a.act} ${a.tgt}</span>`}</div><div class="rd" style="font-size:12px">${rd}</div><span></span></div>`;
+ if(kid)return `<div class="row kid${fail?' tint':''}"><div>${crab(a.role,a.prop,a.walk,c,S)}</div>${fail?`<div class="ttl two"><b class="b">${a.t}</b><span style="color:${c.er};font-weight:600">${a.why}</span></div>`:`<div class="el ttl"><b class="b">${a.t}</b> <span class="m">${a.act} ${a.tgt}</span></div>`}<div class="rd" style="font-size:12px">${rd}</div><span></span></div>`;
  /* ALIGN A1: "slower" is now a word in the row, as on the chip; amber alone carried it before */
  const note=hard(a)?`<span style="color:${c.wa}">${a.tries} failed tries · </span>`:a.slow?`<span style="color:${c.wa}">slower · </span>`:'';
  return `<div style="position:relative">${wait||(fail&&w.beat)?'<span class="ring"></span>':''}<div class="row${al?' need':''}" role="button" tabindex="0" aria-expanded="${!!w.open[a.id]}" data-act="row" data-id="${a.id}"><div>${crab(a.role,a.prop,a.walk,c,M)}</div><div style="min-width:0"><div class="b el">${a.t}</div><div class="sub ${al?'ask':'el'}"><span class="role" style="color:${tc}">${a.role.toUpperCase()}</span> ${al?`<span style="color:${c.er};font-weight:600">${wait?a.q:a.why}</span>`:`${note}<b>${a.act}</b> <span class="m">${a.tgt}</span>`}</div></div><div class="rd">${rd}${blocks(a,col)}</div>${ICON.chev}</div></div>`}
 function drawer(a,w){const n=a.log.length;return `<div class="drawer${w.open[a.id]?' on':''}"><div><div class="log">${a.log.map((l,i)=>`<div class="li ${i===0?'hot':'old'}${a.err&&i===0?' bad':''}"><span>${l[0]}${a.err&&i===0?`<code class="errl">${a.err}</code>`:''}</span><span class="ago">${l[1]}</span></div>`).join('')}<div class="li" style="grid-template-columns:1fr"><div class="foot"><span>steps <b class="tn">${a.n}/${a.N}</b></span>${a.tries?`<span>tries <b class="tn">${a.tries}</b></span>`:''}<span>context <b class="tn">${a.ctx}%</b></span><span>cost <b class="tn">≈$${a.cost}</b></span>${a.prop==='fail'?`<span>ran <b class="tn">${a.took}</b></span>`:''}<span>usually <b>${a.us}</b></span></div></div></div></div></div>`}
 const ended=(e,c)=>`<div class="end">${crab(e.role,e.fail?'fail':'done',0,c,S)}<span class="el">${e.t}</span>${e.fail?`<span class="no tn">${ICON.cross}failed after ${e.took}</span>`:`<span class="ok tn">${ICON.check}${e.took}</span>`}</div>`;
 /* ALIGN F11: sections follow the costume order: Needs you, Failed, Running, Ended. Struggling agents lead Running. */
-function pane(c,w){const need=A.filter(a=>a.prop==='wait'),bad=A.filter(a=>a.prop==='fail'),run=A.filter(a=>!alertOf(a)).sort((x,y)=>hard(y)-hard(x)),order=[...need,...bad,...run];
+/* BUILD Narrow pane: the one reading edge, the widest plain reading (or its step blocks) plus 6, 88 at most */
+const cv=document.createElement('canvas').getContext('2d'),FONT='-apple-system,BlinkMacSystemFont,system-ui,sans-serif',tw=(t,f)=>(cv.font=f,cv.measureText(t).width);
+const readW=(a,px)=>tw(etaTxt(a),`600 ${px}px ${FONT}`)+tw(' left',`${px}px ${FONT}`);
+const readEdge=run=>Math.ceil(Math.min(88,Math.max(0,...run.map(a=>Math.max(readW(a,13),Math.min(a.N,11)*8-2)),...run.flatMap(a=>a.kids||[]).filter(k=>!alertOf(k)).map(k=>readW(k,12)))+6));
+const costs=()=>{const n=TURNS.length,list=TURNS.map((v,i)=>[ST.turns-(n-1-i),v]).reverse();
+ return `<div class="pane costs"><button class="back" data-act="crew" aria-label="Back to the agents">${ICON.small}Agents</button><div class="t">Session cost</div><div class="tot tn"><b>$267</b><span class="m"> · ${ST.turns} turns</span></div><div class="sec">Last ${n} turns</div><div class="cl tn">${list.map(([t,v])=>`<span>turn ${t}</span><span>$${v.toFixed(2)}</span>`).join('')}</div></div>`};
+function pane(c,w){if(w.view==='costs')return costs();
+ if(!A.length)return `<div class="pane"><div class="empty">${crab('explore','none',0,c,L)}<span style="margin-top:12px">No agents yet</span><span class="m">Agents you start show up here</span></div></div>`;
+ const need=A.filter(a=>a.prop==='wait'),bad=A.filter(a=>a.prop==='fail'),run=A.filter(a=>!alertOf(a)).sort((x,y)=>hard(y)-hard(x)),order=[...need,...bad,...run];
  const crew=[...ENDED.map(()=>'<span class="d"></span>'),...order.map(a=>seg({a},c))].join('');
- const sum=`${need.length?`<span style="color:${c.er}"><b class="tn">${need.length}</b> needs you</span><span class="m"> · </span>`:''}${bad.length?`<span style="color:${c.er}"><b class="tn">${bad.length}</b> failed</span><span class="m"> · </span>`:''}<b class="tn">${run.length}</b> running<span class="m"> · </span><b class="tn">${ENDED.length}</b> done<span class="m"> · ≈$${(1+ENDED.length*.1).toFixed(2)} · ${LEFT}</span>`;
+ const sum=`${need.length?`<span style="color:${c.er}"><b class="tn">${need.length}</b> needs you</span><span class="m"> · </span>`:''}${bad.length?`<span style="color:${c.er}"><b class="tn">${bad.length}</b> failed</span><span class="m"> · </span>`:''}<b class="tn">${run.length}</b> running<span class="m"> · </span><b class="tn">${ENDED.length}</b> done<span class="m"> · ≈$${COST.toFixed(2)} · ${LEFT}</span>`;
  const kids=a=>a.kids?`<div class="kids${w.shut[a.id]?' shut':''}"${w.shut[a.id]?' inert':''}><div><div class="tree">${a.kids.map(k=>row(k,c,w,1)).join('')}</div></div></div><button class="kidtog" data-act="tog" data-id="${a.id}" aria-expanded="${!w.shut[a.id]}">${ICON.small}${a.kids.length} helpers${a.kids.some(k=>k.prop==='fail')?`<span style="color:${c.er}"> · ${a.kids.filter(k=>k.prop==='fail').length} failed</span>`:''}</button>`:'';
  const block=a=>`<div>${row(a,c,w)}${drawer(a,w)}${kids(a)}</div>`;
- return `<div class="pane"><div class="hd"><span class="t">Hydra · retro fixes</span></div>
+ return `<div class="pane" style="--rd:${readEdge(run)}px"><div class="hd"><span class="t">Hydra · retro fixes</span></div>
  <div class="crew" role="img" aria-label="${ENDED.length} done, ${need.length} needs you, ${bad.length} failed, ${run.length} running">${crew}</div><div class="sum tn">${sum}</div>
  ${need.length?`<div class="sec need">Needs you</div>${need.map(block).join('')}`:''}
  ${bad.length?`<div class="sec need">Failed <span class="tn" style="font-weight:400">${bad.length}</span></div>${bad.map(block).join('')}`:''}
@@ -377,13 +418,14 @@ function draw(w){const c=TH[w.th],el=w.el;
   <p class="me">Run the retro fixes with Hydra. Keep the fold contract on isWorking.</p>
   <p>The plan has 7 tasks. Schema and API are done. Three agents are on the fold, the fixtures and the review, and a fourth is planning the release.</p>
   <div class="tool">${fi('file',c.mu,14)}<span>Edited hooks/register.tsx</span><span class="tn"><span style="color:${c.okt}">+38</span> −6</span></div>
-  <p>${FAILED?'The e2e agent failed: it could not reach Postgres on :5432 after 3 tries. The review agent has failed 3 tries and is still going. Both logs are in the Agents pane.':'The e2e agent is waiting on you: it needs to know which database the fixture should use. Its question is in the Agents pane.'}</p>
+  <p>${EMPTY?'No agents are running yet.':FAILED?'The e2e agent failed: it could not reach Postgres on :5432 after 3 tries. The review agent has failed 3 tries and is still going. Both logs are in the Agents pane.':'The e2e agent is waiting on you: it needs to know which database the fixture should use. Its question is in the Agents pane.'}</p>
  </div>${panel(c,w.mode,880)}</div>
  <div class="side"><div class="tabs" role="tablist" aria-label="Side pane">${[['agents','Agents'],['files','Files']].map(([k,l])=>`<button role="tab" data-act="tab" data-id="${k}" aria-selected="${w.tab===k}">${l}</button>`).join('')}</div>
  <div class="sidebody" role="tabpanel">${w.tab==='agents'?pane(c,w):filetree(c)}</div></div></div>`}
 function act(w,t){const k=t.dataset.act,id=t.dataset.id;
- if(k==='size')w.mode=NEXT[w.mode];else if(k==='open')w.mode='full';else if(k==='tab')w.tab=id;else if(k==='row')w.open[id]=!w.open[id];else if(k==='tog')w.shut[id]=!w.shut[id];else return;
- draw(w);w.el.querySelector(k==='size'||k==='open'?'.tg':`[data-act="${k}"][data-id="${id}"]`)?.focus();report()}
+ if(k==='size')w.mode=NEXT[w.mode];else if(k==='open'){w.tab='agents';w.view='crew';if(id)w.open[id]=1} /* BUILD Chips open the Agents pane, Chip opens its agent */
+ else if(k==='costs'){w.tab='agents';w.view='costs'}else if(k==='crew')w.view='crew';else if(k==='tab')w.tab=id;else if(k==='row')w.open[id]=!w.open[id];else if(k==='tog')w.shut[id]=!w.shut[id];else return;
+ draw(w);w.el.querySelector(k==='size'?'.tg':k==='open'&&id?`[data-act="row"][data-id="${id}"]`:k==='costs'?'.back':k==='crew'?'[data-act="tab"][aria-selected="true"]':`[data-act="${k}"][data-id="${id}"]`)?.focus();report()}
 /* self-check: the loop budget, measured from the page itself, per window */
 function report(){for(const w of wins){const loops=w.el.getAnimations({subtree:true}).filter(a=>a.effect.getTiming().iterations===Infinity&&!a.effect.target.closest('.fold.shut')); /* folded content is not drawn in the app */
  const drawings=new Set(loops.map(a=>a.effect.target.closest('svg')||a.effect.target)),eased=loops.filter(a=>!a.effect.getKeyframes()[0].easing.startsWith('steps'));
@@ -391,7 +433,7 @@ function report(){for(const w of wins){const loops=w.el.getAnimations({subtree:t
  w.cap.querySelector('span').textContent=`${drawings.size} looping drawings, ${eased.length} eased`}}
 for(const th of themes){if(FAILED){const cap=document.createElement('div');cap.className='cap';cap.innerHTML=`<b>${th==='d'?'Dark':'Light'} · Failed: the chip over time, and the row choice</b>`;const el=document.createElement('div');el.className='spec';el.style.cssText=vars(TH[th],th);el.innerHTML=spec(TH[th]);document.getElementById('root').append(cap,el)}
 for(const v of VIEWS){const cap=document.createElement('div');cap.className='cap';cap.innerHTML=`<b>${th==='d'?'Dark':'Light'} · ${v.name}</b><span></span>`;
- const el=document.createElement('div');el.className='win';const w={th,el,cap,mode:v.mode,tab:v.tab,open:FAILED?{e2e:1}:{imp:1},shut:{ended:true}};wins.push(w);
+ const el=document.createElement('div');el.className='win';const w={th,el,cap,mode:v.mode,tab:v.tab,view:STATE==='costs'?'costs':'crew',open:FAILED?{e2e:1}:{imp:1},shut:{ended:true}};wins.push(w);
  el.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(t)act(w,t)});
  el.addEventListener('keydown',e=>{const t=e.target.closest('[role=button][data-act]');if(t&&t===e.target&&(e.key==='Enter'||e.key===' ')){e.preventDefault();act(w,t)}});
  document.getElementById('root').append(cap,el);draw(w)}}
