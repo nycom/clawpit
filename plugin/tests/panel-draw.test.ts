@@ -153,3 +153,23 @@ test('panel: past forty tasks the plan bar is three proportional parts', () => {
   const src = sourceOf(panelTree({ ...v, crew: { ...v.crew, plan: { ...v.crew.plan!, tasks, total: 41, done: 20 } } }), 'plan-bar')
   expect(src.match(/<rect /g)!.length).toBe(3); expect(words(src)).toBe('')
 })
+
+test('panel: many alert chips stay within the width and the rest count into +N more', () => {
+  for (const n of [3, 8, 12]) for (const bodyColumns of [60, 96]) {
+    const v = viewOf('manyAgents'), agents = v.crew.agents.slice(0, 20).map((a, i): CrewAgent => (i < n ? { ...a, state: 'need', question: `Which schema should worker ${i + 1} use?` } : a))
+    const t = panelTree({ ...v, crew: { ...v.crew, agents }, bodyColumns }), W = bodyColumns * 8.5
+    const rows = find(t, 'chips')!.children as El[], chips = rows.flatMap(r => r.children as El[])
+    for (const r of rows) expect((r.children as El[]).reduce((w, c) => w + propsOf(c).width, 0)).toBeLessThanOrEqual(W)
+    const shown = chips.filter(c => keyOf(c) !== 'chip-more').reduce((s, c) => s + propsOf(c).alt.split('; ').length, 0)
+    const more = find(t, 'chip-more')
+    expect(more ? words(propsOf(more).source) : '').toBe(shown < 20 ? `+${20 - shown} more` : '')
+  }
+})
+
+test('panel: a failed chip with no reason and no end time shows no running clock', () => {
+  const v = viewOf('failed'), strip = (now: number) => {
+    const agents = v.crew.agents.map((a): CrewAgent => (a.state === 'failed' ? { ...a, reason: undefined, endedAt: undefined } : a))
+    return clients(panelTree({ ...v, now, crew: { ...v.crew, agents } }))
+  }
+  expect(strip(NOW + 1000)).toEqual(strip(NOW))
+})

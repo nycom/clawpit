@@ -219,21 +219,21 @@ const planBar = (plan: Plan, W: number): El => {
 }
 
 // ---------- the chips ----------
-const CHIP_PAD = 3, CHIP_H = SIZE.chip, CHIP_GAP = 6, TITLE_MAX = 180, READ_MAX = 300
+const CHIP_PAD = 3, CHIP_H = SIZE.chip, CHIP_GAP = 6, TITLE_MAX = 180, READ_MAX = 300, ALERT_MIN = 160
 const PULSE = `<style>.pulse{animation:pulse ${MOTION.beat} infinite}@keyframes pulse{50%{opacity:1}}</style>`
 const isAlert = (a: CrewAgent) => a.state === 'need' || a.state === 'failed'
 
-const reading = (a: CrewAgent, now: number): Run => {
+const reading = (a: CrewAgent): Run => {
   if (a.state === 'need') return [clean(a.question, 160), '#fff']
-  if (a.state === 'failed') return [a.reason ? `failed · ${clean(a.reason, 160)}` : `failed after ${fmtClock((a.endedAt ?? now) - a.startedAt)}`, '#fff']
+  if (a.state === 'failed') return [a.reason ? `failed · ${clean(a.reason, 160)}` : a.endedAt ? `failed after ${fmtClock(a.endedAt - a.startedAt)}` : 'failed', '#fff']
   // A chip may loop, so it shows no clock finer than a minute: an agent with no estimate shows its steps only.
   const parts = [a.stepTotal ? `${a.stepDone}/${a.stepTotal}` : '', a.eta.kind === 'left' ? fmtLeft(a.eta.minutes) : a.eta.kind === 'over' ? 'slower' : '']
   const note = a.struggling ? `${a.tries} failed tries` : a.eta.kind === 'left' && a.eta.slow ? 'slower' : ''
   return [[...parts, note].filter(Boolean).join(' · '), a.struggling || (a.eta.kind !== 'none' && (a.eta.kind === 'over' || a.eta.slow)) ? 'warn' : 'muted']
 }
 // One chip at the origin, 26 tall: crab S, the name, the reading. `room` caps the whole chip.
-const chipArt = (a: CrewAgent, walk: boolean, pulse: boolean, now: number, room: number) => {
-  const alert = isAlert(a), title = clean(a.title, 60), [say, tone] = reading(a, now)
+const chipArt = (a: CrewAgent, walk: boolean, pulse: boolean, room: number) => {
+  const alert = isAlert(a), title = clean(a.title, 60), [say, tone] = reading(a)
   const tw = Math.min(TITLE_MAX, widthOf(title, 12, 600), Math.max(24, room / 3)), fixed = 35.5 + tw + 6 + 10
   const rw = Math.max(0, Math.min(alert ? READ_MAX : Infinity, widthOf(say, 12), room - fixed)), w = +(fixed + rw).toFixed(2)
   const body = (pulse ? `<rect class="s-halo35 pulse" x="-1.5" y="-1.5" width="${w + 3}" height="${CHIP_H + 3}" rx="9.5" fill="none" stroke-width="3" opacity="0"/>` : '')
@@ -262,23 +262,25 @@ const fitsIn = (ws: number[], avail: number, rows: number) => {
 }
 const CHIP_ROWS = 2
 const chipRows = (v: PanelView, W: number): El | null => {
-  const { crew, loops, now } = v
+  const { crew, loops } = v
   if (!crew.agents.length) return null
-  const alerts = crew.agents.filter(isAlert), rest = crew.agents.filter(a => !isAlert(a))
+  // The alert chips share one row: as many as keep ALERT_MIN px each; the rest count into '+N more'.
+  const fitAlerts = Math.max(1, Math.floor((W - 2 * CHIP_PAD + CHIP_GAP) / (ALERT_MIN + CHIP_GAP)))
+  const allAlerts = crew.agents.filter(isAlert), alerts = allAlerts.slice(0, fitAlerts), rest = crew.agents.filter(a => !isAlert(a))
   const pulses = (a: CrewAgent) => loops.chipPulse && (a.state === 'need' || v.armed)
   const items: { el: El; agents: number }[] = []
   if (alerts.length) {
     const room = (W - 2 * CHIP_PAD - CHIP_GAP * (alerts.length - 1)) / alerts.length
     const anim = alerts.some(pulses)
-    items.push({ el: chipImage('chips-alert', alerts.map(a => chipArt(a, false, pulses(a), now, room)), anim, true, anim ? PULSE : ''), agents: alerts.length })
+    items.push({ el: chipImage('chips-alert', alerts.map(a => chipArt(a, false, pulses(a), room)), anim, true, anim ? PULSE : ''), agents: alerts.length })
   }
   for (const a of rest) {
     const walk = loops.walkers.includes(a.id)
-    items.push({ el: chipImage(`chip-${a.id}`, [chipArt(a, walk, false, now, W - 2 * CHIP_PAD)], walk, walk), agents: 1 })
+    items.push({ el: chipImage(`chip-${a.id}`, [chipArt(a, walk, false, W - 2 * CHIP_PAD)], walk, walk), agents: 1 })
   }
   let shown = items
-  if (!fitsIn(items.map(i => width(i.el)), W, CHIP_ROWS)) {
-    let k = items.length - 1
+  if (alerts.length < allAlerts.length || !fitsIn(items.map(i => width(i.el)), W, CHIP_ROWS)) {
+    let k = items.length
     const total = crew.agents.length, more = (k: number) => moreChip(total - items.slice(0, k).reduce((s, i) => s + i.agents, 0))
     while (k > 1 && !fitsIn([...items.slice(0, k).map(i => width(i.el)), width(more(k))], W, CHIP_ROWS)) k--
     shown = [...items.slice(0, k), { el: more(k), agents: 0 }]
