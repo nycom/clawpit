@@ -24,6 +24,8 @@ An instrument panel above the prompt and a crew pane beside it, for the Claude C
 
 clawpit needs savvy-progress installed: it reads savvy's crew data, and savvy's own band stands down while clawpit runs on the desktop.
 
+Use the savvy-progress release after 1.3.0 that includes the clawpit stand-down: it carries the step `reason` and `error` fields clawpit reads, and stands its band down on the desktop. Update savvy-progress first, then install or update clawpit.
+
 ## How it is tested
 
 Unit tests run under the engine's mock (`claude plugin test plugin`). Playwright stills and motion counts run on a render harness (`npm run test:visual`). The helper scripts have their own tests (`npm run test:scripts`). In-app checks capture the app window and diff it pixel by pixel (`scripts/app-capture.sh`, `npm run app-diff`); the screenshots stay out of the repo.
