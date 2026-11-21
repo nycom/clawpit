@@ -175,6 +175,9 @@ const faceOf = (crew: Crew): Face => {
   if (failed) return { a: failed, say: `${title(failed)} failed`, tone: 'er', w: 600, alert: true, name: title(failed), tail: ' failed' }
   if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false }
   const n = nextUp(as)
+  // One agent: its name and its state, the state kept whole like an alert's tail; "next:" picks among two or more.
+  const state = n.eta.kind === 'left' ? fmtLeft(n.eta.minutes) : n.activity?.verb ?? ''
+  if (as.length === 1) return { a: n, say: state ? `${title(n)} · ${state}` : title(n), tone: 'fg', w: 400, alert: false, name: title(n), tail: state ? ` · ${state}` : undefined }
   return { a: n, say: `next: ${title(n)}${n.eta.kind === 'left' ? ` · ${fmtLeft(n.eta.minutes)}` : ''}`, tone: 'fg', w: 400, alert: false }
 }
 // Cuts only the name of an alert; under 6 name characters left, the tail alone.
@@ -201,7 +204,7 @@ const agentsColumn = (v: PanelView, w: number): El => {
   const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
   // One agent: its name in the value slot and only its state under it; a count of 1 says nothing (maintainer, 2026-11-21).
   const solo = n === 1 ? v.crew.agents[0] : null, own = solo && m.f.a === solo
-  const state = own ? (m.f.tail?.trim() ?? m.f.say.replace(/^next: /, '').slice(clean(solo.title, 60).length).replace(/^ · /, '').trim()) : ''
+  const state = own ? (m.f.tail?.replace(/^ · /, '').trim() ?? m.f.say.replace(/^next: /, '').slice(clean(solo.title, 60).length).replace(/^ · /, '').trim()) : ''
   const value = solo ? text(vx, 35, fitTo(clean(solo.title, 60), w - 4 - vx, 14, 600), 14, 'fg', { w: 600 })
     : text(vx, 35, String(n), 16, 'fg', { w: 600 }) + text(ux, 35, fitWhole('agents', w - 4 - ux, 12), 12, 'muted')
   const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'agents', 11, 'muted', { max })
@@ -411,6 +414,13 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
   const floor = c.whole ? cellsFor([...c.so.slice(0, -1), [s.split(' · ')[0], p, wt]]) : cells
   return { cells, floor, head: cellsFor([]), claims: !!c.whole, warn: c.so.some(([, p]) => p === 'warn' || p === 'er'), priority }
 }
+// A lone agent's column claims the cells for its whole name and, short of them, keeps its even share; more agents
+// take an even share and claim nothing.
+const agentsNeed = (v: PanelView, priority: number): Need => {
+  const solo = v.crew.agents.length === 1 ? v.crew.agents[0] : null
+  const cells = solo ? Math.ceil((12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600) + 4) / CELL_PX) : Infinity
+  return { cells, floor: Infinity, head: 0, claims: !!solo, warn: false, priority }
+}
 // An even share each; then the compact chip's cells, taken even when no column has slack; then the warnings, then the
 // other clause columns left to right, each met whole from spare cells and the most slack, or not at all. With no slack
 // anywhere, the compact chip's cells come from the widest column, one without a warning first, the lowest priority first.
@@ -446,7 +456,7 @@ export const panelTree = (v: PanelView): El => {
   // Columns share the row by need; the context column (always first) holds the compact chip when there is one,
   // its icon alone where the whole chip would cost another column its label and value, or a warning its first clause.
   const cells = keys.map(k => (k === 'agents' ? null : cellOf(k, v))), compact = compactOf(v, cells[0]!)
-  const needs = keys.map((k, i) => needOf(cells[i], i === 0, cands.find(c => c.key === k)!.priority))
+  const needs = keys.map((k, i) => { const p = cands.find(c => c.key === k)!.priority; return k === 'agents' ? agentsNeed(v, p) : needOf(cells[i], i === 0, p) })
   const share = (chip: number) => shareCells(needs.map((n, i) => (i ? n : { ...n, cells: Math.max(n.cells, chip) })), v.bodyColumns - TOGGLE_CELLS, keys.length > 1 ? chip : 0)
   const keeps = (ws: number[]) => ws.map((n, i) => i === 0 || n >= (needs[i].warn ? needs[i].floor : needs[i].head))
   const whole = share(compact?.cells ?? 0), small = compact ? share(compact.iconCells) : whole

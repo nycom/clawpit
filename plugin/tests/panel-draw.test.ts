@@ -575,3 +575,21 @@ test('panel: one folded agent shows its name, not "1 agents", and its state unde
   expect(one.some(x => /^needs you$/.test(x))).toBe(true)
   expect(texts(panelTree(v))).toContain(String(v.crew.agents.length))
 })
+
+const lineOf = (s: StateName, bodyColumns: number) => { const v = viewOf(s, { bodyColumns }); return panelTree({ ...v, ui: { ...v.ui, size: 'line' } }) }
+test('panel: at the one-line size a lone running agent reads its name and state; "next:" is for two or more', () => {
+  expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).not.toMatch(/^next:/)
+  expect(lastText(sourceOf(lineOf('oneRunning', 96), 'mascot'))).toBe('savvy-progress implement · ~2m left')
+  expect(lastText(sourceOf(lineOf('hydra', 96), 'mascot'))).toMatch(/^next: /)
+  // Two or more agents: the alert reads its name too, where the row has room for it.
+  expect(lastText(sourceOf(lineOf('sizeLine', 96), 'mascot'))).toBe('e2e tests needs you')
+})
+test('panel: folded, a lone agent\'s column claims the cells for its whole name; the other columns keep their slots', () => {
+  const value = (t: El) => words([...sourceOf(t, 'mascot').matchAll(/<text[^>]*y="35"[^>]*>(.*?)<\/text>/g)][0][1])
+  const slots = { 60: ['col-context', 'col-5h', 'col-7d', 'col-agents'], 96: ['col-context', 'col-5h', 'col-7d', 'col-tokens', 'col-session', 'col-agents'] }
+  for (const bodyColumns of [60, 96] as const) for (const s of ['oneNeedsYou', 'oneRunning'] as const) expect(cols(panelTree(viewOf(s, { bodyColumns })))).toEqual(slots[bodyColumns])
+  // At 60 every column is at its floor: no spare cells, so the name is cut there and nothing else gives.
+  expect(value(panelTree(viewOf('oneNeedsYou', { bodyColumns: 60 })))).toMatch(/^e2e te.*…$/)
+  expect(value(panelTree(viewOf('oneNeedsYou', { bodyColumns: 96 })))).toBe('e2e tests')
+  expect(value(panelTree(viewOf('oneRunning', { bodyColumns: 140 })))).toBe('savvy-progress implement')
+})
