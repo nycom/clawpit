@@ -136,3 +136,25 @@ test('sizes: the toggle shows the dot only while folded with a waiter or a failu
   }
   await ui.unmount()
 })
+
+// The count badge: a pill of rx 7.5 at the crab's corner, in both folded sizes.
+const BADGE = 'rx="7.5"'
+
+test('sizes: one agent folds to a crab with no count badge; two show the badge', { plugins: [savvy] }, async ($, on) => {
+  setup(on)
+  await start($)
+  const ui = await band($)
+  await click(ui, 'toggle')
+  for (const size of ['agents folded', 'one line']) {
+    while (await sizeOf(ui) !== size) await click(ui, 'toggle')
+    await setRuns($, [run('w1')])
+    const one = (await imageOf(ui, 'mascot'))!
+    expect(one.source.includes(BADGE)).toBe(false)
+    expect(one.alt).toMatch(/^Agents: show them all\. 1 agents?, /)
+    await setRuns($, [run('w1'), run('w2')])
+    const two = (await imageOf(ui, 'mascot'))!
+    expect(two.source.includes(BADGE)).toBe(true)
+    expect(two.alt).toMatch(/^Agents: show them all\. 2 agents, /)
+  }
+  await ui.unmount()
+})
