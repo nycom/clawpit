@@ -159,5 +159,17 @@ test('pane: a helper that needs you shows its question in er and how long it has
     ? { ...x, helpers: x.helpers.map(h => (h.id === 'k1' ? { ...h, state: 'need' as const, prop: 'wait' as const, question: 'Keep the old cache key?', waitingSince: NOW - 150_000, activity: null } : h)) } : x)))
   const row = find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k1')!
   expect(src(row)).toMatch(/class="er"[^>]*>Keep the old cache key\?</); expect(src(row)).toContain('needTint')
-  expect(words(row)).toContain('waiting 2m')
+  expect(words(row)).toContain('2m'); expect(String(inner(row).alt)).toContain('waiting 2m: Keep the old cache key?')
+})
+
+test('pane: a waiting helper keeps its question and a readable wait at 36 columns', () => {
+  const at = (ms: number) => {
+    const v = withAgents(paneViewOf('hydra', { columns: 36 }), a => a.map(x => (x.id === 'rev'
+      ? { ...x, helpers: x.helpers.map(h => (h.id === 'k1' ? { ...h, state: 'need' as const, prop: 'wait' as const, question: 'Keep the old cache key for now?', waitingSince: NOW - ms, activity: null } : h)) } : x)))
+    return find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k1')!
+  }
+  for (const [ms, age] of [[30_000, '<1m'], [720_000, '12m'], [7_200_000, '120m']] as const) {
+    expect(words(at(ms))).toMatch(new RegExp(`Keep\\b.* ${age}$`))
+    expect(String(inner(at(ms)).alt)).toContain(`waiting ${age}: Keep the old cache key for now?`)
+  }
 })

@@ -161,12 +161,17 @@ const helper = (a: CrewAgent, walk: boolean, W: number, now: number): El => {
   const tint = (x: number, w: number) => (alert ? `<rect x="${x}" y="0" width="${n(w)}" height="${h}" rx="8" class="needTint"/>` : '')
   const tree = `${tint(20, HELPER_CRAB - 12)}<rect x="12" y="0" width="1.5" height="${h}" class="track"/><rect x="12" y="15.25" width="9" height="1.5" class="track"/>`
   const crabSvg = withCrab(svg(HELPER_CRAB, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S' }), 23.25, 5.5)
-  const what: Run[] = alert ? [[clean(need ? a.question : a.reason, 160) || (need ? 'needs you' : 'failed'), 'er', 600]] : activityRuns(a, now).map(([s, k]): Run => [s, k === 'fg' ? 'muted' : k])
-  const read: Run[] = need ? [[`waiting ${waiting(a, now)}`, 'er', 600]] : failed ? [['failed', 'er', 600]] : reading(a, now)
-  const body = tint(-8, BW + 8) + runs(GAP, 20, 12, [[clean(a.title, 60), 'fg', 600], [' ', 'muted'], ...what], textW) + runs(rx, 20, 12, read, HELPER_READ, 'end')
+  const msg = alert ? clean(need ? a.question : a.reason, 160) || (need ? 'needs you' : 'failed') : ''
+  const what: Run[] = alert ? [[msg, 'er', 600]] : activityRuns(a, now).map(([s, k]): Run => [s, k === 'fg' ? 'muted' : k])
+  // The tint and the er question already say "waiting", so the narrow column shows only the age.
+  const read: Run[] = need ? [[waiting(a, now), 'er', 600]] : failed ? [['failed', 'er', 600]] : reading(a, now)
+  // An alert keeps at least half the text width for its question, so a long title cannot push it out.
+  const title = clean(a.title, 60), titleW = alert ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW
+  const body = tint(-8, BW + 8) + runs(GAP, 20, 12, [[fit(title, titleW, 12, 600), 'fg', 600], [' ', 'muted'], ...what], textW) + runs(rx, 20, 12, read, HELPER_READ, 'end')
+  const alt = `${title}, ${need ? `waiting ${read[0][0]}` : read.map(r => r[0]).join('')}${alert ? `: ${msg}` : ''}`
   return { type: 'Box', props: { flexDirection: 'row' }, children: [
     image(`crab-${a.id}`, { source: crabSvg, alt: `${a.role} crab`, width: HELPER_CRAB, height: h }, walk),
-    image(`helper-${a.id}`, { source: doc(BW, h, body), alt: `${clean(a.title, 60)}, ${read.map(r => r[0]).join('')}`, width: n(BW), height: h }, false),
+    image(`helper-${a.id}`, { source: doc(BW, h, body), alt, width: n(BW), height: h }, false),
   ] }
 }
 
