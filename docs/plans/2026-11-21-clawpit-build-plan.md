@@ -1164,7 +1164,7 @@ No repo is edited; both are settings on the maintainer's machine.
 - [ ] **Step 1: Record what each shows today.** Capture `before` with `bash scripts/app-capture.sh retire before`.
 - [ ] **Step 2 (maintainer): switch ponytail's band off** with ponytail's own band command (it writes `off` to its band flag file in the user's Claude config folder; its band hook reads that file and draws nothing).
 - [ ] **Step 3 (maintainer): switch skins' usage footer off** in the skins settings (the active skin's `band` preference goes false). Transcript row styling stays on.
-- [ ] **Step 4: Check the information is kept.** Against the `before` shot, tick each figure off in the panel: session cost, last turn cost, tokens, turns, agent time, tests, context, the 5h and 7d limits with pace. Reuse and callers-open are dropped on purpose (decision M5).
+- [ ] **Step 4: Check the information is kept.** Against the `before` shot, tick each figure off in the panel: session cost, last turn cost, tokens, turns, agent time, tests, context, the 5h and 7d limits with pace. Reuse and callers-open are kept as low-priority columns (decision M5).
 - [ ] **Step 5: App check**, task name `retire`: `idle` and `busy`, dark and light. Expected: one panel above the prompt, nothing of ponytail's or skins' beside it.
 - [ ] **Step 6: By-eye gate** (maintainer): the transcript rows are still skinned; nothing else above the prompt moves.
 
@@ -1268,6 +1268,19 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 | M6 | Session, tokens and agent-time figures | (a) this session only, from the plugin's load. (b) a running lifetime total in `$.store` | (a). It matches the engine's session cost beside it |
 | M7 | The plan's "Hydra run" section and the model names in it describe how the build is run; `AGENTS.md` says the repo carries no tooling trace | (a) keep the section while building and remove it from the plan before the PR. (b) keep it: Hydra is a product the mod draws, and the section is the run's record. (c) move it to a local file now | (a) |
 | M8 | Installing savvy's local change: the installed copy is refreshed from the local branch, so a later update of savvy from its public source would undo it | (a) accept and re-apply after each update. (b) pin savvy to the local checkout | (b) |
+
+### Answers (the maintainer, 2026-11-21)
+
+| ID | Answer |
+|---|---|
+| M1 | (a) One ring, on the longest waiter. |
+| M2 | (a) Whole minutes: "waiting 3m". |
+| M3 | (a) The flow's title as sent, no forced prefix. |
+| M4 | (a) Background shells, monitors and crons stay in savvy's `/agents-info` for this build. A Background section in clawpit's pane is a later task. |
+| M5 | **(b) Add reuse and callers-open as the two lowest-priority columns.** They show only when the width has room after every other column, and they step aside first. Before the Hydra run, read ponytail's source to find how it computes both figures and whether they can be read with its band off. Then amend Tasks 7 (tracker), 9 (column ranking: `reuse` and `callers` after `tokens` and `agent`), 12 (column drawing), 15 (by-eye list) and 18 Step 4 (both figures are kept, not dropped). |
+| M6 | (a) This session only. |
+| M7 | (a) Keep the "Hydra run" section and model names while building; strip them before this plan goes into a PR. |
+| M8 | (a) Pin savvy-progress to the local claude-kit checkout, so an upstream update cannot undo the local change. |
 
 ## Self-review
 
