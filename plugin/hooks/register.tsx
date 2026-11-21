@@ -48,6 +48,7 @@ let errors = 0
 let ticker: Timer | null = null
 let period = 0
 let wake: Timer | null = null
+let booted: Promise<void> | null = null
 
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
@@ -106,6 +107,19 @@ const loadStore = async ($: EngineInterface) => {
   }
 }
 
+// Once per plugin load: a reload inside a running session fires no session.start, so the first event runs it there.
+const boot = ($: EngineInterface) => (booted ??= (async () => {
+  try { await loadStore($) } catch { errors += 1 }
+  try { seen = await read($, agents) } catch { errors += 1 }
+  try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
+  try { await retick($) } catch { errors += 1 }
+})())
+
+// Written only when not yet true, so the repaint it causes schedules nothing more: no render loop.
+const takeOver = async ($: EngineInterface) => {
+  try { if ((await read($, takeover)) !== true) await update($, takeover, () => true) } catch { errors += 1 }
+}
+
 // Plain Box and Text data, so it cannot fail the way the drawing did.
 const failedLine = (kind: string): RenderElement => ({
   type: 'Box', props: { key: 'clawpit-failed', flexDirection: 'column' },
@@ -116,17 +130,16 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const out = await next(e)
     reset()
-    try { if (e.surface === 'desktop') await update($, takeover, () => true) } catch { errors += 1 }
-    try { await loadStore($) } catch { errors += 1 }
-    try { seen = await read($, agents) } catch { errors += 1 }
-    try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
-    try { await retick($) } catch { errors += 1 }
+    booted = null
+    if (e.surface === 'desktop') await takeOver($)
+    await boot($)
     return out
   })
 
   on('tool.call', async ($, e, next) => {
     const out = await next(e)
     try {
+      await boot($)
       const at = await $.clock.now()
       const isError = out.deny !== undefined || out.isError === true
       facts = onTool(facts, { tool: e.tool, agentId: e.agentId, input: e as Record<string, unknown>, result: out.result, isError, at })
@@ -145,6 +158,7 @@ export const register: Register = on => {
   on('agent.spawn', async ($, e, next) => {
     const out = await next(e)
     try {
+      await boot($)
       if (out.deny === undefined) {
         const id = out.agentId ?? e.tool_use_id
         if (e.parentAgentId) parents = { ...parents, [id]: e.parentAgentId }
@@ -158,6 +172,7 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     const out = await next(e)
     try {
+      await boot($)
       if (e.agentId === undefined) {
         let usd = turn.session.costUsd
         try { usd = usdOf(await $.session.usage()) } catch { errors += 1 }
@@ -173,13 +188,14 @@ export const register: Register = on => {
 
   // `think` is the model's turn before any tool of the step runs, so it is set as the step starts.
   on('turn.step', async function* ($, e, next) {
-    try { facts = onThink(facts, e.agentId, await $.clock.now()) } catch { errors += 1 }
+    try { await boot($); facts = onThink(facts, e.agentId, await $.clock.now()) } catch { errors += 1 }
     return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const out = await next(e)
     try {
+      await boot($)
       const at = await $.clock.now()
       const u = e.usage
       const tokens = u ? u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens : 0
@@ -204,7 +220,7 @@ export const register: Register = on => {
 
   on('session.measure', async ($, e, next) => {
     const out = await next(e)
-    try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($); await retick($) } catch { errors += 1 }
+    try { await boot($); takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($); await retick($) } catch { errors += 1 }
     return out
   })
 
@@ -212,6 +228,7 @@ export const register: Register = on => {
   on('state.set', { plugin: 'savvy-progress', key: 'agents' }, async ($, e, next) => {
     const out = await next(e)
     try {
+      await boot($)
       if (out.value?.isSet && Array.isArray(e.value)) {
         logs = diff(logs, seen, e.value, parents, await $.clock.now())
         seen = e.value
@@ -225,6 +242,8 @@ export const register: Register = on => {
   // shortcut: vscode and mobile pass through like the terminal (savvy still draws there, takeover is desktop-only).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    // A write is refused while this hook draws, so the start-up work runs just after it.
+    if (!booted || (await read($, takeover)) !== true) $.clock.after(0, () => void takeOver($).then(() => boot($)))
     const table = $.ui.resolve(e), { Client } = table
     const compact = () => { void $.command.run({ command: 'compact' }).catch(() => { errors += 1 }) }
     // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and

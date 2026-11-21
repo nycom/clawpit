@@ -203,3 +203,14 @@ test('wiring: on the desktop surface takeover is true', async ($, on) => {
   await start($)
   expect(w.last('takeover')).toBe(true)
 })
+
+test('wiring: the start-up work runs once', async ($, on) => {
+  let usage = 0
+  const w = setup(on, { usage: () => (usage += 1, USAGE) })
+  const ui = await $.ui.mount({ plugin: 'clawpit', surface: 'desktop', component: 'AbovePrompt', props: { bodyColumns: 120, hasSurvey: false, maxRows: 5 } as never })
+  await Promise.all([ui.redraw({ bodyColumns: 100, hasSurvey: false, maxRows: 5 } as never), spawn($, 'fix the cache')])
+  await w.clock.advance(0)
+  expect(usage).toBe(1)
+  expect(w.last('takeover')).toBe(true)
+  await ui.unmount()
+})

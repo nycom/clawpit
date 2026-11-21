@@ -28,12 +28,13 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: unknown } 
   on('ui.open', () => ({ value: { isPlaced: true } }))
   const commands: string[] = []
   on('command.run', (_$, e) => { commands.push(e.command); return { text: '' } })
-  const writes: { plugin: string; key: string }[] = []
-  on('state.set', (_$, e, next) => { writes.push({ plugin: e.plugin, key: e.key }); return next(e) })
+  const writes: { plugin: string; key: string; value: unknown }[] = []
+  on('state.set', (_$, e, next) => { writes.push({ plugin: e.plugin, key: e.key, value: e.value }); return next(e) })
   const mine = () => writes.filter(w => w.plugin === 'clawpit').length
+  const last = (key: string) => writes.filter(w => w.plugin === 'clawpit' && w.key === key).at(-1)?.value
   // The engine's own drawing of the band, keyed so a test can tell whether it is kept.
   on('ui.render', (h, e) => h.ui.resolve(e).Box({ key: 'beneath', children: [] }))
-  return { clock, store, storeSets, commands, mine }
+  return { clock, store, storeSets, commands, mine, last }
 }
 
 const start = ($: $T, surface: 'desktop' | 'terminal' = 'desktop') => $.session.start({ cwd: '/', surface, isInteractive: true })
@@ -237,6 +238,16 @@ test('wiring: the size press cycles and persists; a bad stored size is full', as
   await ui.post({ press: 'size' }, { in: 'toggle' })
   expect(await sizeOf(ui)).toBe('everything')
   expect(w.store.get('size')).toBe('full')
+  await ui.unmount()
+})
+
+// A plugin reload inside a running session fires no session.start: the first event does the start-up work.
+test('wiring: without session.start, the first desktop render sets takeover and restores the stored size', async ($, on) => {
+  const w = setup(on, { store: { size: 'gauges' } })
+  const ui = await band($)
+  await w.clock.advance(0)
+  expect(w.last('takeover')).toBe(true)
+  expect(await sizeOf(ui)).toBe('agents folded')
   await ui.unmount()
 })
 
