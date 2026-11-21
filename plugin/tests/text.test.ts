@@ -36,3 +36,6 @@ test('text: a cut never splits a token with a digit', () => {
   expect(fit('Searching hooks', textWidth('Searching ho…', 12), 12)).toBe('Searching ho…')
   expect(fit('v2.5.10-beta', textWidth('v2.5.…', 12), 12)).toBe('v2.5.…')
 })
+test('text: a duration under a minute reads <1m, none reads 0m', () => {
+  expect(fmtDuration(1)).toBe('<1m'); expect(fmtDuration(59_999)).toBe('<1m'); expect(fmtDuration(60_000)).toBe('1m'); expect(fmtDuration(0)).toBe('0m')
+})

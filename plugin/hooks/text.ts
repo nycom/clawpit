@@ -45,5 +45,5 @@ export const fmtTokens = (n: number): string =>
   n >= 1e6 || Math.round(n / 1e3) >= 1000 ? `${+(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)}M` : n >= 1e3 ? `${+(n / 1e3).toFixed(n >= 1e5 ? 0 : 1)}k` : String(Math.round(n))
 export const fmtDuration = (ms: number): string => {
   const m = Math.floor(ms / 60000), h = Math.floor(m / 60)
-  return h ? `${h}h ${m % 60}m` : `${m}m`
+  return h ? `${h}h ${m % 60}m` : ms > 0 && ms < 60000 ? '<1m' : `${m}m`
 }
