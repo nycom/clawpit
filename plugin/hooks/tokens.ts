@@ -54,7 +54,7 @@ const MOTION_RULES: Record<string, string> = {
   bd: `.bd{animation:bob ${MOTION.walk} infinite -.125s}`, pr: `.pr{animation:bob ${MOTION.walk} infinite -.125s}`,
   flag: '.flag{transform-origin:0 50%;animation:wave .5s steps(1) 6}',
   hop: `.hop{animation:hop ${MOTION.beat} infinite}`, sway: `.sway{animation:sway ${MOTION.beat} infinite}`,
-  grow: `.grow{transform-origin:0 50%;animation:grow ${MOTION.fillMs}ms ${MOTION.curve} both}`,
+  grow: `.grow{transform-box:fill-box;transform-origin:0 50%;animation:grow ${MOTION.fillMs}ms ${MOTION.curve} both}`,
 }
 const KEYFRAMES: Record<string, string> = {
   la: '@keyframes st{50%{transform:translateY(-1px)}}', lb: '@keyframes st{50%{transform:translateY(-1px)}}',
