@@ -1,5 +1,5 @@
 import type { CodeStat } from '../../types'
-import { clean } from './activity'
+import { oneLine } from '../text'
 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
 
@@ -10,6 +10,6 @@ export const codeOf = (band: unknown): CodeStat | null => {
   return {
     reusePct: reused + created < 3 ? null : Math.round(reused / (reused + created) * 100),
     reused, created,
-    callers: strings(b.openCallers).map(r => clean(r, 120)).filter(Boolean),
+    callers: strings(b.openCallers).map(r => oneLine(r).slice(0, 120)).filter(Boolean),
   }
 }

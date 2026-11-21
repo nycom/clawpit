@@ -1,5 +1,5 @@
 import type { LogLine, SavvyRun } from '../../types'
-import { clean } from './activity'
+import { oneLine } from '../text'
 
 export type Logs = Record<string, LogLine[]>  // by run id
 
@@ -10,11 +10,11 @@ export const diff = (logs: Logs, prev: SavvyRun[], next: SavvyRun[], parents: Re
   const out: Logs = {}
   for (const r of next) out[r.id] = logs[r.id] ?? []
   const add = (id: string, kind: LogLine['kind'], text: string) => {
-    if (out[id]) out[id] = [{ kind, text: clean(text, 200), at }, ...out[id]].slice(0, 30)
+    if (out[id]) out[id] = [{ kind, text: oneLine(text).slice(0, 200), at }, ...out[id]].slice(0, 30)
   }
   for (const r of next) {
     const p = before.get(r.id)
-    const why = clean(r.failNote || r.stepNote, 160)
+    const why = oneLine(r.failNote || r.stepNote).slice(0, 160)
     const tail = why ? `: ${why}` : ''
     if (r.stepNote && r.stepNote !== p?.stepNote) add(r.id, 'step', r.stepNote)
     if ((r.failedAttempts ?? 0) > (p?.failedAttempts ?? 0)) add(r.id, 'try', `Try ${r.failedAttempts} failed${tail}`)
@@ -23,7 +23,7 @@ export const diff = (logs: Logs, prev: SavvyRun[], next: SavvyRun[], parents: Re
       const where = r.stepTotal ? ` at step ${(r.stepDone ?? 0) + 1} of ${r.stepTotal}` : ''
       add(r.id, 'fail', `Failed${where}${tail}`)
       const parent = parents[r.id]
-      if (parent) add(parent, 'helper', `Helper "${clean(r.description, 60)}" failed after ${mmss((r.endedAt ?? at) - r.startedAt)}${tail}`)
+      if (parent) add(parent, 'helper', `Helper "${oneLine(r.description).slice(0, 60)}" failed after ${mmss((r.endedAt ?? at) - r.startedAt)}${tail}`)
     }
   }
   return out

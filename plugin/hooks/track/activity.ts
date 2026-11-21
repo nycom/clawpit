@@ -1,11 +1,11 @@
 import type { Activity } from '../../types'
+import { oneLine } from '../text'
 
 export type ToolEvent = { tool: string; agentId?: string; input: Record<string, unknown>; result?: unknown; isError?: boolean; at: number }
 export type Facts = { activity: Record<string, Activity>; files: Record<string, string[]>; lines: { added: number; removed: number } }  // key '' is the main loop
 
-// Stands in for oneLine and clip until the kit is wired in.
-export const clean = (v: unknown, max: number): string =>
-  (typeof v === 'string' ? v : '').replace(/[\t\n\r\f\v]/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').replace(/\s+/g, ' ').trim().slice(0, max)
+// A hard cap, not clip: what is stored keeps no ellipsis, the draw clips it (design §11).
+const clean = (v: unknown, max: number): string => oneLine(typeof v === 'string' ? v : '').slice(0, max)
 
 export const emptyFacts = (): Facts => ({ activity: {}, files: {}, lines: { added: 0, removed: 0 } })
 
