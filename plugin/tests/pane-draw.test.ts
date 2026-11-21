@@ -187,8 +187,7 @@ test('pane: a waiting helper counts in the summary, reads waiting Nm, and cuts i
   const t = paneTree({ ...v, ui: { ...v.ui, shut: [] } }), row = find(t, 'helper-k1')!
   expect(words(find(t, 'head'))).toContain('1 needs you · 4 running')
   expect(inner(row).height).toBe(32); expect(src(row)).toContain('needTint')
-  // Its title is cut beside "waiting 2m", so the column reads only the age; the alt keeps the words.
-  expect(src(row)).toMatch(/text-anchor="end"><tspan class="er" font-weight="600">2m</)
+  expect(src(row)).toMatch(/text-anchor="end"><tspan class="er" font-weight="600">waiting 2m</)
   const first = src(row).match(/<tspan class="fg">find call[^<]* <\/tspan><tspan class="er">([^<]*)<\/tspan><\/text>/)!
   const second = [...src(row).matchAll(/<text x="10" y="27" class="er" font-size="12" font-weight="600">([^<]*)<\/text>/g)].map(m => unescape(m[1]))
   expect(first[1].startsWith('Should')).toBe(true); expect(second.length).toBe(1); expect(second[0].endsWith('…')).toBe(true)
@@ -451,6 +450,13 @@ test('pane: an alert row always shows its why at the width the app gives', () =>
   const row = find(paneTree(paneViewOf('needsYou', { columns: 28 })), 'row-e2e')!
   expect(why(row)[0]).toBe('Postgres or'); expect(src(row)).toMatch(/<text x="48" y="53" class="er" font-size="12" font-weight="600">SQLite/)
   expect(why(find(paneTree(paneViewOf('both', { columns: 28 })), 'row-pln')!)).toEqual(['Ship the', 'release notes in…'])
+})
+
+test('pane: a waiting helper keeps "waiting Nm" where its title fits the row, however long its question', () => {
+  for (const columns of [36, 40, 41]) {
+    const v = paneViewOf('helperNeedsYou', { columns }), row = find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k1')!
+    expect(`${columns}: ${src(row).includes('font-weight="600">waiting 1m</tspan>')}`).toBe(`${columns}: true`)
+  }
 })
 
 test('pane: the struggling note never drops; where it and the tag will not both fit it takes the tag slot', () => {

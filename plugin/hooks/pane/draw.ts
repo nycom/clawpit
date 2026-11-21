@@ -259,8 +259,8 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
   // A question keeps at least half the text width, so a long title cannot push it out; any other helper keeps its title whole.
   const titleRoom = (textW: number) => (need ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW)
-  const full = need ? textWidth(`waiting ${age}`, 12, 600) : failedW, titleFits = (r: number) => textWidth(title, 12, 600) <= titleRoom(helperRoom(W, depth, r))
-  const col = alert ? alertColumn(titleFits, Math.min(READ, full + READ_GAP), full, need ? textWidth(age, 12, 600) : failedW) : { read: edge, brief: false }
+  const full = need ? textWidth(`waiting ${age}`, 12, 600) : failedW, own = Math.min(READ, full + READ_GAP), titleFits = (r: number) => textWidth(title, 12, 600) <= helperRoom(W, depth, r)
+  const col = alert ? alertColumn(titleFits, own, full, need ? textWidth(age, 12, 600) : failedW) : { read: edge, brief: false }
   const plain = alert ? null : plainRead(a, now, 12, r => helperRoom(W, depth, r), edge)
   const BW = W - cw, rx = BW - PAD - CHEV - GAP, textW = plain ? plain.titleW : helperRoom(W, depth, col.read)
   // The tint spans both images; each runs 8px past the seam, clipped there, so the band reads as one.
@@ -269,7 +269,8 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   const tree = `${tint(20 + indent, HELPER_CRAB - 12)}<rect x="12" y="0" width="1.5" height="${h}" class="track"/><rect x="12" y="15.25" width="${9 + indent}" height="1.5" class="track"/>`
   const crabSvg = withCrab(svg(cw, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S' }), 23.25 + indent, 5.5)
   const read: Run[] = need ? [[col.brief ? age : `waiting ${age}`, 'er', 600]] : failed ? [['failed', 'er', 600]] : plain!.read
-  const titleW = titleRoom(textW)
+  // Laid out at the words' column, so the age-only step widens the question, not the title; never under MIN_CUT of it.
+  const titleW = need ? Math.max(titleRoom(helperRoom(W, depth, own)), Math.min(keepWidth(title, 12), textW)) : textW
   let what: string, tip = msg, cut: boolean
   if (need) {
     // The question follows the title and wraps to a second line, cut there with an ellipsis.

@@ -6,7 +6,7 @@
 
 - **Sections:** Needs you, then Failed, then Running, then Ended (folds away). See "Failed state" below.
 - **Rows:** every row uses the same four columns: crab (38px), title plus role tag and activity, a reading column (time left over step blocks) as wide as the widest reading in view plus 6, 88px at most (replaces the fixed 88px, 2026-11-21; see "Narrow pane"), then a chevron.
-- **Needs-you row:** 62px tall, so the question wraps to two lines and is never cut off. It carries a soft red ring pulse.
+- **Needs-you row:** 62px tall, so the question wraps to two lines and is never cut off (narrowed 2026-11-21 by "Narrow pane"). It carries a soft red ring pulse.
 - **Log drawer:** a click opens it. Entries are newest first and stagger in; a footer shows steps, context, cost, and the usual time.
 - **Helpers:** nested under their parent on a tree line, with a "N helpers" toggle.
 - **Crew bar:** one segment per agent, filled to that agent's progress. Hue = role, red = needs you, green = done.
@@ -88,7 +88,7 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Count badge:** the folded agents crab shows its count badge only for 2 or more agents; one agent needs no number.
 - **Chips open the Agents pane:** a press on any chip opens it, as the folded agents column does.
 - **No orphan ellipses (pane):** a text cut to fewer than 8 characters is dropped instead of shown, with the " · " before it; a bare "…" is never drawn. The role tag and the "slower" or "N failed tries" note stay (narrowed 2026-11-21 by "Narrow pane": where both will not fit, the note takes the tag's slot and the tag goes). The drawer footer wraps at item boundaries and leaves "usually Nm" out first when it alone would take another line.
-- **Reading column with no estimate:** the clock plus a muted " so far" ("0:10 so far"), the same words as the activity fallback, instead of a bare clock.
+- **Reading column with no estimate:** the clock plus a muted " so far" ("0:10 so far"), the same words as the activity fallback, instead of a bare clock (narrowed 2026-11-21 by "Narrow pane").
 - **Empty pane:** one muted line, "Agents you start show up here", under "No agents yet".
 - **Pane tooltips:** a row's cut activity, question or failure reason carries its full text in a `<title>` and in the image's alt text. The row stays an unframed image, so it keeps its press; as with chips, this app build does not show the `<title>` over an image, and screen readers read the alt.
 - **Needs you, jump in:** pressing a needs-you row (or a helper that waits on you) puts "@" and the agent's title into the prompt at the cursor, once; the row still opens its drawer (a helper has none). The engine gives a plugin no way to focus the prompt box, so the person clicks into it.
