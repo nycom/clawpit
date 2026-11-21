@@ -176,9 +176,11 @@ test('pane: a waiting helper keeps its question and a readable wait at 36 column
 
 // hydra with k1 waiting on you and, when `nested`, k3 helping k1 and waiting too.
 const waitingHelper = (over: Partial<ReturnType<typeof paneViewOf>> = {}, question = 'Keep the old cache key?', nested = false) =>
-  withAgents(paneViewOf('hydra', over), a => a.map(x => (x.id === 'rev' ? { ...x, helpers: x.helpers.map(h => (h.id === 'k1' ? {
-    ...h, state: 'need' as const, prop: 'wait' as const, question, waitingSince: NOW - 150_000, activity: null,
-    helpers: nested ? [{ ...h, id: 'k3', title: 'read the guard', parentId: 'k1', helpers: [] }] : [] } : h)) } : x)))
+  withAgents(paneViewOf('hydra', over), a => a.map(x => (x.id === 'rev' ? { ...x, helpers: x.helpers.map(h => {
+    if (h.id !== 'k1') return h
+    const need = { ...h, state: 'need' as const, prop: 'wait' as const, question, waitingSince: NOW - 150_000, activity: null }
+    return { ...need, helpers: nested ? [{ ...need, id: 'k3', title: 'read the guard', parentId: 'k1', helpers: [] }] : [] }
+  }) } : x)))
 
 test('pane: a waiting helper counts in the summary, reads waiting Nm, and cuts its question at two lines', () => {
   const v = waitingHelper({ columns: 36 }, 'Should the guard keep the old cache key for one release, or drop it now that every caller has moved over?')
@@ -195,7 +197,7 @@ test('pane: a waiting helper counts in the summary, reads waiting Nm, and cuts i
 test('pane: a waiting helper\'s segment in the crew bar is er, like a top-level needs-you agent', () => {
   const reds = (v: ReturnType<typeof paneViewOf>) => src(find(paneTree(v), 'head')).match(/class="tint28-er"/g)?.length ?? 0
   expect(reds(waitingHelper())).toBe(reds(paneViewOf('hydra')) + 1)
-  expect(reds(waitingHelper({}, 'Keep the old cache key?', true))).toBe(reds(paneViewOf('hydra')) + 1)
+  expect(reds(waitingHelper({}, 'Keep the old cache key?', true))).toBe(reds(paneViewOf('hydra')) + 2)
 })
 
 test('pane: a folded toggle names the helpers that need you in er', () => {
