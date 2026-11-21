@@ -9,6 +9,12 @@
       "title": "Loop bench",
       "description": "Adds /clawpit-bench, which draws n looping crabs in the Agents pane to measure what loops cost. Off for normal use.",
       "default": false
+    },
+    "animations": {
+      "type": "boolean",
+      "title": "Animations",
+      "description": "Off stops every walking crab, pulse and needle settle in the panel and the Agents pane.",
+      "default": true
     }
   }
 }

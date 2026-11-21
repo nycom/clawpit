@@ -13,7 +13,7 @@ import { image, type El } from '../draw'
 
 export { image, type El }
 
-export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle> }
+export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle>; still?: boolean }
 
 // ---------- text ----------
 // shortcut: the kit's width table runs up to ~10% short of SF Pro, so drawn widths add 10%; drop SLACK once the table is measured.
@@ -245,7 +245,7 @@ const STATE_WORD = { done: 'done', live: 'in progress', need: 'needs you', faile
 // shortcut: capped at 4,000 characters so a huge plan stays under the props cap; list fewer if plans grow past ~60 tasks.
 const taskList = (plan: Plan) => clip(plan.tasks.map(t => `${clean(t.name, 60)} ${STATE_WORD[t.state]}`).join(', '), 4000)
 const NAME_MIN_PX = 56, NAME_MAX_TASKS = 8, PARTS_PAST = 40
-const planBar = (plan: Plan, W: number): El => {
+const planBar = (plan: Plan, W: number, grow: boolean): El => {
   const n = plan.tasks.length, count = (s: string) => plan.tasks.filter(t => t.state === s).length
   const list = taskList(plan), alt = `tasks: ${list}`
   if (n > PARTS_PAST) {
@@ -261,7 +261,7 @@ const planBar = (plan: Plan, W: number): El => {
     return text(x, 22, name, 10, t.state === 'need' ? 'er' : t.state === 'live' ? 'fg' : 'muted', { w: t.state === 'need' ? 600 : 400, max })
   }).join('')
   const h = names ? 26 : 8
-  return image('plan-bar', { source: doc(W, h, withTip(list, segBar(planSegs(plan), W, 'full', true) + (names ? label : ''), Infinity), true), alt, width: W, height: h }, true)
+  return image('plan-bar', { source: doc(W, h, withTip(list, segBar(planSegs(plan), W, 'full', grow) + (names ? label : ''), Infinity), grow), alt, width: W, height: h }, grow)
 }
 
 // ---------- the chips ----------
@@ -459,7 +459,7 @@ export const panelTree = (v: PanelView): El => {
   const out: El[] = [{ type: 'Box', props: { key: 'cols', flexDirection: 'row' }, children: [...columns, spacer, toggle(v)] }]
   if (v.ui.size === 'full') {
     const W = v.bodyColumns * CELL_PX
-    if (v.crew.plan) out.push(planLine(v.crew.plan, v.crew, W), planBar(v.crew.plan, W))
+    if (v.crew.plan) out.push(planLine(v.crew.plan, v.crew, W), planBar(v.crew.plan, W, !v.still))
     const chips = chipRows(v, W)
     if (chips) out.push(chips)
   }

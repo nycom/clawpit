@@ -53,6 +53,7 @@ let booted: Promise<void> | null = null
 let paneAsked = false                           // the pane opened by itself this session
 let benchOn = false                             // the `bench` setting, read at each load: /clawpit-bench is registered
 let benchReg: Promise<unknown> | null = null
+let animations = true                           // the `animations` setting, read at each load: off draws nothing that moves
 let bench: { count: number; eased: boolean } | null = null
 
 // The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
@@ -171,6 +172,7 @@ const failedLine = (kind: string): RenderElement => ({
 
 export const register: Register = (on, options) => {
   benchOn = options.bench === true
+  animations = options.animations !== false
   on('session.start', async ($, e, next) => {
     const out = await next(e)
     reset()
@@ -368,9 +370,9 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
   if (s.context) settles.context = settle(settles.context, s.context.pct)
   for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct) }
-  const loops = pickLoops(crew, u, busy, armed)
+  const loops = pickLoops(crew, u, busy, armed, animations)
   return {
-    panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: { ...settles } },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session },
+    panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? { ...settles } : {}, still: !animations },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations },
   }
 }

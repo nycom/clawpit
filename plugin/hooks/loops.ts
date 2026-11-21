@@ -6,11 +6,12 @@ export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 12 }
 const newestFirst = (a: CrewAgent, b: CrewAgent) => b.startedAt - a.startedAt
 const waited = (a: CrewAgent) => a.waitingSince ?? a.startedAt
 
-export const pickLoops = (crew: Crew, ui: Ui, busy: boolean, armed: boolean): LoopPlan => {
+// With the `animations` setting off nothing loops, as with an idle crew.
+export const pickLoops = (crew: Crew, ui: Ui, busy: boolean, armed: boolean, animations = true): LoopPlan => {
   const { running } = crew.counts, { need, failed } = alertsOf(crew)
   // At full size only what gets an alert chip beats: a failed helper has none, so it neither pulses nor cuts the walkers.
   const beat = ui.size === 'full' ? need > 0 || (crew.counts.failed > 0 && armed) : need > 0 || (failed > 0 && armed)
-  if (!(busy || running > 0 || need > 0) && !beat) return { walkers: [], chipPulse: false, ring: null, mascot: 'still', count: 0 }
+  if (!animations || (!(busy || running > 0 || need > 0) && !beat)) return { walkers: [], chipPulse: false, ring: null, mascot: 'still', count: 0 }
 
   const tops = crew.agents.filter(a => a.state === 'running').sort(newestFirst)
   const helpers = crew.agents.filter(a => ui.paneOpen && !ui.shut.includes(a.id)).flatMap(helpersOf).filter(h => h.state === 'running').sort(newestFirst)

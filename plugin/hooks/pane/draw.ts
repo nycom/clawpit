@@ -9,7 +9,7 @@ import { alertsOf, helpersOf } from '../model'
 import { paneLayout, type PaneItem } from './layout'
 
 export type { El }
-export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat }
+export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean }
 
 // The row's four columns: crab 38, title and activity, the reading column (88px at most, see readEdge), the chevron.
 const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6
@@ -207,10 +207,10 @@ const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: 
   ] }
 }
 
-const drawer = (a: CrewAgent, W: number, now: number): El => {
+const drawer = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   const x = CRAB + GAP + 12, textW = W - x - GAP - 38 - PAD, failed = a.prop === 'fail'
   // A line under a second old plays the one-shot: it fades in from the right while the older lines slide down by its height.
-  const fresh = a.log.length > 0 && now - a.log[0].at < 1000
+  const fresh = !still && a.log.length > 0 && now - a.log[0].at < 1000
   let y = 6, body = '', row = 0
   a.log.slice(0, 30).forEach((l, i) => {
     const top = y, cls = failed && i === 0 ? 'er' : i === 0 ? 'fg' : 'muted', lines = wrap(clean(l.text, 120), textW, 12, 2, cls === 'er' ? 600 : 400)
@@ -316,12 +316,12 @@ const endedRow = (a: CrewAgent, W: number, now: number): El => {
   return image(`ended-${a.id}`, { source, alt: `${title} ${status}`, width: n(W), height: h }, false)
 }
 
-const drawItem = (item: PaneItem, W: number, now: number, edge = READ): El => {
+const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ): El => {
   switch (item.kind) {
     case 'head': return head(item.crew, W)
     case 'section': return section(item, W)
     case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now, edge)
-    case 'drawer': return drawer(item.agent, W, now)
+    case 'drawer': return drawer(item.agent, W, now, still)
     case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge)
     case 'kids': return kids(item, W)
     case 'ended': return endedRow(item.agent, W, now)
@@ -342,7 +342,7 @@ const engineChars = (e: El | string): number => typeof e === 'string' ? e.length
 // shortcut: measured at a reference width and clock, so wraps and ages may differ by a few characters from the drawn pane; the bounds keep a wide margin.
 const COST_COLUMNS = 64
 export const itemCost = (item: PaneItem): { host: number; engine: number } => {
-  const el = drawItem(item, COST_COLUMNS * CELL_PX, 0)
+  const el = drawItem(item, COST_COLUMNS * CELL_PX, 0, false)
   return { host: JSON.stringify(el).length, engine: engineChars(el) }
 }
 
@@ -367,7 +367,7 @@ export const paneTree = (v: PaneView): El => {
   const W = v.columns * CELL_PX
   if (v.ui.view === 'costs') return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: costsView(v.session, W) }
   const items = paneLayout(v.crew, v.ui, v.loops, itemCost), edge = readEdge(items, W, v.now)
-  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, edge)) }
+  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge)) }
 }
 
 // The measuring bench: `count` walking M crabs, past the loop budget. Eased keeps the walk's size and keyframes on an
