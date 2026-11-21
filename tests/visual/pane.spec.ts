@@ -8,7 +8,7 @@ const SHOTS = ['hydra', 'needsYou', 'failed', 'both', 'drawerOpen', 'helpers', '
 for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (const w of [36, 52] as const)   // narrow, wide
   test(`pane: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
     await show(page, paneTree(paneViewOf(s, { columns: w })), { surface: 'pane', widthCells: w, theme })
-    await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true })
+    await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })  // exact: a 1% ratio hid a stale baseline
   })
 
 test('pane: nothing animates while idle', async ({ page }) => {

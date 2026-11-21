@@ -153,3 +153,11 @@ test('pane: the loop count follows the plan', () => {
   const v = paneViewOf('needsYou')
   expect(paneLoopCount(v)).toBe(looping(paneTree(v)).length); expect(paneLoopCount(v)).toBe(v.loops.walkers.length + 1)
 })
+
+test('pane: a helper that needs you shows its question in er and how long it has waited', () => {
+  const v = withAgents(paneViewOf('hydra'), a => a.map(x => (x.id === 'rev'
+    ? { ...x, helpers: x.helpers.map(h => (h.id === 'k1' ? { ...h, state: 'need' as const, prop: 'wait' as const, question: 'Keep the old cache key?', waitingSince: NOW - 150_000, activity: null } : h)) } : x)))
+  const row = find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k1')!
+  expect(src(row)).toMatch(/class="er"[^>]*>Keep the old cache key\?</); expect(src(row)).toContain('needTint')
+  expect(words(row)).toContain('waiting 2m')
+})
