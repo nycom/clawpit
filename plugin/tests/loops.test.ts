@@ -48,11 +48,20 @@ test('loops: idle with a held failure, armed: only the pulse', () => {
 test('loops: a helper walks only when a slot is left', () => {
   const walkersWith = (tops: number) => {
     const h = agent('running'), ts = running(tops); ts[0].helpers = [h]
-    return { h, w: pickLoops(crewOf(...ts), ui('full', false), true, false).walkers }
+    return { h, w: pickLoops(crewOf(...ts), ui('full', true), true, false).walkers }
   }
   const full = walkersWith(BUDGET.walkers), room = walkersWith(BUDGET.walkers - 1)
   expect(full.w).not.toContain(full.h.id)
   expect(room.w[room.w.length - 1]).toBe(room.h.id)
+})
+
+test('loops: a helper walks only when its row is on screen', () => {
+  const h = agent('running'), top = agent('running', { helpers: [h] })
+  const walkers = (u: Ui) => pickLoops(crewOf(top), u, true, false).walkers
+  expect(walkers(ui('full', true))).toContain(h.id)
+  expect(walkers(ui('full', false))).not.toContain(h.id)
+  expect(walkers({ ...ui('full', true), shut: [top.id] })).not.toContain(h.id)
+  expect(pickLoops(crewOf(top), { ...ui('full', true), shut: [top.id] }, true, false).count).toBe(2)
 })
 
 test('loops: the mascot costume order', () => {
@@ -74,6 +83,15 @@ test('loops: the count never passes the budget', () => {
   const c = crewOf(agent('need'), agent('failed'), ...running(20))
   for (const size of ['full', 'gauges', 'line'] as const) for (const pane of [true, false])
     expect(pickLoops(c, ui(size, pane), true, true).count).toBeLessThanOrEqual(BUDGET.max)
+})
+
+test('loops: over the budget, walkers are cut from the end', () => {
+  const was = BUDGET.max, rs = running(3)
+  try {
+    BUDGET.max = 4
+    const p = pickLoops(crewOf(...rs), ui('full', true), true, false)
+    expect(p.walkers).toEqual([rs[2].id, rs[1].id]); expect(p.count).toBe(4)
+  } finally { BUDGET.max = was }
 })
 
 test('loops: a struggling agent never pulses', () => {

@@ -11,7 +11,7 @@ export const pickLoops = (crew: Crew, ui: Ui, busy: boolean, armed: boolean): Lo
   if (!(busy || running > 0 || need > 0) && !beat) return { walkers: [], chipPulse: false, ring: null, mascot: 'still', count: 0 }
 
   const tops = crew.agents.filter(a => a.state === 'running').sort(newestFirst)
-  const helpers = crew.agents.flatMap(a => a.helpers).filter(h => h.state === 'running').sort(newestFirst)
+  const helpers = crew.agents.filter(a => ui.paneOpen && !ui.shut.includes(a.id)).flatMap(a => a.helpers).filter(h => h.state === 'running').sort(newestFirst)
   const topIds = new Set(tops.map(a => a.id))
   let walkers = [...tops, ...helpers].slice(0, beat ? BUDGET.walkersOnBeat : BUDGET.walkers).map(a => a.id)
 
