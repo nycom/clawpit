@@ -4,7 +4,13 @@
 export const oneLine = (v: unknown): string =>
   (typeof v === 'string' ? v : v == null ? '' : String(v))
     .replace(/[\n\r\t\u2028\u2029]/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').replace(/\s+/g, ' ').trim()
-export const clip = (s: string, max: number): string => (s.length <= max ? s : max <= 1 ? '…'.slice(0, max) : s.slice(0, max - 1) + '…')
+// Where a cut at `k` lands: never inside a token with a digit (":54…" names another port), so it backs off to the space before it.
+const cutAt = (s: string, k: number): number => {
+  if (k <= 0 || k >= s.length || s[k] === ' ' || s[k - 1] === ' ') return k
+  const a = s.lastIndexOf(' ', k - 1), b = s.indexOf(' ', k)
+  return a >= 0 && /\d/.test(s.slice(a + 1, b < 0 ? s.length : b)) ? a : k
+}
+export const clip = (s: string, max: number): string => (s.length <= max ? s : max <= 1 ? '…'.slice(0, max) : s.slice(0, cutAt(s, max - 1)) + '…')
 export const xml = (s: string): string => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!)
 
 // shortcut: per-class average advance widths in em, not font metrics; swap in measured tables if wraps drift in the app.
@@ -13,9 +19,9 @@ export const textWidth = (s: string, sizePx: number, weight: 400 | 600 | 700 = 4
   [...s].reduce((w, ch) => w + adv(ch), 0) * sizePx * (weight === 400 ? 1 : 1.04)
 export const fit = (s: string, widthPx: number, sizePx: number, weight: 400 | 600 | 700 = 400): string => {
   if (textWidth(s, sizePx, weight) <= widthPx) return s
-  const out = [...s.replace(/…$/, '')]
+  const body = s.replace(/…$/, ''), out = [...body]
   while (out.length && textWidth(out.join('') + '…', sizePx, weight) > widthPx) out.pop()
-  return out.join('').trimEnd() + '…'
+  return body.slice(0, cutAt(body, out.join('').length)).trimEnd() + '…'
 }
 // Greedy wrap; whatever does not fit in the last line is cut and marked with an ellipsis.
 export const wrap = (s: string, widthPx: number, sizePx: number, lines: number, weight: 400 | 600 | 700 = 400): string[] => {

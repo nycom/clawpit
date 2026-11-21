@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { oneLine, xml, clip, wrap, textWidth, fmtClock, fmtAge, fmtLeft, fmtCost, fmtTokens, fmtDuration } from '../hooks/text'
+import { oneLine, xml, clip, fit, wrap, textWidth, fmtClock, fmtAge, fmtLeft, fmtCost, fmtTokens, fmtDuration } from '../hooks/text'
 
 test('text: oneLine strips control characters', () => expect(oneLine('a\u0000b\n c\u001b[31m')).toBe('ab c[31m'))
 test('text: xml escapes the five characters', () => expect(xml(`<&>"'`)).toBe('&lt;&amp;&gt;&quot;&apos;'))
@@ -26,4 +26,13 @@ test('text: wrap keeps a long first word instead of dropping it', () => {
 test('text: wrap carries the words after a long first word to line 2', () => {
   const out = wrap('src/app/code/project/src/VeryLongFileName.tsx is missing', 88, 12, 2)
   expect(out.length).toBe(2); expect(out[1]).toContain('is'); expect(out.every(l => textWidth(l, 12) <= 88)).toBe(true)
+})
+test('text: a cut never splits a token with a digit', () => {
+  const s = 'Could not reach Postgres on :5432 after three restarts'
+  expect(fit(s, textWidth('Could not reach Postgres on :54…', 12), 12)).toBe('Could not reach Postgres on…')
+  expect(clip('Postgres on :5432', 15)).toBe('Postgres on…')
+  expect(wrap(s, textWidth('Postgres on :54…', 12, 600), 12, 2, 600)).toEqual(['Could not reach', 'Postgres on…'])
+  // A word with no digit is still cut inside; a lone token with no space before it keeps its cut.
+  expect(fit('Searching hooks', textWidth('Searching ho…', 12), 12)).toBe('Searching ho…')
+  expect(fit('v2.5.10-beta', textWidth('v2.5.…', 12), 12)).toBe('v2.5.…')
 })

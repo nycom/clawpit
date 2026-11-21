@@ -279,7 +279,7 @@ test('pane: a reading column with no estimate reads the clock and a muted so far
 
 test('pane: the empty state says how agents arrive', () => {
   const e = paneTree(paneViewOf('emptyPane')).children![0] as El
-  expect(pieces(e)).toEqual([['muted', 'No agents yet'], ['muted', 'Agents you start show up here']])
+  expect(pieces(e)).toEqual([['fg', 'No agents yet'], ['muted', 'Agents you start show up here']])
   expect(src(e)).toMatch(/font-size="12"[^>]*>Agents you start show up here</)
 })
 
@@ -318,18 +318,65 @@ test('pane: a helper that waits on you is pressed with ask:<id>; other helpers h
   expect(inner(find(paneTree(paneViewOf('needsYou')), 'row-e2e')!).press).toBe('row:e2e')
 })
 
-test('pane: the costs view lists turn N · $X newest first with the session total and a back row', () => {
+test('pane: the costs view lists turn N and $X newest first with the session total and a back row', () => {
   const v = paneViewOf('costs'), t = paneTree(v)
   expect(t.props!.key).toBe('clawpit-pane'); expect(find(t, 'head')).toBeUndefined()
   const back = find(t, 'back')!
   expect(back.type).toBe('Client'); expect(inner(back).press).toBe('crew'); expect(words(back)).toBe('Agents'); expect(String(inner(back).alt)).toBe('Back to the agents')
   const list = find(t, 'costs')!, w = words(list)
   expect(w.startsWith('Session cost $267 · 44 turns')).toBe(true)
-  expect(w).toContain('turn 44 · $2.46 turn 43 · $1.10 turn 42 · $0.85')
+  expect(w).toContain('turn 44 $2.46 turn 43 $1.10 turn 42 $0.85')
   expect(w.indexOf('turn 44')).toBeLessThan(w.indexOf('turn 25')); expect(w).not.toContain('turn 24')
   expect(String(inner(list).alt)).toContain('turn 44 $2.46')
   expect(src(list)).not.toContain('animation')
   const none = words(find(paneTree({ ...v, session: { costUsd: null, lastTurnUsd: null, turns: 0, tokens: 0, agentMs: 0 } }), 'costs')!)
   expect(none).toBe('Session cost no reading yet No turns yet')
   for (const c of clients(t)) expect(String(inner(c).press)).toBe('crew')
+})
+
+test('pane: the struggling note is never cut; its separator drops first', () => {
+  for (const s of ['failed', 'both'] as const) for (let columns = 36; columns <= 64; columns += 2) {
+    const note = pieces(find(paneTree(paneViewOf(s, { columns })), 'row-rev')!).filter(([, p]) => p.includes('failed tr')).map(([, p]) => p)
+    expect(note.length).toBe(1); expect(['3 failed tries', '3 failed tries · ']).toContain(note[0])
+  }
+  const row = find(paneTree(paneViewOf('both', { columns: 36 })), 'row-rev')!
+  expect(words(row)).toContain('REVIEW 3 failed tries'); expect(src(row)).toMatch(/<tspan class="warn">3 failed tries<\/tspan><\/text>/)
+})
+
+test('pane: a helper row keeps its title whole and drops the reason when tight', () => {
+  const k2 = (columns: number) => { const v = paneViewOf('failed', { columns }); return find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k2')! }
+  const tight = k2(36), seen = pieces(tight).map(([, p]) => p)
+  expect(seen).toContain('map the cache keys'); expect(seen.some(p => p.includes('cach') && p !== 'map the cache keys')).toBe(false)
+  expect(unescape(src(tight).match(/<title>([^<]*)<\/title>/)![1])).toBe('no "cacheKey" in src/'); expect(String(inner(tight).alt)).toContain('no "cacheKey" in src/')
+  expect(words(k2(52))).toContain('map the cache keys no "cacheKey" in src/')
+})
+
+test('pane: the empty state ranks its title over the hint', () => {
+  const e = paneTree(paneViewOf('emptyPane')).children![0] as El
+  expect(src(e)).toMatch(/class="fg" font-size="13"[^>]*>No agents yet</); expect(src(e)).toMatch(/class="muted" font-size="12"[^>]*>Agents you start show up here</)
+})
+
+const costList = (turnCosts: number[], turns: number) => {
+  const v = paneViewOf('costs')
+  return find(paneTree({ ...v, session: { ...v.session, turns, turnCosts } }), 'costs')!
+}
+
+test('pane: the cost list right-aligns its amounts at the reading column edge', () => {
+  const list = costList([0.42, 12.40], 10), edge = 52 * 8.5 - 8 - 16 - 10
+  for (const amount of ['$0.42', '$12.40'])
+    expect(src(list)).toMatch(new RegExp(`<text x="${edge}" y="[\\d.]+" class="fg" font-size="12" text-anchor="end">${amount.replace('$', '\\$').replace('.', '\\.')}</text>`))
+  for (const turn of ['turn 9', 'turn 10']) expect(src(list)).toMatch(new RegExp(`<text x="0" y="[\\d.]+" class="muted" font-size="12">${turn}</text>`))
+  expect(src(list)).toContain('tabular-nums'); expect(words(list)).not.toMatch(/turn \d+ ·/)
+})
+
+test('pane: in the cost list only the session total is bold', () => {
+  const bold = [...src(find(paneTree(paneViewOf('costs')), 'costs')!).matchAll(/font-weight="600"[^>]*>([^<]*)</g)].map(m => m[1]).filter(t => t.includes('$'))
+  expect(bold).toEqual(['$267'])
+})
+
+test('pane: the cost list says how many turns it shows', () => {
+  const list = find(paneTree(paneViewOf('costs')), 'costs')!, w = words(list)
+  expect(src(list)).toMatch(/class="muted" font-size="12" font-weight="600">Last 20 turns</)
+  expect(w.indexOf('44 turns')).toBeLessThan(w.indexOf('Last 20 turns')); expect(w.indexOf('Last 20 turns')).toBeLessThan(w.indexOf('turn 44'))
+  expect(words(costList([0.42, 12.40], 10))).toContain('Last 2 turns'); expect(words(costList([0.42], 1))).toContain('Last 1 turn turn 1')
 })

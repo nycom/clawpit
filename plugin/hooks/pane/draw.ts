@@ -23,12 +23,14 @@ const text = (x: number, y: number, cls: string, size: number, s: string, o: { w
 const runsWidth = (rs: Run[], size: number) => rs.reduce((w, [s, , wt]) => w + textWidth(s, size, wt ?? 400), 0)
 const MIN_CUT = 8   // a cut fragment shorter than this reads as noise, so it is dropped
 // Coloured runs on one line, cut with an ellipsis where they pass `maxW`. A short cut fragment goes, with the ' · ' before it.
+// A run ending in ' · ' (a note such as "3 failed tries · ") is never cut: it drops its separator first, then goes whole.
 const runs = (x: number, y: number, size: number, rs: Run[], maxW: number, anchor?: 'end') => {
   let left = maxW
   const out: Run[] = []
   for (const [s, cls, wt] of rs) {
     const w = textWidth(s, size, wt ?? 400)
     if (w <= left) { out.push([s, cls, wt]); left -= w; continue }
+    if (s.endsWith(' · ')) { const bare = s.slice(0, -3); if (textWidth(bare, size, wt ?? 400) <= left) out.push([bare, cls, wt]); break }
     const cut = fit(s, left, size, wt ?? 400)
     if ([...cut.slice(0, -1).trim()].length >= MIN_CUT) out.push([cut, cls, wt])
     else if (out.length) { const [ps, pc, pw] = out[out.length - 1]; out[out.length - 1] = [ps.replace(/ · $/, ''), pc, pw] }
@@ -195,8 +197,8 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   const crabSvg = withCrab(svg(cw, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S' }), 23.25 + indent, 5.5)
   const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
   const read: Run[] = need ? [[`waiting ${waiting(a, now)}`, 'er', 600]] : failed ? [['failed', 'er', 600]] : reading(a, now)
-  // An alert keeps at least half the text width for its message, so a long title cannot push it out.
-  const title = clean(a.title, 60), titleW = alert ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW
+  // A question keeps at least half the text width, so a long title cannot push it out; any other helper keeps its title whole.
+  const title = clean(a.title, 60), titleW = need ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW
   let what: string, tip = msg, cut: boolean
   if (need) {
     // The question follows the title and wraps to a second line, cut there with an ellipsis.
@@ -205,9 +207,11 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
     what = `<text x="${GAP}" y="${y0}" font-size="12" font-weight="600"><tspan class="fg">${xml(t)}</tspan><tspan class="er">${xml(first.slice(t.length))}</tspan></text>`
       + (second ? text(GAP, y0 + 14, 'er', 12, second, { weight: 600 }) : '')
   } else {
-    const rs: Run[] = failed ? [[msg, 'er', 600]] : activityRuns(a, now).map(([s, k]): Run => [s, k === 'fg' ? 'muted' : k])
-    const line: Run[] = [[fit(title, titleW, 12, 600), 'fg', 600], [' ', 'muted'], ...rs]
-    if (failed) cut = runsWidth(line, 12) > textW
+    const t: Run = [fit(title, titleW, 12, 600), 'fg', 600]
+    const rs: Run[] = [[' ', 'muted'], ...(failed ? [[msg, 'er', 600] as Run] : activityRuns(a, now).map(([s, k]): Run => [s, k === 'fg' ? 'muted' : k]))]
+    // A failed helper's reason shows only whole beside its title; when tight it lives in the tooltip and the alt.
+    const line: Run[] = failed && runsWidth([t, ...rs], 12) > textW ? [t] : [t, ...rs]
+    if (failed) cut = line.length === 1
     else ({ tip, cut } = activityLine(a, now, line, textW, 12))
     what = runs(GAP, 20, 12, line, textW)
   }
@@ -247,7 +251,7 @@ const drawItem = (item: PaneItem, W: number, now: number): El => {
     case 'more': return image(`more-${item.section}`, { source: doc(W, 22, text(CRAB + GAP, 15, 'muted', 12, `+${item.count} more`)), alt: `${item.count} more agents`, width: n(W), height: 22 }, false)
     case 'empty': {
       const [cw, ch] = SIZE.crab.L, x = (W - cw) / 2
-      const say = text(W / 2, 76, 'muted', 13, 'No agents yet', { anchor: 'middle' }) + text(W / 2, 94, 'muted', 12, 'Agents you start show up here', { anchor: 'middle' })
+      const say = text(W / 2, 76, 'fg', 13, 'No agents yet', { anchor: 'middle' }) + text(W / 2, 94, 'muted', 12, 'Agents you start show up here', { anchor: 'middle' })
       return image('empty', { source: withCrab(doc(W, 104, say), crab({ role: 'explore', prop: 'none', walk: false, size: 'L' }), x, 52 - ch), alt: 'No agents yet. Agents you start show up here', width: n(W), height: 104 }, false)
     }
   }
@@ -271,8 +275,10 @@ const costsView = (s: SessionStat, W: number): El[] => {
   const back = `<g transform="translate(0 9) rotate(180 5 5)">${icon('chev', 10, 's-muted')}</g>` + runs(16, 18, 12, [['Agents', 'muted']], W - 16)
   const list = (s.turnCosts ?? []).map((c, i, all) => ({ turn: s.turns - (all.length - 1 - i), c })).reverse()
   const sum: Run[] = s.costUsd === null ? [['no reading yet', 'muted']] : [[usd(s.costUsd), 'fg', 600], [` · ${s.turns} turn${s.turns === 1 ? '' : 's'}`, 'muted']]
-  const rows = list.length ? list.map((r, i) => runs(0, 62 + i * 20, 12, [[`turn ${r.turn}`, 'muted'], [' · ', 'muted'], [usd(r.c), 'fg', 600]], W)).join('') : text(0, 62, 'muted', 12, 'No turns yet')
-  const h = 50 + Math.max(1, list.length) * 20
+  // Under a section header, each amount right-aligns where the rows' reading column ends; only the total is bold.
+  const rx = W - PAD - CHEV - GAP, header = text(0, 62, 'muted', 12, `Last ${list.length} turn${list.length === 1 ? '' : 's'}`, { weight: 600 })
+  const rows = list.length ? header + list.map((r, i) => text(0, 84 + i * 20, 'muted', 12, `turn ${r.turn}`) + text(rx, 84 + i * 20, 'fg', 12, usd(r.c), { anchor: 'end' })).join('') : text(0, 62, 'muted', 12, 'No turns yet')
+  const h = list.length ? 72 + list.length * 20 : 70
   const alt = `Session cost ${textOf(sum).replace(' · ', ', ')}${list.length ? `: ${list.map(r => `turn ${r.turn} ${usd(r.c)}`).join(', ')}` : ', no turns yet'}`
   return [
     image('back', { source: doc(W, 28, back), alt: 'Back to the agents', width: n(W), height: 28, press: 'crew', hover: true }, false),

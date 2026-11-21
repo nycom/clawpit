@@ -103,3 +103,6 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Plan bar names its tasks:** the plan bar and the folded mini bars carry each task and its state ("schema done, api done, … merge not started") in their alt and tooltip.
 - **Alert line keeps its words:** the folded agents column's alert line cuts only the agent's name and keeps " needs you" or " failed" whole; with under 6 name characters left it reads only "needs you" or "failed".
 - **So-whats drop whole clauses:** a so-what of clauses joined by " · " (context, this turn, session, the limits) drops whole clauses right to left; a clause that does not fit goes whole, so a number is never cut.
+- **Cuts keep meaning:** a note never takes an ellipsis, a cut never splits a number, and a helper row keeps its title over its reason.
+- **Cost list:** amounts right-aligned in the reading column, only the total bold, under a 'Last N turns' header.
+- **Empty pane:** the title in fg, the hint muted.
