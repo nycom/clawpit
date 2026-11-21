@@ -1,0 +1,21 @@
+import { test, expect } from '@playwright/test'
+import { show, loops, alts } from './harness'
+import { panelTree } from '../../plugin/hooks/panel/draw'
+import { BUDGET } from '../../plugin/hooks/loops'
+import { panelLoopCount, viewOf } from '../../plugin/tests/build'
+
+const SHOTS = ['idle', 'busy', 'hydra', 'needsYou', 'failed', 'both', 'context90', 'limitAhead', 'sizeGauges', 'sizeLine', 'codeColumns'] as const
+for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (const w of [60, 96] as const)   // narrow, wide
+  test(`panel: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
+    await show(page, panelTree(viewOf(s, { bodyColumns: w })), { surface: 'panel', widthCells: w, theme })
+    await expect(page).toHaveScreenshot(`panel-${s}-${theme}-${w}.png`, { fullPage: true })
+  })
+test('panel: nothing animates while idle', async ({ page }) => {
+  await show(page, panelTree(viewOf('idle')), { surface: 'panel', widthCells: 96, theme: 'dark', motion: true }); expect(await loops(page)).toEqual({ drawings: 0, eased: 0 })
+})
+for (const s of ['hydra', 'needsYou', 'failed', 'both', 'sizeGauges', 'sizeLine'] as const)
+  test(`panel: ${s} loops match the plan and the budget`, async ({ page }) => {
+    const v = viewOf(s); await show(page, panelTree(v), { surface: 'panel', widthCells: 96, theme: 'dark', motion: true })
+    const l = await loops(page); expect(l.eased).toBe(0); expect(l.drawings).toBe(panelLoopCount(v)); expect(l.drawings).toBeLessThanOrEqual(BUDGET.max)
+  })
+test('panel: every Svg and Client has a non-empty alt', () => { for (const s of SHOTS) expect(alts(panelTree(viewOf(s))).every(a => a.trim().length > 0)).toBe(true) })
