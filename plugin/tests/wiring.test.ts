@@ -18,7 +18,7 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: () => unkn
   on('store.set', (_$, e) => { storeSets.push(e.key); store.set(e.key, e.value); return { value: undefined } })
   on('store.keys', () => ({ value: [...store.keys()] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.usage', () => ({ value: (o.usage ?? (() => USAGE))() as never }))
+  on('session.usage', async () => ({ value: (await (o.usage ?? (() => USAGE))()) as never }))
   if (o.surfaces) { const surfaces = o.surfaces; on('session.surfaces', () => ({ value: surfaces() as never })) }
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
@@ -74,6 +74,27 @@ test('wiring: turn.start then turn.complete fills the session figures and idleSi
   const s = w.last('stats') as { turn: unknown; session: { turns: number; tokens: number; agentMs: number; lastTurnUsd: number; costUsd: number } }
   expect(s.turn).toBeNull()
   expect(s.session).toEqual({ costUsd: 1.25, lastTurnUsd: 0.25, turns: 1, tokens: 126, agentMs: 120_000, turnCosts: [0.25] })
+})
+
+// Two hooks in flight at once: a main tool call waits on its usage reading while the turn starts.
+test('wiring: a tool call waiting on usage does not undo a turn that starts meanwhile', async ($, on) => {
+  let usd = 1, hold = false, release = () => {}, reached = () => {}
+  const atUsage = new Promise<void>(r => { reached = r })
+  const w = setup(on, { usage: async () => {
+    if (hold) { hold = false; reached(); await new Promise<void>(r => { release = r }) }
+    return { ...USAGE, cost: { usd } }
+  } })
+  on('tool.call', () => ({ result: {} }) as never)
+  await start($)
+  hold = true
+  const call = $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
+  await atUsage
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)
+  release()
+  await call
+  usd = 1.25
+  await done($, undefined)
+  expect((w.last('stats') as { session: { lastTurnUsd: number | null } }).session.lastTurnUsd).toBe(0.25)
 })
 
 test('wiring: an answered agent turn records its duration once, a second run of the same agent does not', async ($, on) => {

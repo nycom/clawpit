@@ -202,7 +202,8 @@ export const register: Register = (on, options) => {
       if (t) tests = t
       else if (isEdit(e.tool) && !isError) tests = null
       if (tests !== before) await retick($)
-      if (e.agentId === undefined) turn = onCost(turn, usdOf(await $.session.usage()))
+      // Awaited into a local first: `turn` is read only after the await, so a hook that ran meanwhile is not undone.
+      if (e.agentId === undefined) { const usd = usdOf(await $.session.usage()); turn = onCost(turn, usd) }
     } catch { errors += 1 }
     return out
   })
@@ -235,7 +236,8 @@ export const register: Register = (on, options) => {
       if (e.agentId === undefined) {
         let usd = turn.session.costUsd
         try { usd = usdOf(await $.session.usage()) } catch { errors += 1 }
-        turn = onStart(turn, await $.clock.now(), usd)
+        const at = await $.clock.now()
+        turn = onStart(turn, at, usd)
         wake?.cancel(); wake = null
         await update($, idleSince, () => null)
         await writeStats($)
@@ -247,7 +249,7 @@ export const register: Register = (on, options) => {
 
   // `think` is the model's turn before any tool of the step runs, so it is set as the step starts.
   on('turn.step', async function* ($, e, next) {
-    try { await boot($); facts = onThink(facts, e.agentId, await $.clock.now()) } catch { errors += 1 }
+    try { await boot($); const at = await $.clock.now(); facts = onThink(facts, e.agentId, at) } catch { errors += 1 }
     return yield* next(e)
   })
 
@@ -289,7 +291,8 @@ export const register: Register = (on, options) => {
     try {
       await boot($)
       if (out.value?.isSet && Array.isArray(e.value)) {
-        logs = diff(logs, seen, e.value, parents, await $.clock.now())
+        const at = await $.clock.now()
+        logs = diff(logs, seen, e.value, parents, at)
         seen = e.value
         await retick($)
       }
