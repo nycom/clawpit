@@ -4,7 +4,7 @@ import Image from '../hooks/client/image'
 import type { ImageProps } from '../types'
 
 // The module is driven as the desktop drives it: one surface whose listeners, posts and state are recorded.
-// A Client only loads from a hooks module that draws it, and clawpit draws nothing yet, so the module is called directly.
+// The panel draws no hover image (the pane does), so the module is called directly; presses through the panel are in panel-hook.test.tsx.
 const surfaceFor = () => {
   const s = {
     posts: [] as unknown[], state: undefined as { isHover: boolean } | undefined,

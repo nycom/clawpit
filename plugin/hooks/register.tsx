@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, SessionRateLimit, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderNode, SessionRateLimit, Timer } from 'claude-code'
 import type { SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
 import { crewOf } from './model'
 import { pickLoops } from './loops'
 import { nextSize, parseSize, settle } from './panel/fold'
-import type { PanelView } from './panel/draw'
+import { COMPACT_KEY, panelTree, type PanelView } from './panel/draw'
+import type { El } from './draw'
 import type { PaneView } from './pane/draw'
 import { emptyFacts, isEdit, linesOf, onThink, onTool } from './track/activity'
 import { diff, type Logs } from './track/steplog'
@@ -15,7 +16,7 @@ import { paceOf } from './track/pace'
 import { contextOf, pushTurn, type CtxInput } from './track/context'
 import { codeOf } from './track/code'
 
-// Wiring only: the atoms, the observers that feed the trackers, the Client presses, and `view`.
+// Wiring only: the atoms, the observers that feed the trackers, the render hooks, the Client presses, and `view`.
 
 const PANE_ID = 'clawpit-agents'
 const UI0: Ui = { size: 'full', open: null, shut: ['ended'], paneOpen: false }
@@ -104,6 +105,12 @@ const loadStore = async ($: EngineInterface) => {
     if (Array.isArray(v)) history[k.slice(4)] = v.filter((n): n is number => typeof n === 'number' && Number.isFinite(n)).slice(-20)
   }
 }
+
+// Plain Box and Text data, so it cannot fail the way the drawing did.
+const failedLine = (kind: string): RenderElement => ({
+  type: 'Box', props: { key: 'clawpit-failed', flexDirection: 'column' },
+  children: [{ type: 'Text', props: {}, children: [`clawpit could not draw this panel: ${kind}`] }],
+})
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -213,6 +220,24 @@ export const register: Register = on => {
     } catch { errors += 1 }
     return out
   })
+
+  // clawpit draws its own row only, never what `next(e)` returns; on desktop savvy's band stands down (takeover).
+  // shortcut: vscode and mobile pass through like the terminal (savvy still draws there, takeover is desktop-only).
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    const table = $.ui.resolve(e), { Client } = table
+    const compact = () => { void $.command.run({ command: 'compact' }).catch(() => { errors += 1 }) }
+    // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
+    // loads a surface module only from a <Client> written here with a literal path.
+    const live = (n: El | string): RenderNode => {
+      if (typeof n === 'string') return n
+      const p = n.props ?? {}
+      if (n.type === 'Client') return <Client key={String(p.key)} module="./client/image.tsx" props={p.props} />
+      const tag = (table as unknown as Record<string, (props: never) => RenderNode>)[n.type]
+      return h(tag, n.type === 'Button' && p.key === COMPACT_KEY ? { ...p, onPress: compact } : p, ...(n.children ?? []).map(live)) as RenderNode
+    }
+    return live(panelTree((await view($, e.props.bodyColumns)).panel))
+  }).catch((_$, _e, next) => { errors += 1; return failedLine(next.error.kind) })
 
   on('ui.message', async ($, e) => {
     try {
