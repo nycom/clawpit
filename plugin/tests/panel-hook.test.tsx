@@ -12,7 +12,7 @@ const BAND = { bodyColumns: 120, hasSurvey: false, maxRows: 5 }
 
 // The engine beneath clawpit: a frozen clock, a store in memory, the answers each event needs,
 // a record of every atom write and of every command run.
-const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: unknown } = {}) => {
+const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: unknown; surfaces?: string[] } = {}) => {
   const clock = mock.clock(on, { now: T0 })
   const store = new Map<string, unknown>(Object.entries(o.store ?? {}))
   const storeSets: string[] = []
@@ -21,6 +21,7 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: unknown } 
   on('store.keys', () => ({ value: [...store.keys()] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.usage', () => ({ value: (o.usage ?? USAGE) as never }))
+  if (o.surfaces) { const surfaces = o.surfaces; on('session.surfaces', () => ({ value: surfaces as never })) }
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   let agent = 0
@@ -241,11 +242,11 @@ test('wiring: the size press cycles and persists; a bad stored size is full', as
   await ui.unmount()
 })
 
-// A plugin reload inside a running session fires no session.start: the first event does the start-up work.
-test('wiring: without session.start, the first desktop render sets takeover and restores the stored size', async ($, on) => {
-  const w = setup(on, { store: { size: 'gauges' } })
+// A plugin reload inside a running session fires no session.start: the first observer does the start-up work.
+test('wiring: without session.start, the first observer on a desktop session sets takeover and restores the stored size', async ($, on) => {
+  const w = setup(on, { store: { size: 'gauges' }, surfaces: ['desktop'] })
   const ui = await band($)
-  await w.clock.advance(0)
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)
   expect(w.last('takeover')).toBe(true)
   expect(await sizeOf(ui)).toBe('agents folded')
   await ui.unmount()

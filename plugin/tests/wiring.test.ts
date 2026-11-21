@@ -10,7 +10,7 @@ const USAGE = { startedAt: T0, context: { window: 200_000 }, rateLimits: [], cos
 
 // The engine beneath clawpit: a frozen clock, a store in memory whose writes are counted, the answers
 // each event needs, and a record of every atom write.
-const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: () => unknown } = {}) => {
+const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: () => unknown; surfaces?: () => string[] } = {}) => {
   const clock = mock.clock(on, { now: T0 })
   const store = new Map<string, unknown>(Object.entries(o.store ?? {}))
   const storeSets: string[] = []
@@ -19,7 +19,9 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: () => unkn
   on('store.keys', () => ({ value: [...store.keys()] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.usage', () => ({ value: (o.usage ?? (() => USAGE))() as never }))
+  if (o.surfaces) { const surfaces = o.surfaces; on('session.surfaces', () => ({ value: surfaces() as never })) }
   on('session.measure', (_$, e) => ({ changed: e.changed }))
+  on('session.attach', (_$, e) => ({ clientId: e.clientId }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   let agent = 0
@@ -206,11 +208,35 @@ test('wiring: on the desktop surface takeover is true', async ($, on) => {
 
 test('wiring: the start-up work runs once', async ($, on) => {
   let usage = 0
-  const w = setup(on, { usage: () => (usage += 1, USAGE) })
-  const ui = await $.ui.mount({ plugin: 'clawpit', surface: 'desktop', component: 'AbovePrompt', props: { bodyColumns: 120, hasSurvey: false, maxRows: 5 } as never })
-  await Promise.all([ui.redraw({ bodyColumns: 100, hasSurvey: false, maxRows: 5 } as never), spawn($, 'fix the cache')])
-  await w.clock.advance(0)
+  const w = setup(on, { usage: () => (usage += 1, USAGE), surfaces: () => ['desktop'] })
+  await Promise.all([spawn($, 'fix the cache'), spawn($, 'fix the tests')])
   expect(usage).toBe(1)
   expect(w.last('takeover')).toBe(true)
-  await ui.unmount()
+})
+
+test('wiring: after a reload, the first observer call on a desktop session sets takeover', async ($, on) => {
+  const w = setup(on, { surfaces: () => ['desktop'] })
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)
+  expect(w.last('takeover')).toBe(true)
+})
+
+test('wiring: a terminal-only session never sets takeover', async ($, on) => {
+  const w = setup(on, { surfaces: () => ['terminal'] })
+  on('tool.call', () => ({ result: {} }) as never)
+  await start($, 'terminal')
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
+  await done($, undefined)
+  expect(w.mine('takeover')).toEqual([])
+})
+
+test('wiring: a desktop surface attaching sets takeover', async ($, on) => {
+  let roster = ['terminal']
+  const w = setup(on, { surfaces: () => roster })
+  await start($, 'terminal')
+  expect(w.mine('takeover')).toEqual([])
+  roster = ['terminal', 'desktop']
+  const out = await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(out).toEqual({ clientId: 'desktop:default' })
+  expect(w.last('takeover')).toBe(true)
 })

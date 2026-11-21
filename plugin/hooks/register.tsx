@@ -107,18 +107,19 @@ const loadStore = async ($: EngineInterface) => {
   }
 }
 
-// Once per plugin load: a reload inside a running session fires no session.start, so the first event runs it there.
+// Written only when not yet true, so the repaint it causes schedules nothing more: no render loop.
+const takeOver = async ($: EngineInterface) => {
+  try { if ((await read($, takeover)) !== true) await update($, takeover, () => true) } catch { errors += 1 }
+}
+
+// Once per plugin load: a reload inside a running session fires no session.start, so the first observer runs it there.
 const boot = ($: EngineInterface) => (booted ??= (async () => {
+  try { if ((await $.session.surfaces()).includes('desktop')) await takeOver($) } catch { errors += 1 }
   try { await loadStore($) } catch { errors += 1 }
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
 })())
-
-// Written only when not yet true, so the repaint it causes schedules nothing more: no render loop.
-const takeOver = async ($: EngineInterface) => {
-  try { if ((await read($, takeover)) !== true) await update($, takeover, () => true) } catch { errors += 1 }
-}
 
 // Plain Box and Text data, so it cannot fail the way the drawing did.
 const failedLine = (kind: string): RenderElement => ({
@@ -133,6 +134,12 @@ export const register: Register = on => {
     booted = null
     if (e.surface === 'desktop') await takeOver($)
     await boot($)
+    return out
+  })
+
+  on('session.attach', { surface: 'desktop' }, async ($, e, next) => {
+    const out = await next(e)
+    await takeOver($)
     return out
   })
 
@@ -242,8 +249,6 @@ export const register: Register = on => {
   // shortcut: vscode and mobile pass through like the terminal (savvy still draws there, takeover is desktop-only).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
-    // A write is refused while this hook draws, so the start-up work runs just after it.
-    if (!booted || (await read($, takeover)) !== true) $.clock.after(0, () => void takeOver($).then(() => boot($)))
     const table = $.ui.resolve(e), { Client } = table
     const compact = () => { void $.command.run({ command: 'compact' }).catch(() => { errors += 1 }) }
     // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
