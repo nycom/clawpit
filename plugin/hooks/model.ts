@@ -60,11 +60,11 @@ export const crewOf = (i: CrewInput): Crew => {
   const byId = new Map(i.runs.map(r => [r.id, agentOf(i, r)]))
   const all = [...byId.values()]
   const top: CrewAgent[] = []
+  const liveParent = (a: CrewAgent) => { const p = Object.hasOwn(i.parents, a.id) ? byId.get(i.parents[a.id]) : undefined; return isLive(p) ? p : undefined }
   for (const a of all) {
-    const parent = Object.hasOwn(i.parents, a.id) ? byId.get(i.parents[a.id]) : undefined
-    // The pane draws one level of helpers, so a parent that is itself nested does not take children.
-    const grand = parent && Object.hasOwn(i.parents, parent.id) ? byId.get(i.parents[parent.id]) : undefined
-    if (parent && isLive(parent) && !isLive(grand)) { a.parentId = parent.id; parent.helpers.push(a) } else top.push(a)
+    // The pane draws two levels of helpers, so a parent nested two deep does not take children.
+    const parent = liveParent(a), grand = parent && liveParent(parent)
+    if (parent && !(grand && liveParent(grand))) { a.parentId = parent.id; parent.helpers.push(a) } else top.push(a)
   }
   for (const a of all) a.helpers.sort(order)
   top.sort(order)
@@ -80,9 +80,12 @@ export const crewOf = (i: CrewInput): Crew => {
   }
 }
 
+// Every helper under an agent, nested ones included, in pane order.
+export const helpersOf = (a: CrewAgent): CrewAgent[] => (a.helpers ?? []).flatMap(h => [h, ...helpersOf(h)])
+
 // Needs you and failed over the agents and their helpers: a helper that waits on you needs you as much as its parent would.
 export const alertsOf = (crew: Crew): { need: number; failed: number } => {
-  const hs = crew.agents.flatMap(a => a.helpers)
+  const hs = crew.agents.flatMap(helpersOf)
   return { need: crew.counts.need + hs.filter(h => h.state === 'need').length, failed: crew.counts.failed + hs.filter(h => h.state === 'failed').length }
 }
 
