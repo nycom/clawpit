@@ -18,6 +18,7 @@ export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; bus
 // ---------- text ----------
 // shortcut: the kit's width table runs up to ~10% short of SF Pro, so drawn widths add 10%; drop SLACK once the table is measured.
 const SLACK = 1.1
+const FIRST_X = 4 // the first column sits a little in from the band's left edge
 const widthOf = (s: string, size: number, w?: Weight) => textWidth(s, size, w) * SLACK
 const fitTo = (s: string, max: number, size: number, w?: Weight) => fitText(s, max / SLACK, size, w)
 type Weight = 400 | 600 | 700
@@ -125,7 +126,7 @@ const cellOf = (key: ColumnKey, v: PanelView): Cell | null => {
 const altOf = (c: Cell) => `${c.label}: ${c.value}${c.small ? ` ${c.small}` : ''}${c.so.map(r => r[0]).join('') ? `, ${c.so.map(r => r[0]).join('')}` : ''}`
 
 const columnImage = (key: ColumnKey, c: Cell, w: number, first: boolean): El => {
-  const x0 = first ? 0 : 12, max = w - x0 - 4
+  const x0 = first ? FIRST_X : 12, max = w - x0 - 4
   const vx = x0 + (c.art ? c.art.w + 6 : 0)
   const body = (first ? '' : `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>`)
     + text(x0, 11, c.label, 11, 'muted', { max })
@@ -143,7 +144,7 @@ const COMPACT_H = 18, COMPACT_W = 6 + 12 + 4 + widthOf('compact', 11, 600) + 6, 
 const compactOf = (v: PanelView, c: Cell): { el: (iconOnly: boolean) => El; cells: number; iconCells: number } | null => {
   const ctx = v.stats.context
   if (!ctx || ctx.pct < 50) return null
-  const left = Math.ceil(((c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + 4) / CELL_PX)
+  const left = Math.ceil((FIRST_X + (c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + 4) / CELL_PX)
   const alt = ctx.alarm ? `Compact context now: ${contextText(ctx, v.stats.session.turns)}` : 'Compact context: runs /compact'
   const el = (iconOnly: boolean): El => {
     const w = +(iconOnly ? COMPACT_ICON_W : COMPACT_W).toFixed(2)
@@ -397,7 +398,7 @@ const oneLineRow = (v: PanelView): El => {
 type Need = { cells: number; floor: number; head: number; claims: boolean; warn: boolean; priority: number }
 const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
   if (!c) return { cells: Infinity, floor: Infinity, head: 0, claims: false, warn: false, priority }
-  const x0 = first ? 0 : 12, head = (c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + (c.small ? 4 + widthOf(c.small, 12) : 0)
+  const x0 = first ? FIRST_X : 12, head = (c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + (c.small ? 4 + widthOf(c.small, 12) : 0)
   const cellsFor = (so: Run[]) => Math.ceil((x0 + 4 + Math.max(widthOf(c.label, 11), head, runsWidth(so, 11))) / CELL_PX)
   const [s, p, wt] = c.so.at(-1)!, cells = cellsFor(c.so)
   const floor = c.whole ? cellsFor([...c.so.slice(0, -1), [s.split(' · ')[0], p, wt]]) : cells
