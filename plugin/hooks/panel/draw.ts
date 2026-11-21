@@ -394,7 +394,7 @@ const oneLineRow = (v: PanelView): El => {
     const m = mascotArt(crew, v.loops, 'S'), used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX
     const room = W - used - m.w - 6, say = room >= 40 ? sayFit(m.f, room, 13) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
     const body = at(0, 1, m.body) + (say ? text(m.w + 6, 18, say, 13, m.f.tone, { w: m.f.w }) : '')
-    children.push(image('mascot', { source: doc(w, LINE_H, body, m.animated), alt: `Agents: show them all. ${crew.agents.length} agents, ${m.f.say}`, width: w, height: LINE_H, press: 'open' }, true))
+    children.push(image('mascot', { source: doc(w, LINE_H, body, m.animated), alt: `Agents: show them all. ${crew.agents.length} ${crew.agents.length === 1 ? 'agent' : 'agents'}, ${m.f.say}`, width: w, height: LINE_H, press: 'open' }, true))
   }
   children.push(toggle(v))
   return { type: 'Box', props: { key: 'line', flexDirection: 'row', alignItems: 'center', gap: 1 }, children }
@@ -418,7 +418,9 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
 // take an even share and claim nothing.
 const agentsNeed = (v: PanelView, priority: number): Need => {
   const solo = v.crew.agents.length === 1 ? v.crew.agents[0] : null
-  const cells = solo ? Math.ceil((12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600) + 4) / CELL_PX) : Infinity
+  // The state line under the name counts too, so a short title never leaves its note to be cut.
+  const f = solo ? faceOf(v.crew) : null
+  const cells = solo && f ? Math.ceil(Math.max(12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600), 12 + widthOf(f.say, 11, f.w)) / CELL_PX + 4 / CELL_PX) : Infinity
   return { cells, floor: Infinity, head: 0, claims: !!solo, warn: false, priority }
 }
 // An even share each; then the compact chip's cells, taken even when no column has slack; then the warnings, then the

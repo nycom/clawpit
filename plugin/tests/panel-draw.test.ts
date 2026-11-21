@@ -602,3 +602,10 @@ test('panel: folded, a lone agent\'s column claims the cells for its whole name;
   expect(value(panelTree(viewOf('oneNeedsYou', { bodyColumns: 96 })))).toBe('e2e tests')
   expect(value(panelTree(viewOf('oneRunning', { bodyColumns: 140 })))).toBe('savvy-progress implement')
 })
+
+test('panel: a lone struggling agent with a short title keeps its note whole in the folded column', () => {
+  const v = viewOf('sizeGauges', { bodyColumns: 60 }), a = { ...v.crew.agents.find(x => x.state === 'running')!, title: 'a', struggling: true, tries: 3 }
+  const texts = [...sourceOf(panelTree({ ...v, crew: { ...v.crew, agents: [a] } } as typeof v), 'mascot').matchAll(/<text[^>]*>(.*?)<\/text>/g)].map(m => words(m[1]))
+  expect(texts.some(t => t.includes('3 failed tries'))).toBe(true)
+  expect(texts.some(t => t.includes('…'))).toBe(false)
+})
