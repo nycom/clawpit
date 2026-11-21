@@ -1154,12 +1154,12 @@ git commit -m "panel: wire the size toggle and the folded agents column"
 
 **Interfaces:**
 - Consumes: `view`, `paneTree`, the presses.
-- Produces: `on('ui.render', { component: 'Pane', requestId: 'clawpit-agents' }, …)` with a `.catch` failure line; auto-open: `$.ui.open({ id: 'clawpit-agents', title: 'Agents' })` on the first `agent.spawn` of each crew (keyed by the flow title, or `Subagents`), once; `ui.paneOpen` follows `ui.open` and `ui.close` for that id.
+- Produces: `on('ui.render', { component: 'Pane', requestId: 'clawpit-agents' }, …)` with a `.catch` failure line; auto-open: `$.ui.open({ id: 'clawpit-agents', title: 'Agents' })` on the first `agent.spawn` of the session, once (LOCKED, Build decisions); a closed pane is opened again only by the `open` press; `ui.paneOpen` follows `ui.open` and `ui.close` for that id.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-test('pane hook: the first spawn opens the pane once; a second spawn of the same crew does not reopen a closed pane', …)
+test('pane hook: the first spawn of the session opens the pane once; no later spawn, flow or crew reopens a closed pane; the open press does', …)
 test('pane hook: pressing a row opens its drawer; pressing it again closes it; another row moves it', …)
 test('pane hook: pressing the helpers toggle and the Ended toggle fold and unfold', …)
 test('pane hook: closing the pane clears paneOpen, and the ring leaves the loop count', …)
@@ -1174,6 +1174,7 @@ test('pane hook: 80 agents mount within the bounds on desktop', …)
 - [ ] **Step 5: App check**, task name `pane`. States: `empty`, `running` (three agents, one with two helpers), `needs-you`, `failed` (with a reason and an error line), `both`, `drawer` (click a row with computer use), `helpers-shut`, `ended-open`; dark and light.
 - [ ] **Step 6: By-eye gate** (maintainer):
   - [ ] The pane opens beside the file tree without taking the front tab from it more than once.
+  - [ ] With the sidebar open and the pane docked, the session header still shows its Terminal and Browser buttons (the header hides them below about 448px).
   - [ ] The reading column is flush right and the same width on every row.
   - [ ] The needs-you ring pulses on the beat, inside the row, and only on one row.
   - [ ] A failed row is still. The error line renders in a monospace face.

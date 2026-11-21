@@ -77,6 +77,9 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **A helper that waits on you** needs you: it counts in "N needs you", its row is tinted and reads "waiting Nm" with its question, and a folded helpers toggle reads "N helpers · M needs you" in `er`, so an alert always points at something visible. It stays under its parent; the ring stays on top-level rows.
 - **A helper that failed** gets no chip of its own in the panel's chip row: only a helper that waits on you does. A failed helper still dresses the folded crab, lights the toggle's red dot and is named in its alt text, and shows in the pane under its parent.
 - **Crew bar:** a helper that waits on you gets a red segment of its own, after the top-level needs-you ones, so the bar adds up to the summary's counts.
+- **Ages, everywhere:** whole minutes, "<1m" or "Nm" (the drawer, the waiting age, the tests column's "<1m ago"). This replaces ALIGNMENT W2's "Ns".
+- **Alert chips that do not fit:** red chips fill one row; any further needs-you or failed agents collapse into a red "+N need you" chip of their own (white on red), never into the muted "+N more", which stays for normal chips.
+- **The Agents pane opens by itself once per session,** on the first agent of the session. Once closed it stays closed until the folded agents column is pressed, or the next session. A pane that re-opens by itself narrows the app header and hides its buttons.
 - **Helpers of helpers** nest one more level under their helper, on the same tree line.
 - **Step blocks:** at most 11 in the reading column; more steps fill them in proportion.
 - **Pane summary:** when it does not fit one line, the cost and the time left move to a second line.
