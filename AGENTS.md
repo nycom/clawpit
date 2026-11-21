@@ -48,6 +48,7 @@ The decisions are in [`docs/decisions/`](docs/decisions/). Ask before bending on
 
 ## Quality gate, before asking for review
 - Tests green: `claude plugin test plugin`, `claude plugin validate plugin`, `npm run test:visual` and `npm run test:scripts`.
+- Off macOS, `npm run test:visual` skips the `@shot` screenshot tests (their baselines are macOS renders) and runs the structural ones.
 - The leak check is clean.
 - The previews are refreshed if anything visual changed.
 - Every unverified item is listed in the PR.
