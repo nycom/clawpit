@@ -13,3 +13,4 @@ test('tokens: cssOf emits only the classes used, dark inside the media query', (
 test('tokens: an animated image ends with the reduced-motion rule', () =>
   expect(cssOf(['fg'], true)).toContain('@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}'))
 test('tokens: a still image carries no animation rule', () => expect(cssOf(['fg'])).not.toContain('animation'))
+test('tokens: the grow one-shot scales each segment about its own box', () => expect(cssOf(['grow'], true)).toContain('.grow{transform-box:fill-box;'))
