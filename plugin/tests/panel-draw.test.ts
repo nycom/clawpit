@@ -200,20 +200,21 @@ test('panel: the folded alert line keeps " needs you" and " failed" whole and cu
 
 test('panel: a two-clause so-what drops whole clauses right to left, never cutting a number', () => {
   const v = viewOf('hydra'), soOf = (t: El, key: string) => lastText(sourceOf(t, key))
-  // At 60 cells the turn column drops its cost clause anyway, so the long clause claims the cells above the turn's floor.
-  const ctx = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789 } } }))
+  // At 88 cells the tokens and session columns have cells to spare, so the long clause claims them.
+  const ctx = panelTree(viewOf('hydra', { bodyColumns: 88, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789 } } }))
   expect(soOf(ctx, 'col-context')).toBe('~123456789 turns · 34% msgs')
-  expect(soOf(ctx, 'col-turn')).toBe('+38 −6')
+  expect(soOf(ctx, 'col-turn')).toBe('+38 −6 · ≈$0.42')
   // Past those cells the long clause cannot claim, so it goes whole.
   const ctxWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789_012 } } }))
   expect(soOf(ctxWide, 'col-context')).toBe('~123456789012 turns')
-  const ses = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
+  const ses = panelTree(viewOf('hydra', { bodyColumns: 74, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
   expect(soOf(ses, 'col-session')).toBe('last turn $123456789')
   // One clause that does not fit goes whole: never 'last turn $12…' nor 'last turn…'.
-  const sesWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789_012_345 } } }))
+  const sesWide = panelTree(viewOf('hydra', { bodyColumns: 74, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789_012_345 } } }))
   expect(soOf(sesWide, 'col-session')).toBe('')
-  const turn = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, turn: { ...v.stats.turn!, costUsd: 123_456.78 } } }))
-  expect(soOf(turn, 'col-turn')).toBe('+38 −6')
+  // A long cost claims the spare cells whole, never '$12…'.
+  const turn = panelTree(viewOf('hydra', { bodyColumns: 88, stats: { ...v.stats, turn: { ...v.stats.turn!, costUsd: 123_456.78 } } }))
+  expect(soOf(turn, 'col-turn')).toBe('+38 −6 · $123457')
   const whole = ['~7 turns · 34% msgs', '~7 turns', 'auto-compacts at 97%', 'last turn $2.46', 'on pace for 58%', 'on pace for 131%', '+38 −6 · ≈$0.42', '+38 −6', '']
   for (const s of ['hydra', 'context90', 'limitAhead'] as const) for (const bodyColumns of [46, 60, 88, 96]) {
     const t = panelTree(viewOf(s, { bodyColumns }))
@@ -222,10 +223,13 @@ test('panel: a two-clause so-what drops whole clauses right to left, never cutti
 })
 
 test('panel: a column that drops a clause anyway gives up the cells above its floor', () => {
-  const t = panelTree(viewOf('context90', { bodyColumns: 60 })), soOf = (key: string) => lastText(sourceOf(t, key))
+  // Under three turns there is no tokens column, so at 74 cells the turn column is the one squeezed beside Compact.
+  const s = viewOf('context90').stats, t = panelTree(viewOf('context90', { bodyColumns: 74, stats: { ...s, session: { ...s.session, turns: 2 } } }))
+  const soOf = (key: string) => lastText(sourceOf(t, key))
+  expect(soOf('col-turn')).toBe('+38 −6')
   expect(soOf('col-7d')).toBe('on pace for 131%')
   expect(soOf('col-session')).toBe('last turn $2.46')
-  expect(cols(t).map(k => find(t, k)!.props!.width as number).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(56)
+  expect(cols(t).map(k => find(t, k)!.props!.width as number).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(70)
 })
 
 test('panel: the failed chip pulses only while armed', () => {
@@ -485,17 +489,22 @@ test('panel: at 60 cells the 7d warning so-what survives beside Compact', () => 
 test('panel: spare width goes to the column whose clauses would drop, warn first', () => {
   const v = viewOf('hydra'), at = (stats: typeof v.stats) => panelTree(viewOf('hydra', { bodyColumns: 60, stats }))
   const sum = (t: El) => cols(t).reduce((a, k) => a + colWidth(t, k), 0)
-  // Below 50%, no Button: the even share (14) is one cell short for the context so-what, and the session column has two over.
+  // Below 50%, no Button: the even share (14) is one cell short for the context so-what, and the tokens column has cells over.
   const roomy = at({ ...v.stats, context: { ...v.stats.context!, pct: 40 } })
   expect(colWidth(roomy, 'col-context')).toBe(15); expect(lastText(sourceOf(roomy, 'col-context'))).toBe('~7 turns · 34% msgs')
-  expect(colWidth(roomy, 'col-session')).toBe(13); expect(lastText(sourceOf(roomy, 'col-session'))).toBe('last turn $2.46')
-  expect(words(sourceOf(roomy, 'col-turn'))).toContain('+38 −6 · ≈$0.42'); expect(lastText(sourceOf(roomy, 'col-7d'))).toBe('on pace for 131%')
+  expect(colWidth(roomy, 'col-tokens')).toBe(13); expect(lastText(sourceOf(roomy, 'col-tokens'))).toBe('44 turns')
+  expect(lastText(sourceOf(roomy, 'col-7d'))).toBe('on pace for 131%')
   expect(sum(roomy)).toBe(60 - 4)
-  // With the Button the row is one cell short: the session gives its slack, then the amber warning is the last to give.
+  // With the Button the tokens column gives its slack and the amber warning keeps its cells.
   const calm = { ...v.stats, limits: v.stats.limits.map(l => (l.kind === 'seven_day' ? { ...l, ahead: false } : l)) }
-  const hot = at(v.stats), still = at(calm)
-  for (const t of [hot, still]) { expect(colWidth(t, 'col-session')).toBe(12); expect(lastText(sourceOf(t, 'col-session'))).toBe('last turn $2.46'); expect(sum(t)).toBe(60 - 4) }
-  expect(lastText(sourceOf(hot, 'col-7d'))).toBe('on pace for 131%'); expect(words(sourceOf(hot, 'col-turn'))).not.toContain('≈$0.42')
+  const hot = at(v.stats)
+  expect(colWidth(hot, 'col-tokens')).toBe(11); expect(lastText(sourceOf(hot, 'col-tokens'))).toBe('44 turns'); expect(sum(hot)).toBe(60 - 4)
+  expect(lastText(sourceOf(hot, 'col-7d'))).toBe('on pace for 131%')
+  // Folded at 74 cells no column has slack left for the Button: the amber warning is the last to give.
+  const folded = (stats: typeof v.stats) => panelTree(viewOf('hydra', { bodyColumns: 74, stats, ui: { ...v.ui, size: 'gauges' } }))
+  const warm = folded(v.stats), still = folded(calm)
+  for (const t of [warm, still]) expect(sum(t)).toBe(74 - 4)
+  expect(lastText(sourceOf(warm, 'col-7d'))).toBe('on pace for 131%')
   // With the limit calm, the lowest priority column gives instead: the 7d limit.
-  expect(words(sourceOf(still, 'col-turn'))).toContain('+38 −6 · ≈$0.42'); expect(lastText(sourceOf(still, 'col-7d'))).toBe('')
+  expect(colWidth(still, 'col-7d')).toBe(13); expect(lastText(sourceOf(still, 'col-7d'))).toBe('')
 })

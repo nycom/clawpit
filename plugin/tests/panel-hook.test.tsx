@@ -101,9 +101,9 @@ test('panel hook: bodyColumns sets the column count', async ($, on) => {
   await $.turn.start({ text: 'go', turnId: 'm' } as never)
   await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
   const ui = await band($, 'desktop', { bodyColumns: 46 })
-  expect(await columns(ui)).toEqual(['context', 'turn', '5h'])
+  expect(await columns(ui)).toEqual(['context', '5h', '7d'])
   await ui.redraw({ ...BAND, bodyColumns: 88 } as never)
-  expect(await columns(ui)).toEqual(['context', 'turn', '5h', '7d', 'session', 'tests'])
+  expect(await columns(ui)).toEqual(['context', '5h', '7d', 'session', 'turn', 'tests'])
   await ui.unmount()
 })
 

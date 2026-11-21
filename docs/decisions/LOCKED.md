@@ -19,12 +19,12 @@ Plan writing is deferred: the maintainer asked to do the panel above the prompt 
 
 **Mockup:** `panel-above-prompt.html`. ponytail's band is switched off. Its information is kept (context, cost, tokens, agent time); its buttons are not.
 
-**Dynamic columns.** Each column appears only when it has something to say, ranked by priority. The column count fits the width: about one per 128px, between 2 and 6.
+**Dynamic columns.** Each column appears only when it has something to say, ranked by priority. The column count fits the width: about one per 128px, between 2 and 6. (ranking replaced 2026-11-21 by "Stable column order")
 - **context:** always shown. A dial with a grey base arc; the so-what reads "~N turns · M% msgs". At 90% and above it turns red and reads "auto-compacts at 97%", and "Compact now" appears.
 - **this turn:** only while busy. The clock, +/− lines, and ≈ cost.
-- **5h and 7d:** low priority while calm. They jump forward when ≥ 50% or ahead of pace, in amber. Each dial has a dashed ghost needle at the on-pace point.
+- **5h and 7d:** low priority while calm. They jump forward when ≥ 50% or ahead of pace, in amber. Each dial has a dashed ghost needle at the on-pace point. (ranking replaced 2026-11-21 by "Stable column order")
 - **session:** cost and last-turn cost.
-- **tokens and agent time:** after 3 turns. These step aside first.
+- **tokens and agent time:** after 3 turns. These step aside first. (ranking replaced 2026-11-21 by "Stable column order")
 - **tests:** once a test has run since the last change.
 - **reuse and callers open (decided 2026-11-21, M5):** kept from ponytail's band as the two lowest-priority columns. They show only when the width has room after every other column, and step aside first.
 
@@ -109,3 +109,4 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 - **Column widths follow need:** columns share the row by what their text needs; warnings claim spare width first; the Compact button takes its room from the column with the most slack.
 - **Slack counts from the floor:** a column that cannot fit its whole so-what gives up everything above its floor, so the alarm state keeps the 7d warning and the last turn.
 - **Narrow alert wraps:** measured in the app on 2026-11-21, the width model is right and "<title> needs you" does not fit one line at 60 cells; the alert keeps its two-line form there and goes to one line where it fits.
+- **Stable column order:** context, 5h, 7d, tokens, session, then this turn, tests, agent, reuse, callers, with the folded plan and agents last. The core five keep their slots over every extra and drop from the right when narrow; extras fill what is left. Decided 2026-11-21.

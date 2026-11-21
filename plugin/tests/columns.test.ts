@@ -20,17 +20,17 @@ test('columns: one per fourteen cells, between two and six', () => {
 })
 test('columns: calm, idle, three turns: the priorities', () => {
   const s = stats({ limits: [limit('five_hour'), limit('seven_day')], session: turns3 })
-  expect(prio(candidates(s, crew(), 'full', false))).toEqual({ context: 100, session: 80, '5h': 40, '7d': 35, tokens: 30, agent: 28 })
+  expect(prio(candidates(s, crew(), 'full', false))).toEqual({ context: 100, '5h': 96, '7d': 95, tokens: 94, session: 93, agent: 40 })
 })
-test('columns: a hot limit jumps forward', () => {
+test('columns: a hot limit keeps its rank', () => {
   const p = prio(candidates(stats({ limits: [limit('five_hour', true), limit('seven_day', true)] }), crew(), 'full', false))
-  expect(p['5h']).toBe(96); expect(p['7d']).toBe(90)
+  expect(p['5h']).toBe(96); expect(p['7d']).toBe(95)
 })
-test('columns: this turn only while busy; tests drop to 20 while busy', () => {
+test('columns: this turn only while busy; tests keep their rank either way', () => {
   const s = stats({ tests: { passed: 1, failed: 0, at: 1 } })
   const idle = prio(candidates(s, crew(), 'full', false)), busy = prio(candidates(s, crew(), 'full', true))
   expect(idle.turn).toBeUndefined(); expect(idle.tests).toBe(45)
-  expect(busy.turn).toBe(95); expect(busy.tests).toBe(20)
+  expect(busy.turn).toBe(50); expect(busy.tests).toBe(45)
 })
 test('columns: tokens and agent time only after three turns', () => {
   const keys = (turns: number) => candidates(stats({ session: { ...turns3, turns } }), crew(), 'full', false).map(c => c.key)
@@ -67,10 +67,27 @@ test('columns: plan and agents are columns only when folded', () => {
 test('columns: fit keeps the top by priority and lays them in the fixed order', () =>
   expect(fit([{ key: 'agents', priority: 99 }, { key: 'session', priority: 80 }, { key: 'context', priority: 100 }, { key: 'tokens', priority: 30 }], 3)).toEqual(['context', 'session', 'agents']))
 test('columns: ORDER is the fixed layout', () =>
-  expect([...ORDER]).toEqual(['context', 'turn', '5h', '7d', 'plan', 'session', 'tests', 'tokens', 'agent', 'reuse', 'callers', 'agents']))
+  expect([...ORDER]).toEqual(['context', '5h', '7d', 'tokens', 'session', 'turn', 'tests', 'agent', 'reuse', 'callers', 'plan', 'agents']))
 test('columns: the one-line parts', () => {
   const s = stats({ limits: [limit('five_hour', true), limit('seven_day')], code: { reusePct: 50, reused: 1, created: 1, callers: ['f'] } })
   expect(lineParts(s, crew())).toEqual(['context', '5h', 'session'])
   expect(lineParts(s, crew({ agents: [agent], plan }))).toEqual(['context', '5h', 'plan', 'agents'])
   expect(lineParts(stats({ limits: [limit('seven_day', true)] }), crew())).toEqual(['context', '7d', 'session'])
+})
+const busyDay = stats({ tests: { passed: 1, failed: 0, at: 1 }, limits: [limit('five_hour'), limit('seven_day')], session: turns3 })
+test('columns: busy or idle, calm or hot, the core keeps its slots and this turn comes after session', () => {
+  const idle = fit(candidates(busyDay, crew(), 'full', false), 6), busy = fit(candidates(busyDay, crew(), 'full', true), 6)
+  expect(idle).toEqual(['context', '5h', '7d', 'tokens', 'session', 'tests'])
+  expect(busy).toEqual(['context', '5h', '7d', 'tokens', 'session', 'turn'])
+  const hot = { ...busyDay, limits: [limit('five_hour', true), limit('seven_day', true)] }
+  expect(fit(candidates(hot, crew(), 'full', true), 6)).toEqual(busy)
+})
+test('columns: when narrow the core drops from the right and nothing left of it moves', () => {
+  const at = (max: number) => fit(candidates(busyDay, crew(), 'full', true), max)
+  for (let max = 2; max < 6; max++) expect(at(max)).toEqual(at(6).slice(0, max))
+  expect(at(3)).toEqual(['context', '5h', '7d'])
+})
+test('columns: tokens is never pushed out by this turn or tests', () => {
+  expect(fit(candidates({ ...busyDay, limits: [] }, crew(), 'full', true), 3)).toEqual(['context', 'tokens', 'session'])
+  expect(fit(candidates(busyDay, crew(), 'full', true), 4)).toEqual(['context', '5h', '7d', 'tokens'])
 })
