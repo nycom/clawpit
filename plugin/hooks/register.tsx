@@ -51,7 +51,8 @@ let period = 0
 let wake: Timer | null = null
 let booted: Promise<void> | null = null
 let paneAsked = false                           // the pane opened by itself this session
-let benchOn = false                             // /clawpit-bench is registered: CLAWPIT_BENCH=1 at boot
+let benchOn = false                             // the `bench` setting, read at each load: /clawpit-bench is registered
+let benchReg: Promise<unknown> | null = null
 let bench: { count: number; eased: boolean } | null = null
 
 // The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
@@ -60,7 +61,7 @@ const BENCH_MAX = 48
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}
-  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchOn = false; bench = null
+  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; bench = null
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -128,13 +129,14 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
-  try {
-    if ((await $.env.get('CLAWPIT_BENCH')) === '1') {
-      await $.command.register({ name: 'clawpit-bench', description: 'Draws n walking crabs in the Agents pane, past the loop budget; 0 restores it.', argumentHint: '<n> [eased]' })
-      benchOn = true
-    }
-  } catch { errors += 1 }
+  try { await benchUp($) } catch { errors += 1 }
 })())
+
+// Once per load and session, only with the `bench` setting on. The panel's render calls it too: after /reload-plugins
+// no session.start runs, and the panel redraws before any observer does.
+const benchUp = ($: EngineInterface) => benchOn ? (benchReg ??= $.command.register({
+  name: 'clawpit-bench', description: 'Draws n walking crabs in the Agents pane, past the loop budget; 0 restores it.', argumentHint: '<n> [eased]',
+}).catch(() => { errors += 1 })) : undefined
 
 // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
 // loads a surface module only from a <Client> written here with a literal path.
@@ -167,7 +169,8 @@ const failedLine = (kind: string): RenderElement => ({
   children: [{ type: 'Text', props: {}, children: [`clawpit could not draw this panel: ${kind}`] }],
 })
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  benchOn = options.bench === true
   on('session.start', async ($, e, next) => {
     const out = await next(e)
     reset()
@@ -295,6 +298,7 @@ export const register: Register = on => {
   // clawpit draws its own row only, never what `next(e)` returns; on desktop savvy's band stands down (takeover).
   // shortcut: vscode and mobile pass through like the terminal (savvy still draws there, takeover is desktop-only).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    void benchUp($)
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     return liveOf($, e)(panelTree((await view($, e.props.bodyColumns)).panel))
   }).catch((_$, _e, next) => { errors += 1; return failedLine(next.error.kind) })
