@@ -2,7 +2,7 @@
 import type { ColumnKey, Crew, CrewAgent, ImageProps, LimitStat, LoopPlan, Plan, Settle, Stats, Ui } from '../../types'
 import { crab } from '../crab'
 import { dial, icon, segBar, toggleIcon } from '../icons'
-import { CELL_PX, FONT, MOTION, SIZE, SURFACE, svg } from '../tokens'
+import { CELL_PX, FONT, LINE_CELL_PX, MOTION, SIZE, SURFACE, svg } from '../tokens'
 import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtDuration, fmtLeft, fmtTokens, oneLine, textWidth, xml } from '../text'
 import { alertsOf, helpersOf } from '../model'
 import { contextText } from '../track/context'
@@ -373,7 +373,7 @@ const lineItem = (key: string, art: string, artW: number, parts: Run[], alt: str
   return image(key, { source: doc(w, LINE_H, o.tip ? withTip(o.tip, body, Infinity) : body), alt, width: w, height: LINE_H, ...(o.press ? { press: o.press } : {}) }, client)
 }
 const oneLineRow = (v: PanelView): El => {
-  const { stats, crew } = v, W = v.bodyColumns * CELL_PX, items: El[] = []
+  const { stats, crew } = v, W = v.bodyColumns * LINE_CELL_PX, items: El[] = []
   for (const part of lineParts(stats, crew)) {
     if (part === 'context') {
       const c = stats.context, value = c ? pctOf(c.pct) : '—'
@@ -391,7 +391,7 @@ const oneLineRow = (v: PanelView): El => {
   }
   const children: El[] = [...items, spacer]
   if (crew.agents.length) {
-    const m = mascotArt(crew, v.loops, 'S'), used = items.reduce((s, e) => s + width(e) + CELL_PX, 0) + 24 + 2 * CELL_PX
+    const m = mascotArt(crew, v.loops, 'S'), used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX
     const room = W - used - m.w - 6, say = room >= 40 ? sayFit(m.f, room, 13) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
     const body = at(0, 1, m.body) + (say ? text(m.w + 6, 18, say, 13, m.f.tone, { w: m.f.w }) : '')
     children.push(image('mascot', { source: doc(w, LINE_H, body, m.animated), alt: `Agents: show them all. ${crew.agents.length} agents, ${m.f.say}`, width: w, height: LINE_H, press: 'open' }, true))

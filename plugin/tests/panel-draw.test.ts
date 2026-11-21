@@ -579,11 +579,19 @@ test('panel: one folded agent shows its name, not "1 agents", and its state unde
 const lineOf = (s: StateName, bodyColumns: number) => { const v = viewOf(s, { bodyColumns }); return panelTree({ ...v, ui: { ...v.ui, size: 'line' } }) }
 test('panel: at the one-line size a lone running agent reads its name and state; "next:" is for two or more', () => {
   // Too tight for 6 characters of the name: the state alone, with no separator left over.
-  expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).toBe('~2m left')
+  expect(lastText(sourceOf(lineOf('oneRunning', 52), 'mascot'))).toBe('~2m left')
+  expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).not.toMatch(/^next:/)
   expect(lastText(sourceOf(lineOf('oneRunning', 96), 'mascot'))).toBe('savvy-progress implement · ~2m left')
   expect(lastText(sourceOf(lineOf('hydra', 96), 'mascot'))).toMatch(/^next: /)
   // Two or more agents: the alert reads its name too, where the row has room for it.
   expect(lastText(sourceOf(lineOf('sizeLine', 96), 'mascot'))).toBe('e2e tests needs you')
+})
+test('panel: the one-line row has its cells at the measured 9.1 px for the agent to read in', () => {
+  expect(lastText(sourceOf(lineOf('oneNeedsYou', 60), 'mascot'))).toBe('e2e tests needs you')
+  expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).toMatch(/^savvy-.*… · ~2m left$/)
+  // With the plan's mini bar in the row too, the name fits from 66 cells; at 60 the tail reads alone.
+  expect(lastText(sourceOf(lineOf('sizeLine', 60), 'mascot'))).toBe('needs you')
+  expect(lastText(sourceOf(lineOf('sizeLine', 66), 'mascot'))).toBe('e2e tests needs you')
 })
 test('panel: folded, a lone agent\'s column claims the cells for its whole name; the other columns keep their slots', () => {
   const value = (t: El) => words([...sourceOf(t, 'mascot').matchAll(/<text[^>]*y="35"[^>]*>(.*?)<\/text>/g)][0][1])

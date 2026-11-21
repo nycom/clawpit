@@ -39,6 +39,8 @@ for (const r of ROLES) {
 export const TOKENS = base as Record<TokenName, Pair>
 export const SURFACE = { dark: '#252424', light: '#faf9f5' } as const
 export const CELL_PX = 8.5
+// Measured in the desktop app 2026-11-21: the one-line row's items are drawn at natural size, not stretched, so the row has cells x 9.1 px; Windows still to be measured.
+export const LINE_CELL_PX = 9.1
 export const SIZE = { chip: 26, row: 48, needRow: 62, helperRow: 32, endedRow: 30, toggle: 24, crab: { S: [25.5, 21], M: [34, 28], L: [51, 42] } } as const
 export const MOTION = { curve: 'cubic-bezier(.2,.8,.2,1)', walk: '.5s steps(1)', beat: '1.2s steps(2)', settleMs: 900, fillMs: 600, revealMs: 300 } as const
 export const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif'   // Segoe UI: the same face on every Windows machine
