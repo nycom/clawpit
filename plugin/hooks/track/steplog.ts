@@ -15,14 +15,15 @@ export const diff = (logs: Logs, prev: SavvyRun[], next: SavvyRun[], parents: Re
   for (const r of next) {
     const p = before.get(r.id)
     const why = clean(r.failNote || r.stepNote, 160)
+    const tail = why ? `: ${why}` : ''
     if (r.stepNote && r.stepNote !== p?.stepNote) add(r.id, 'step', r.stepNote)
-    if ((r.failedAttempts ?? 0) > (p?.failedAttempts ?? 0)) add(r.id, 'try', `Try ${r.failedAttempts} failed: ${why}`)
+    if ((r.failedAttempts ?? 0) > (p?.failedAttempts ?? 0)) add(r.id, 'try', `Try ${r.failedAttempts} failed${tail}`)
     if (r.blocked && r.blocked !== p?.blocked) add(r.id, 'ask', `Asked: ${r.blocked}`)
     if (r.status === 'failed' && p?.status !== 'failed') {
       const where = r.stepTotal ? ` at step ${(r.stepDone ?? 0) + 1} of ${r.stepTotal}` : ''
-      add(r.id, 'fail', `Failed${where}: ${why}`)
+      add(r.id, 'fail', `Failed${where}${tail}`)
       const parent = parents[r.id]
-      if (parent) add(parent, 'helper', `Helper "${clean(r.description, 60)}" failed after ${mmss((r.endedAt ?? at) - r.startedAt)}: ${why}`)
+      if (parent) add(parent, 'helper', `Helper "${clean(r.description, 60)}" failed after ${mmss((r.endedAt ?? at) - r.startedAt)}${tail}`)
     }
   }
   return out
