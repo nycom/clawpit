@@ -190,7 +190,7 @@ export type Column = { key: ColumnKey; priority: number }
 export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean; view?: 'crew' | 'costs' }   // view: the pane's; absent reads as crew
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
-export type Settle = { from: number; to: number }
+export type Settle = { from: number; to: number; at: number }   // at: when the value moved
 export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; interactive?: boolean; zones?: { to: number; press: string }[] }
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
@@ -379,7 +379,7 @@ The toggle shows the `er` dot when `size !== 'full'` and any agent is `need` or 
 
 `panelTree(view): RenderElement`. Everything coloured is an SVG; the only host element with text is the Compact Button.
 
-- **Row 1**: a Box row. Each column is a Box `width` in cells holding one image (label 11px, value 16/600 with its dial, so-what 11px). Images are drawn at `cells * 8.5` px, which is under the real cell width, so an image never shrinks; text is left-aligned, so the slack is padding. Dials are `image` Clients (the needle settle is a one-shot keyframe, 900 ms, with its start baked in from `settle`); every other cell is a plain Svg. The toggle is an `image` Client, 24×24, `press: 'size'`.
+- **Row 1**: a Box row. Each column is a Box `width` in cells holding one image (label 11px, value 16/600 with its dial, so-what 11px). Images are drawn at `cells * 8.5` px, which is under the real cell width, so an image never shrinks; text is left-aligned, so the slack is padding. Dials are `image` Clients (the needle settle is a one-shot keyframe, 900 ms, with its start baked in from `settle`, drawn only within 900 ms of the move, so a later redraw does not sweep it again); every other cell is a plain Svg. The toggle is an `image` Client, 24×24, `press: 'size'`.
 - **Compact**: from `pct >= 50`, a `Button` labelled "Compact" ("Compact now" in alarm) in an absolute Box inside the context column, right of the value on its line; never `dimColor`; `onPress` runs the engine's own `/compact` through `$.command.run`. When the column is narrower than the value plus the Button (guessed at its label plus one cell), the context column widens to fit it and the other columns share the rest.
 - **Presses**: the context image presses `context`, the 5h and 7d images `usage`, the session image `costs`, so each is an `image` Client. A so-what of ` · `-joined clauses (context, this turn, session, limits) drops whole clauses right to left; a clause that does not fit goes whole.
 - **Plan row** (`full`, with a plan): one image for the line (title, phase stepper, `N/M tasks · ~Xm left`), one for the segmented bar and names. The bar's fills grow by a 600 ms one-shot, so the bar is an `image` Client. Names show while each segment is at least 56px wide and there are at most 8 tasks; past 40 tasks the bar is three proportional parts (done, live, rest).
