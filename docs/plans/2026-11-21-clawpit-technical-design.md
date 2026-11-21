@@ -160,7 +160,7 @@ export type CrewAgent = {
   question?: string; reason?: string; errorLine?: string
   stepDone: number; stepTotal: number
   eta: Eta; usuallyMin: number | null
-  startedAt: number; endedAt?: number
+  startedAt: number; endedAt?: number; waitingSince?: number
   contextPct: number; costUsd: number
   parentId?: string; helpers: CrewAgent[]; log: LogLine[]
 }
@@ -210,6 +210,7 @@ export type SavvyFlow = { title: string; total: number; done: number; phase: 'pl
 - **Role** (`roleOf(type, description)`): by type first: `implementer` → implement; `reviewer` or a type ending `code-reviewer` → review; `validator` → test; `designer`, `Plan`, `architect-reviewer` → design; `Explore`, `researcher`, `dev-researcher` → explore. Otherwise by the first match in the lower-cased description: `implement|fix|build|merge|wire` → implement; `review|recheck|audit` → review; `test|validat|e2e|verify` → test; `design|plan|spec` → design. Otherwise explore.
 - **Prop**: `need` → `wait`; `failed` → `fail`; ended and done → `done`; else from the activity kind: `search`, `browse` → `search`; `read` → `read`; `edit` → `write`; `think` → `think`; `run`, `spawn`, `other`, none → `none`.
 - **Helpers**: a run whose `parentId` names a run that is still `need` or `running` nests under it. A child whose parent has ended is listed flat. The parent link comes from clawpit's own `agent.spawn` observer (`parentAgentId`, `d.ts:341`), kept in a module map; savvy does not record it.
+- **Waiting since** (`waitingSince`, set only on `need`): the `at` of the run's newest `ask` log line, else `startedAt`. The pane's "waiting Nm" and the ring's "longest waiter" read it.
 - **Order**: need (longest waiting first), failed (newest first), running (struggling first, then newest first). `ended` newest first.
 - **`leftMin`**: the largest `minutes` among `running` agents whose `eta.kind === 'left'`; `null` when none has an estimate. This one number is used by the plan line, the plan column and the pane summary.
 - **Plan** (`planOf`): `null` when `flow` is `null` or `isFinished`. Phase `design` maps to `plan`. For each flow task, the newest run whose normalised description equals or starts with the task title gives the state: done run → `done`; `need` → `need`; `failed` → `failed`; running → `live` with `fill = max(0.08, stepDone / stepTotal)` (0.08 when no steps). No run → `todo`. If fewer tasks are `done` than `flow.done`, the earliest `todo` tasks are marked `done` until the counts match.

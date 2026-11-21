@@ -6,7 +6,7 @@
 
 **Architecture:** One plugin in `plugin/`. `hooks/register.tsx` is wiring only (atoms, observers, two render hooks, Client presses); everything under it is pure functions over plain data that return plain `RenderElement` objects, so each module is tested headlessly and drawn by a Node render harness for Playwright. Crew data is read from savvy-progress's `flow` and `agents` atoms; session figures are gathered by clawpit's own observers.
 
-**Tech Stack:** TypeScript function hooks for Claude Code 2.1.325 (desktop surface); `claude plugin test` and `claude plugin validate`; Node 20+ with `@playwright/test` 1.52.0, `pixelmatch` 6.0.0, `pngjs` 7.0.0 (dev only, exact pins); bash and Swift for window capture.
+**Tech Stack:** TypeScript function hooks for Claude Code 2.1.325 (desktop surface); `claude plugin test` and `claude plugin validate`; Node 20+ with `@playwright/test` 1.62.1 (1.52.0's browser download stalled; 1.62.1's Chromium was already cached), `pixelmatch` 6.0.0, `pngjs` 7.0.0 (dev only, exact pins); bash and Swift for window capture.
 
 **Spec:** [`2026-11-21-clawpit-technical-design.md`](2026-11-21-clawpit-technical-design.md) ("the design", cited as `design §N`), with the locked decisions in [`docs/decisions/`](../decisions/) and the mockup [`design/mockups-all.html`](../../design/mockups-all.html).
 
@@ -487,6 +487,8 @@ export const contextText: (c: ContextStat | null, turns: number) => string
 export const codeOf: (band: unknown) => CodeStat | null
 ```
 
+So that this workstream does not wait for Task 5, `track/code.ts` carries its own small `clean(v: unknown, max: number): string`, as Task 6's `activity.ts` does; Task 14 replaces both with `oneLine` and `clip`.
+
 Rules: design §6.3, §6.4, §6.6, §6.7, §6.8, §6.9, exactly.
 
 - [ ] **Step 1: Write the failing tests**
@@ -561,7 +563,7 @@ test('code: ponytail absent or malformed', () => {
 })
 ```
 
-- [ ] **Step 2: Run** `claude plugin test plugin`. Expected: the four new files fail.
+- [ ] **Step 2: Run** `claude plugin test plugin`. Expected: the five new files fail.
 - [ ] **Step 3: Implement the four modules.** Median: the middle of the sorted list, the mean of the two middles for an even count. 80th percentile: nearest rank, `sorted[ceil(0.8 * n) - 1]`.
 - [ ] **Step 4: Run** `claude plugin test plugin`. Expected: `0 fail`.
 - [ ] **Step 5: Commit**
@@ -578,7 +580,7 @@ git commit -m "track: add the eta, turn, pace, context and code trackers"
 
 **Interfaces:**
 - Consumes: `Crew`, `Ui`, `LoopPlan` from Task 4.
-- Produces: `export const BUDGET = { walkers: 3, walkersOnBeat: 2, rings: 1, max: 8 }` and `export const pickLoops: (crew: Crew, ui: Ui, busy: boolean, armed: boolean) => LoopPlan`. Rules: design §10, exactly. The tests read `BUDGET`; they never repeat its numbers, so Task 20 can change them.
+- Produces: `export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 8 }` (one ring at most: `LoopPlan.ring` is a single id) and `export const pickLoops: (crew: Crew, ui: Ui, busy: boolean, armed: boolean) => LoopPlan`. Rules: design §10, exactly. The tests read `BUDGET`; they never repeat its numbers, so Task 20 can change them.
 
 - [ ] **Step 1: Write the failing tests** (crews are built by hand from the `CrewAgent` type)
 
@@ -698,23 +700,24 @@ export const HOST_MAX = 200_000, ENGINE_MAX = 90_000
 export const paneLayout: (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: PaneItem) => { host: number; engine: number }) => PaneItem[]
 ```
 
-Rules: design §5 "Deriving `Crew`" and §8.1, exactly. `cost` is injected so the layout does not depend on the drawing; Task 13 passes the real measure.
+Rules: design §5 "Deriving `Crew`" (including `waitingSince`) and §8.1, exactly. Each fixture carries its step logs (`logs`), and `ETA` and `USUALLY` in `states.ts` are the one estimate table every builder uses. `cost` is injected so the layout does not depend on the drawing; Task 13 passes the real measure.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-const input = (s: keyof typeof STATES, over = {}) => ({ ...STATES[s], logs: {}, etaOf: () => ({ kind: 'none' as const }), usuallyOf: () => null, now: NOW, ...over })
+const input = (s: keyof typeof STATES, over = {}) => ({ ...STATES[s], etaOf: (r: SavvyRun) => ETA[r.id] ?? { kind: 'none' as const }, usuallyOf: (r: SavvyRun) => USUALLY[r.id] ?? null, now: NOW, ...over })
 test('crewOf: the hydra fixture gives the mockup counts', () => {
   const c = crewOf(input('needsYou')); expect(c.counts).toEqual({ need: 1, failed: 0, running: 3, done: 1 })
   expect(c.agents[0].title).toBe('e2e tests'); expect(c.agents.length).toBe(4); expect(c.ended.map(a => a.title)).toEqual(['docs pass'])
   expect(c.agents.find(a => a.title === 'cache-tax review c1')!.helpers.length).toBe(2); expect(c.title).toBe(STATES.needsYou.flow!.title)
 })
-test('crewOf: section order is need, failed, running with struggling first', () => { /* 'both' -> states in order: need, need, failed, running; within running, tries>=3 first */ })
+test('crewOf: section order is need, failed, running with struggling first', () => { /* 'both' -> states in order: need, failed, running, running; within running, tries>=3 first (rev before imp) */ })
 test('crewOf: a failed run is failed while held, ended after', () => {
   const run = { id: 'r', type: 'validator', description: 'e2e tests', model: 'm', status: 'failed', startedAt: 0, endedAt: 130_000, contextTokens: 0, contextMax: 1, costUsd: 0, heldDone: true } as SavvyRun
   expect(crewOf(input('idle', { runs: [run] })).agents[0].state).toBe('failed'); expect(crewOf(input('idle', { runs: [{ ...run, heldDone: false }] })).ended[0].prop).toBe('fail')
 })
 test('crewOf: a helper whose parent ended is listed flat', () => {})
+test('crewOf: waitingSince is the newest ask line, else startedAt', () => { /* needsYou -> e2e waitingSince NOW - 42_000; same without logs -> its startedAt; a running agent has none */ })
 test('crewOf: one time-left figure, the largest running estimate', () => { /* etaOf returns left 2, 4, 9 -> leftMin 9; all none -> null */ })
 test('crewOf: tolerates a run with only the required fields', () => { /* the run above without step, fail or blocked fields -> no throw; stepDone 0, stepTotal 0, tries 0, struggling false */ })
 test('crewOf: null flow and empty agents give the empty crew', () =>
@@ -770,11 +773,12 @@ test('step: control characters and length are bounded', …)              // rea
 test('step: the tool description and the brief ask for reason and error', …)   // both strings contain 'reason' and 'error'
 test('takeover: with the clawpit atom true the band draws nothing of savvy and the pane does not auto-open', …)
 test('takeover: with the atom unset savvy draws as before', …)
+test('takeover: autoOpen stands down on both of its paths, a new plan and a subagent spawn', …)   // the check sits inside autoOpen() itself
 ```
 
-- [ ] **Step 2: Run** `claude plugin test plugins/savvy-progress`. Expected: the 7 new tests fail; the existing 179 pass.
+- [ ] **Step 2: Run** `claude plugin test plugins/savvy-progress`. Expected: the 8 new tests fail; the existing 179 pass (the count includes the 5 tests of the git-excluded `tests/zz.preview.test.ts`, which the run copies into each worktree).
 - [ ] **Step 3: Apply the diff in design §15.**
-- [ ] **Step 4: Run** `claude plugin validate plugins/savvy-progress && claude plugin test plugins/savvy-progress`. Expected: no validate error; `186 pass`, `0 fail`.
+- [ ] **Step 4: Run** `claude plugin validate plugins/savvy-progress && claude plugin test plugins/savvy-progress`. Expected: no validate error; `187 pass`, `0 fail`.
 - [ ] **Step 5: Commit** on the local branch, with no push
 
 ```bash
@@ -785,7 +789,7 @@ git commit -m "savvy-progress: step reason and error fields, and stand down for 
 ### Task 12: The panel tree (after Tasks 5, 8, 9, 10)
 
 **Files:**
-- Create: `plugin/hooks/panel/draw.ts`, `plugin/tests/panel-draw.test.ts`, `tests/visual/panel.spec.ts`, `tests/visual/build.ts`
+- Create: `plugin/hooks/panel/draw.ts`, `plugin/tests/panel-draw.test.ts`, `tests/visual/panel.spec.ts`, `plugin/tests/build.ts`
 
 **Interfaces:**
 - Consumes: the kit (Task 5), `pickLoops` (Task 8), `candidates`, `fit`, `maxColumns`, `lineParts`, `hasDot` (Task 9), `crewOf` (Task 10), `STATES` (Task 4), the harness (Task 2).
@@ -797,8 +801,9 @@ export type El = { type: string; props?: Record<string, unknown>; children?: (El
 export const image: (key: string, p: ImageProps, loop: boolean) => El      // loop or press -> { type: 'Client', props: { key, module: './client/image.tsx', props: p } }; else { type: 'Svg', props: p }
 export const panelTree: (v: PanelView) => El                                // root Box key 'clawpit-panel'
 export const COMPACT_KEY = 'clawpit-compact'                                // the Button's key; Task 15 attaches onPress
-// tests/visual/build.ts
-export const viewOf: (state: StateName, over?: Partial<PanelView>) => PanelView   // builds crew, loops and settles from STATES with a fixed etaOf table
+// plugin/tests/build.ts (inside the plugin, so `claude plugin test` resolves it; the Playwright spec imports it from there)
+export const viewOf: (state: StateName, over?: Partial<PanelView>) => PanelView   // builds crew, loops and settles from STATES with ETA and USUALLY
+export const panelLoopCount: (v: PanelView) => number   // the panel's own looping drawings: walkers among top-level chips (full size) + chipPulse + (mascot !== 'still')
 ```
 
 Rules: design §7.3, §9 (the constant-props rule), §11. The reuse and callers columns (decision M5): reuse reads label `reuse`, value `72%` in `fg`, so-what `18 used · 7 new` in `muted`; callers reads label `callers`, value `2 open` in `warn`, so-what the first two refs joined by `, `, cut to the column with `fit`. Keys: columns `col-<key>`, the toggle `toggle`, the plan line `plan-line`, the plan bar `plan-bar`, alert chips `chips-alert`, a chip `chip-<id>`, the folded crab `mascot`. `image` throws when the serialized props pass 60,000 characters.
@@ -821,14 +826,14 @@ test('panel: a looping client has the same props one second later', () => {
 })
 test('panel: alert chips share one client; a still chip is a plain Svg', () => {})
 test('panel: the failed chip pulses only while armed', () => { /* armed false -> 'chips-alert' source has no 'animation' */ })
-test('panel: wording', () => { /* chip '3/5 · ~2m left'; struggling '1/4 · ~4m left · 3 failed tries'; slow '… · slower'; failed 'failed · Could not reach Postgres on :5432'; folded 'next: savvy-progress implement · ~2m left'; plan '2/7 tasks · ~9m left'; codeColumns: 'col-reuse' says '72%' and '18 used · 7 new', 'col-callers' says '2 open' in warn and 'hooks/band.ts:41, tests/fold.test.ts:12' */ })
+test('panel: wording', () => { /* chip '3/5 · ~2m left'; struggling '1/4 · ~4m left · 3 failed tries'; slow '… · slower'; failed 'failed · Could not reach Postgres on :5432'; folded 'next: savvy-progress implement · ~2m left'; plan '2/7 tasks · ~9m left'; codeColumns at bodyColumns 96 (at 60 cells the four columns are taken, so neither shows): 'col-reuse' says '72%' and '18 used · 7 new', 'col-callers' says '2 open' in warn and 'hooks/band.ts:41, tests/fold.test.ts:12' */ })
 test('panel: a hostile chip title still yields well-formed svg', () => { /* title '<b>&"\u0000' -> every source parses with the test's tiny tag-balance check, and contains '&lt;b&gt;' */ })
 test('panel: every image has an alt and every client is under the size cap', () => {})
 test('panel: forty agents collapse into a +N more chip within maxRows', () => {})
 ```
 
 - [ ] **Step 2: Run** `claude plugin test plugin`. Expected: `panel-draw.test.ts` fails.
-- [ ] **Step 3: Implement `panel/draw.ts` and `tests/visual/build.ts`.**
+- [ ] **Step 3: Implement `panel/draw.ts` and `plugin/tests/build.ts`.**
 - [ ] **Step 4: Run** `claude plugin test plugin`. Expected: `0 fail`.
 - [ ] **Step 5: Write the visual tests** `tests/visual/panel.spec.ts`
 
@@ -866,18 +871,19 @@ git commit -m "panel: draw the columns, the plan row, the chips and the three si
 ### Task 13: The pane tree (after Tasks 5, 8, 10)
 
 **Files:**
-- Create: `plugin/hooks/pane/draw.ts`, `plugin/tests/pane-draw.test.ts`, `tests/visual/pane.spec.ts`, `tests/visual/build-pane.ts`
+- Create: `plugin/hooks/pane/draw.ts`, `plugin/tests/pane-draw.test.ts`, `tests/visual/pane.spec.ts`, `plugin/tests/build-pane.ts`
 
 **Interfaces:**
-- Consumes: the kit (Task 5), `pickLoops` (Task 8), `crewOf`, `paneLayout`, `PaneItem` (Task 10), `STATES` (Task 4), the harness (Task 2). It defines its own `image` with the same signature and rule as Task 12's (`(key, p, loop) => El`); Task 14 folds the two into one.
+- Consumes: the kit (Task 5), `pickLoops` (Task 8), `crewOf`, `paneLayout`, `PaneItem` (Task 10), `STATES` (Task 4), the harness (Task 2). It defines its own `El` type and `image` with the same signature and rule as Task 12's (`(key, p, loop) => El`); Task 14 folds the two into one.
 - Produces:
 
 ```ts
 export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number }
 export const itemCost: (item: PaneItem) => { host: number; engine: number }   // measured from the drawn element
 export const paneTree: (v: PaneView) => El                                     // root Box key 'clawpit-pane'; calls paneLayout with itemCost
-// tests/visual/build-pane.ts
-export const paneViewOf: (state: StateName, over?: Partial<PaneView>) => PaneView
+// plugin/tests/build-pane.ts
+export const paneViewOf: (state: StateName, over?: Partial<PaneView>) => PaneView   // from STATES, with ETA and USUALLY
+export const paneLoopCount: (v: PaneView) => number   // the pane's own looping drawings: walkers with a row on screen + (ring ? 1 : 0)
 ```
 
 Rules: design §8.2, §9, §11. Keys and presses: a row `row-<id>` with press `row:<id>` (crab `crab-<id>`, same press), the helpers toggle `kids-<id>` with press `kids:<id>`, the Ended toggle `ended` with press `ended`, a drawer `drawer-<id>`.
@@ -887,7 +893,7 @@ Rules: design §8.2, §9, §11. Keys and presses: a row `row-<id>` with press `r
 ```ts
 test('pane: the title is the flow title, or Subagents', () => {})
 test('pane: sections in order: Needs you, Failed, Running, Ended', () => {})
-test('pane: the summary line', () => { /* 'both' -> '2 needs you · 1 failed · 1 running · 1 done · ≈$… · ~Nm left'; zero need and failed parts are absent */ })
+test('pane: the summary line', () => { /* 'both' -> '1 needs you · 1 failed · 2 running · 1 done · ≈$… · ~Nm left'; zero need and failed parts are absent */ })
 test('pane: a needs-you row is one looping client 62px tall; only the ring id rings', () => {})
 test('pane: a failed row has no ring, says failed and after m:ss, and shows the reason', () => { /* source contains 'failed', 'after 2:10', 'Could not reach Postgres on :5432'; no 'animation' */ })
 test('pane: a struggling row starts its activity with N failed tries in warn; slow starts with slower', () => {})
@@ -898,12 +904,12 @@ test('pane: helpers nest with the toggle text, and a failed helper is counted in
 test('pane: an ended failed row has the cross and failed after m:ss; a done one the check and m:ss', () => {})
 test('pane: the empty state', () => { /* one L crab, still, and 'No agents yet' */ })
 test('pane: a two-line question is cut with an ellipsis and fits the body width', () => {})
-test('pane: every press is one of the five forms', () => { /* every Client props.props.press matches /^(row:|kids:).+$|^ended$/ */ })
+test('pane: every press is one of the three pane forms', () => { /* every Client props.props.press matches /^(row:|kids:).+$|^ended$/ */ })
 test('pane: 80 agents stay under both bounds', () => { /* JSON length of the tree <= HOST_MAX; engine count <= ENGINE_MAX; a '+N more' line exists */ })
 ```
 
 - [ ] **Step 2: Run** `claude plugin test plugin`. Expected: `pane-draw.test.ts` fails.
-- [ ] **Step 3: Implement `pane/draw.ts` and `tests/visual/build-pane.ts`.**
+- [ ] **Step 3: Implement `pane/draw.ts` and `plugin/tests/build-pane.ts`.**
 - [ ] **Step 4: Run** `claude plugin test plugin`. Expected: `0 fail`.
 - [ ] **Step 5: Write the visual tests** `tests/visual/pane.spec.ts`
 
@@ -938,7 +944,7 @@ git commit -m "pane: draw the roster, the drawer, the helpers and the crew bar"
 1. The plan and the design are approved and merged to `main`. Cut `feat/build` from `main` in the clawpit checkout, then do Tasks 1 to 4 on it in session.
 2. In the claude-kit checkout cut the local branch `clawpit/step-fields` from `main`.
 3. Set up the `hydra-local` remote in both checkouts as Hydra's local-only mode describes, and push the base and feature branches into it.
-4. Workstream models are explicit: `sonnet` for bounded modules, `opus` where the rules interlock. Reviews run one tier up; the two `opus` workstreams that draw are reviewed by `fable`, named here on purpose. Validators stay on `opus`.
+4. Workstream models are explicit: `sonnet` for bounded modules, `opus` where the rules interlock. Reviews run one tier up, except that `fable` reviews only the two `opus` workstreams that draw, named here on purpose: `track-b` and `crew` are reviewed by `opus`, and so is the whole-branch pass. Validators stay on `opus`.
 
 ```
 Workflow({
@@ -949,6 +955,7 @@ Workflow({
     maxCycles: 4,
     tokenBudget: 4000000,
     localOnly: true,                   // nothing reaches a remote; pushing stays the maintainer's
+    wbReviewModel: "opus",             // fable reviews only the two draw workstreams
     decisionLog: "<clawpit checkout>/docs/decisions/LOCKED.md",
     docsRepos: [],                     // docs are Task 21, in session
     workstreams: [
@@ -958,7 +965,7 @@ Workflow({
       { id: "track-a",      repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--track-a",      model: "sonnet",
         files: ["plugin/hooks/track/activity.ts","plugin/hooks/track/steplog.ts","plugin/hooks/track/tests.ts","plugin/tests/activity.test.ts","plugin/tests/steplog.test.ts","plugin/tests/tests.test.ts"],
         brief: BRIEF(6), gate: G },
-      { id: "track-b",      repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--track-b",      model: "opus",
+      { id: "track-b",      repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--track-b",      model: "opus", reviewModel: "opus",
         files: ["plugin/hooks/track/eta.ts","plugin/hooks/track/turn.ts","plugin/hooks/track/pace.ts","plugin/hooks/track/context.ts","plugin/hooks/track/code.ts","plugin/tests/eta.test.ts","plugin/tests/turn.test.ts","plugin/tests/pace.test.ts","plugin/tests/context.test.ts","plugin/tests/code.test.ts"],
         brief: BRIEF(7), gate: G },
       { id: "loops",        repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--loops",        model: "sonnet",
@@ -967,17 +974,17 @@ Workflow({
       { id: "panel-logic",  repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--panel-logic",  model: "sonnet",
         files: ["plugin/hooks/panel/columns.ts","plugin/hooks/panel/fold.ts","plugin/tests/columns.test.ts","plugin/tests/fold.test.ts"],
         brief: BRIEF(9), gate: G },
-      { id: "crew",         repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--crew",         model: "opus",
+      { id: "crew",         repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--crew",         model: "opus", reviewModel: "opus",
         files: ["plugin/hooks/model.ts","plugin/hooks/pane/layout.ts","plugin/tests/model.test.ts","plugin/tests/layout.test.ts"],
         brief: BRIEF(10), gate: G },
       { id: "panel-draw",   repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--panel-draw",   model: "opus", reviewModel: "fable",
         after: ["kit","loops","panel-logic","crew"],
-        files: ["plugin/hooks/panel/draw.ts","plugin/tests/panel-draw.test.ts","tests/visual/panel.spec.ts","tests/visual/build.ts","tests/visual/panel.spec.ts-snapshots/"],
+        files: ["plugin/hooks/panel/draw.ts","plugin/tests/panel-draw.test.ts","tests/visual/panel.spec.ts","plugin/tests/build.ts","tests/visual/panel.spec.ts-snapshots/"],
         humanCheck: "Run `npx playwright show-report` (or open tests/visual/panel.spec.ts-snapshots/). For hydra, needsYou, failed, both, context90 and the two folded sizes, dark and light, compare with design/mockups-all.html on the four parity points of Task 12 Step 6: layout order, tokens, wording, what shows in each size.",
         brief: BRIEF(12), gate: G },
       { id: "pane-draw",    repo: "<clawpit checkout>", featureBranch: "feat/build", branch: "feat/build--pane-draw",    model: "opus", reviewModel: "fable",
         after: ["kit","loops","crew"],
-        files: ["plugin/hooks/pane/draw.ts","plugin/tests/pane-draw.test.ts","tests/visual/pane.spec.ts","tests/visual/build-pane.ts","tests/visual/pane.spec.ts-snapshots/"],
+        files: ["plugin/hooks/pane/draw.ts","plugin/tests/pane-draw.test.ts","tests/visual/pane.spec.ts","plugin/tests/build-pane.ts","tests/visual/pane.spec.ts-snapshots/"],
         humanCheck: "Open tests/visual/pane.spec.ts-snapshots/. For needsYou, failed, both, drawerOpen, helpers and emptyPane, dark and light, compare with design/mockups-all.html on the four parity points of Task 13 Step 6.",
         brief: BRIEF(13), gate: G },
       { id: "savvy-step",   repo: "<claude-kit checkout>", featureBranch: "clawpit/step-fields", branch: "clawpit/step-fields--savvy-step", model: "sonnet",
@@ -985,7 +992,7 @@ Workflow({
         brief: BRIEF(11), gate: "claude plugin validate plugins/savvy-progress && claude plugin test plugins/savvy-progress" }
     ],
     repos: [
-      { repo: "<clawpit checkout>", hot: ["**/README*", "docs/**", "design/**", "AGENTS.md", "**/package-lock.json", "plugin/types/**", "plugin/tests/fixtures/**"] },
+      { repo: "<clawpit checkout>", hot: ["**/README*", "docs/**", "design/**", "AGENTS.md", "**/package.json", "**/package-lock.json", "playwright.config.ts", "tests/visual/harness.ts", "tests/visual/harness.spec.ts", "plugin/hooks/register.tsx", "plugin/hooks/hooks.json", "plugin/types/**", "plugin/tests/fixtures/**"] },
       { repo: "<claude-kit checkout>", copyExcluded: ["plugins/savvy-progress/tests/zz.preview.test.ts"] }
     ]
   }
@@ -1272,7 +1279,7 @@ git commit -m "docs: keep the preview rule with the baselines and update the REA
 - [ ] **Step 6: The app diff, every task's states.** Re-capture every state of `panel`, `sizes`, `pane`, `retire` and `filetree` (the app check procedure, steps 2 to 4), then `for t in panel sizes pane retire filetree; do npm run app-diff -- $t && npm run app-diff -- $t --idle; done`. Expected: every row `pass`, exit 0.
 - [ ] **Step 7: The leak check.** `bash scripts/leak-check.sh`. Expected: `leak-check: clean`. Also `git status --short artifacts` prints nothing tracked.
 - [ ] **Step 8: The previews.** `bash scripts/preview.sh`, then `git status --short design`. Expected: no change, or only the two PNGs if the design changed since Task 21; commit them if so.
-- [ ] **Step 9: The savvy checkout.** `claude plugin test plugins/savvy-progress` in the claude-kit checkout. Expected: `186 pass`, `0 fail`. `git branch -r --contains clawpit/step-fields` prints nothing: the branch is on no remote.
+- [ ] **Step 9: The savvy checkout.** `claude plugin test plugins/savvy-progress` in the claude-kit checkout. Expected: `187 pass`, `0 fail`. `git branch -r --contains clawpit/step-fields` prints nothing: the branch is on no remote.
 - [ ] **Step 10: Write the "not checked" list** for the PR description, from design §19 and whatever the app checks left unsure. Open the PR only on the maintainer's go.
 
 ---

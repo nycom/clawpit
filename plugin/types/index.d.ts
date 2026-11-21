@@ -20,7 +20,7 @@ export type CrewAgent = {
   question?: string; reason?: string; errorLine?: string
   stepDone: number; stepTotal: number
   eta: Eta; usuallyMin: number | null
-  startedAt: number; endedAt?: number
+  startedAt: number; endedAt?: number; waitingSince?: number
   contextPct: number; costUsd: number
   parentId?: string; helpers: CrewAgent[]; log: LogLine[]
 }
