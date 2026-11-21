@@ -209,11 +209,16 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   } else {
     const t: Run = [fit(title, titleW, 12, 600), 'fg', 600]
     const rs: Run[] = [[' ', 'muted'], ...(failed ? [[msg, 'er', 600] as Run] : activityRuns(a, now).map(([s, k]): Run => [s, k === 'fg' ? 'muted' : k]))]
-    // A failed helper's reason shows only whole beside its title; when tight it lives in the tooltip and the alt.
-    const line: Run[] = failed && runsWidth([t, ...rs], 12) > textW ? [t] : [t, ...rs]
-    if (failed) cut = line.length === 1
-    else ({ tip, cut } = activityLine(a, now, line, textW, 12))
-    what = runs(GAP, 20, 12, line, textW)
+    if (failed && runsWidth([t, ...rs], 12) > textW) {
+      // A failed helper's reason shows only whole beside its title; when tight it wraps to a second line, cut there with an ellipsis.
+      const reason = fit(msg, textW, 12, 600)
+      cut = reason !== msg
+      what = text(GAP, 13, 'fg', 12, t[0], { weight: 600 }) + text(GAP, 27, 'er', 12, reason, { weight: 600 })
+    } else {
+      if (failed) cut = false
+      else ({ tip, cut } = activityLine(a, now, [t, ...rs], textW, 12))
+      what = runs(GAP, 20, 12, [t, ...rs], textW)
+    }
   }
   what = withTip(tip, cut, what)
   const body = tint(-8, BW + 8) + what + runs(rx, 20, 12, read, need ? READ : HELPER_READ, 'end')  // "waiting 120m" may run into the gap before the column, never into the text

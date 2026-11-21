@@ -343,11 +343,20 @@ test('pane: the struggling note is never cut; its separator drops first', () => 
   expect(words(row)).toContain('REVIEW 3 failed tries'); expect(src(row)).toMatch(/<tspan class="warn">3 failed tries<\/tspan><\/text>/)
 })
 
-test('pane: a helper row keeps its title whole and drops the reason when tight', () => {
-  const k2 = (columns: number) => { const v = paneViewOf('failed', { columns }); return find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k2')! }
-  const tight = k2(36), seen = pieces(tight).map(([, p]) => p)
-  expect(seen).toContain('map the cache keys'); expect(seen.some(p => p.includes('cach') && p !== 'map the cache keys')).toBe(false)
-  expect(unescape(src(tight).match(/<title>([^<]*)<\/title>/)![1])).toBe('no "cacheKey" in src/'); expect(String(inner(tight).alt)).toContain('no "cacheKey" in src/')
+test('pane: a helper row keeps its title whole and wraps the reason to line 2 when tight', () => {
+  const k2 = (columns: number, reason?: string) => {
+    const v = paneViewOf('failed', { columns }), crew = reason ? { ...v.crew, agents: v.crew.agents.map(x => ({ ...x, helpers: x.helpers.map(h => (h.id === 'k2' ? { ...h, reason } : h)) })) } : v.crew
+    return find(paneTree({ ...v, crew, ui: { ...v.ui, shut: [] } }), 'helper-k2')!
+  }
+  const line = (e: El, y: number, cls: string) => [...src(e).matchAll(new RegExp(`<text x="10" y="${y}" class="${cls}" font-size="12" font-weight="600">([^<]*)</text>`, 'g'))].map(m => unescape(m[1]))
+  const tight = k2(36)
+  expect(inner(tight).height).toBe(32)
+  expect(pieces(tight).filter(([, p]) => p.includes('cach'))).toEqual([['fg', 'map the cache keys'], ['er', 'no "cacheKey" in src/']])
+  expect(line(tight, 13, 'fg')).toEqual(['map the cache keys']); expect(line(tight, 27, 'er')).toEqual(['no "cacheKey" in src/'])
+  expect(String(inner(tight).alt)).toContain('no "cacheKey" in src/')
+  const long = k2(36, 'no "cacheKey" in src/ or lib/ after 3 passes over port 5432 config'), second = line(long, 27, 'er')
+  expect(second.length).toBe(1); expect(second[0].endsWith('…')).toBe(true); expect(second[0]).not.toMatch(/\d…$/)
+  expect(unescape(src(long).match(/<title>([^<]*)<\/title>/)![1])).toBe('no "cacheKey" in src/ or lib/ after 3 passes over port 5432 config')
   expect(words(k2(52))).toContain('map the cache keys no "cacheKey" in src/')
 })
 
