@@ -13,7 +13,7 @@ const EDITS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
 export const isEdit = (tool: string): boolean => EDITS.includes(tool)
 
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
-const tail2 = (p: string) => p.split('/').filter(Boolean).slice(-2).join('/')
+const tail2 = (p: string) => p.split(/[\\/]/).filter(Boolean).slice(-2).join('/')   // Windows paths use backslashes
 
 export const linesOf = (tool: string, result: unknown): { added: number; removed: number } => {
   const r = rec(result), none = { added: 0, removed: 0 }

@@ -7,6 +7,11 @@ test('activity: each tool maps to its kind, verb and target', () => {
   expect(onTool(emptyFacts(), { tool: 'Grep', input: { pattern: 'UNATTENDED', path: 'hooks/' }, at: 1 }).activity['']).toEqual({ kind: 'search', verb: 'Searching', target: '"UNATTENDED" in hooks/', at: 1 })
   expect(onTool(emptyFacts(), { tool: 'mcp__x__y', input: {}, at: 1 }).activity[''].kind).toBe('other')
 })
+test('activity: a Windows or mixed path shows the same two-part tail', () => {
+  const target = (file_path: string) => onTool(emptyFacts(), { tool: 'Read', input: { file_path }, at: 1 }).activity[''].target
+  expect(target('C:\\Users\\x\\hooks\\text.ts')).toBe('hooks/text.ts')
+  expect(target('C:\\work/clawpit\\hooks/text.ts')).toBe('hooks/text.ts')
+})
 test('activity: read, run, browse, spawn and think', () => {
   const at = (tool: string, input: Record<string, unknown>) => onTool(emptyFacts(), { tool, input, at: 1 }).activity['']
   expect(at('Read', { file_path: '/a/b/c/d.ts' })).toEqual({ kind: 'read', verb: 'Reading', target: 'c/d.ts', at: 1 })
