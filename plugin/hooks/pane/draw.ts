@@ -11,8 +11,8 @@ import { paneLayout, type PaneItem } from './layout'
 export type { El }
 export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat }
 
-// The row's four columns: crab 38, title and activity, the reading column (88px where titles fit), the chevron.
-const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, HELPER_READ = 72, INDENT = 14, READ_GAP = 6
+// The row's four columns: crab 38, title and activity, the reading column (88px at most, see readEdge), the chevron.
+const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6
 const n = (v: number) => +v.toFixed(2)
 const clean = (v: unknown, max: number) => clip(oneLine(v), max)
 type Weight = 400 | 600 | 700
@@ -79,30 +79,49 @@ const activityLine = (a: CrewAgent, now: number, rs: Run[], maxW: number, size: 
   return { tip, cut: runsWidth(rs, size) > maxW || textOf(activityRuns(a, now)) !== tip }
 }
 
-// Where the reading column starts. Running rows and plain helpers share one edge per pane: 88 (72 for helpers) while every
-// title fits beside it, else the widest reading in view. Alert rows size their own, and where the title would still not fit
-// beside "waiting Nm" they read only the age.
-type Edge = { row: number; helper: number }
-const WIDE: Edge = { row: READ, helper: HELPER_READ }
+// Where the reading column starts. Running rows and plain helpers share one edge per pane: the widest reading in view plus
+// READ_GAP, 88 at most. Where a title would cut under MIN_CUT there, the edge pulls in to keep MIN_CUT of it, down to the
+// widest number-only reading ("~1m", "0:30"); readings that no longer fit read only their number. Moving the edge with the
+// width, never jumping, keeps every title growing as the pane widens. A title that still will not fit runs over its reading.
 const rowRoom = (W: number, read: number) => W - CRAB - 3 * GAP - read - CHEV - PAD
 const helperRoom = (W: number, depth: 1 | 2, read: number) => W - HELPER_CRAB - (depth - 1) * INDENT - PAD - CHEV - 3 * GAP - read
-const readEdge = (items: PaneItem[], W: number, now: number): Edge => {
-  let need = 0, fits = true
-  for (const i of items) {
-    if (i.kind === 'row' && i.agent.state !== 'need' && i.agent.state !== 'failed') {
-      need = Math.max(need, runsWidth(reading(i.agent, now), 13), blocksWidth(i.agent.stepTotal))
-      fits &&= textWidth(clean(i.agent.title, 60), 13, 600) <= rowRoom(W, READ)
-    } else if (i.kind === 'helper' && i.agent.state !== 'need' && i.agent.prop !== 'fail') {
-      need = Math.max(need, runsWidth(reading(i.agent, now), 12))
-      fits &&= textWidth(clean(i.agent.title, 60), 12, 600) <= helperRoom(W, i.depth, HELPER_READ)
-    }
-  }
-  return fits ? WIDE : { row: Math.min(READ, need + READ_GAP), helper: Math.min(HELPER_READ, need + READ_GAP) }
+const shortReading = (a: CrewAgent, now: number): Run[] => reading(a, now).slice(0, 1)
+// The width at which `s` shows whole or as a cut of at least MIN_CUT characters.
+const keepWidth = (s: string, size: number) => {
+  for (let k = MIN_CUT; k < [...s].length; k++) { const w = textWidth(`${s.slice(0, k)}…`, size, 600); if (fit(s, w, size, 600)) return w }
+  return textWidth(s, size, 600)
 }
-// `full`/`brief`: what the column's words need, and its age-only form.
-const alertColumn = (titleW: number, cap: number, full: number, brief: number, room: (read: number) => number) => {
+type Plain = { a: CrewAgent; size: 12 | 13; room: (read: number) => number; dots: number }
+const plainOf = (i: PaneItem, W: number): Plain | null =>
+  i.kind === 'row' && i.agent.state !== 'need' && i.agent.state !== 'failed' ? { a: i.agent, size: 13, room: r => rowRoom(W, r), dots: blocksWidth(i.agent.stepTotal) }
+    : i.kind === 'helper' && i.agent.state !== 'need' && i.agent.prop !== 'fail' ? { a: i.agent, size: 12, room: r => helperRoom(W, i.depth, r), dots: 0 } : null
+const readEdge = (items: PaneItem[], W: number, now: number): number => {
+  const plain = items.flatMap(i => plainOf(i, W) ?? [])
+  if (!plain.length) return READ
+  const widest = (of: (a: CrewAgent, now: number) => Run[]) => Math.min(READ, Math.max(...plain.map(p => Math.max(p.dots, runsWidth(of(p.a, now), p.size)))) + READ_GAP)
+  const keep = Math.min(...plain.map(p => p.room(0) - keepWidth(clean(p.a.title, 60), p.size)))
+  return Math.min(widest(reading), Math.max(widest(shortReading), keep))
+}
+// A plain row at the shared edge: its title's room and the reading it shows (none when the title runs over it).
+const plainRead = (a: CrewAgent, now: number, size: 12 | 13, room: (read: number) => number, edge: number) => {
+  const at = room(edge), keep = keepWidth(clean(a.title, 60), size), full = reading(a, now)
+  if (at >= keep) return { titleW: at, read: runsWidth(full, size) + READ_GAP <= edge ? full : shortReading(a, now) }
+  return { titleW: Math.min(room(0), keep), read: [] as Run[] }
+}
+// An alert row sizes its own column: 88 where its title and the start of its why fit, else its words, else the age alone.
+const alertColumn = (fits: (read: number) => boolean, cap: number, full: number, brief: number) => {
   const own = Math.min(cap, full + READ_GAP)
-  return titleW <= room(cap) ? { read: cap, brief: false } : titleW <= room(own) ? { read: own, brief: false } : { read: Math.min(cap, brief + READ_GAP), brief: true }
+  return fits(cap) ? { read: cap, brief: false } : fits(own) ? { read: own, brief: false } : { read: Math.min(cap, brief + READ_GAP), brief: true }
+}
+// A why's first line beside the tag (`w1`), the rest on one line under it (`w2`), cut there.
+const whyLines = (s: string, w1: number, w2: number): [string, string] => {
+  const words = s.split(' ').filter(Boolean)
+  let k = 0, first = ''
+  while (k < words.length && textWidth(first ? `${first} ${words[k]}` : words[k], 12, 600) <= w1) first = first ? `${first} ${words[k++]}` : words[k++]
+  const rest = words.slice(k).join(' '), second = rest ? fit(rest, w2, 12, 600) : ''
+  if (!rest || second) return [first, second]
+  const handed = first && fit(`${first}…`, w1, 12, 600)   // the dropped line's ellipsis goes back to line 1
+  return [short(handed) ? '' : handed, '']
 }
 
 const tagOf = (role: Role) => role.toUpperCase()
@@ -152,31 +171,34 @@ const section = (item: Extract<PaneItem, { kind: 'section' }>, W: number): El =>
 // A needs-you or failed row: one image, so the ring is one drawing with one clock.
 const alertRow = (a: CrewAgent, ring: boolean, open: boolean, W: number, now: number): El => {
   const need = a.state === 'need', h = SIZE.needRow, rx = W - PAD - CHEV - GAP, title = clean(a.title, 60), age = waiting(a, now), after = `after ${elapsed(a, now)}`
-  const dots = blocksWidth(a.stepTotal), failedW = textWidth('failed', 13, 600)
-  const col = alertColumn(textWidth(title, 13, 600), READ, Math.max(dots, need ? textWidth(`waiting ${age}`, 13, 600) : Math.max(failedW, textWidth(after, 12))),
-    Math.max(dots, need ? textWidth(age, 13, 600) : failedW), r => W - CRAB - GAP - GAP - r - CHEV - PAD)
-  const textW = W - CRAB - GAP - GAP - col.read - CHEV - PAD
   const msg = clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : `failed after ${elapsed(a, now)}`)
-  const tw = tagWidth(a.role), x = CRAB + GAP + tw + 4
-  const lines = wrap(msg, textW - tw - 4, 12, 2, 600)
+  const tw = tagWidth(a.role), x = CRAB + GAP + tw + 4, room = (r: number) => W - CRAB - GAP - GAP - r - CHEV - PAD
+  // It fits where its title is whole and the first 2 × MIN_CUT characters of its why sit beside the tag.
+  const titleW = textWidth(title, 13, 600), start = textWidth([...msg].slice(0, 2 * MIN_CUT).join(''), 12, 600)
+  const dots = blocksWidth(a.stepTotal), failedW = textWidth('failed', 13, 600)
+  const col = alertColumn(r => titleW <= room(r) && start <= room(r) - tw - 4, READ,
+    Math.max(dots, need ? textWidth(`waiting ${age}`, 13, 600) : Math.max(failedW, textWidth(after, 12))), Math.max(dots, need ? textWidth(age, 13, 600) : failedW))
+  const textW = room(col.read), lines = whyLines(msg, textW - tw - 4, textW)
   const read = need
     ? text(rx, 24, 'er', 13, col.brief ? age : `waiting ${age}`, { weight: 600, anchor: 'end' }) + blocks(rx, 32, a.stepDone, a.stepTotal, 'er')
     : text(rx, 20, 'er', 13, 'failed', { weight: 600, anchor: 'end' }) + (col.brief ? '' : text(rx, 36, 'fg', 12, after, { anchor: 'end' })) + blocks(rx, 42, a.stepDone, a.stepTotal, 'er')
   const ringArt = ring ? `<style>.ring{opacity:0;animation:ring ${MOTION.beat} infinite}@keyframes ring{50%{opacity:1}}</style><rect x="1" y="1" width="${n(W - 2)}" height="${h - 2}" rx="7" fill="none" class="s-ring60 ring" stroke-width="2"/>` : ''
   const body = `<rect x="0" y="0" width="${n(W)}" height="${h}" rx="8" class="needTint"/>${ringArt}`
     + text(CRAB + GAP, 19, 'fg', 13, fit(title, textW, 13, 600), { weight: 600 }) + tag(CRAB + GAP, 37, a.role, 'er')
-    + withTip(msg, lines.join(' ') !== msg, lines.map((l, i) => text(x, 37 + i * 16, 'er', 12, l, { weight: 600 })).join('')) + read + chevron(W - PAD - 14, 25, 12, open)
+    + withTip(msg, lines.filter(Boolean).join(' ') !== msg, lines.map((l, i) => (l ? text(i ? CRAB + GAP : x, 37 + i * 16, 'er', 12, l, { weight: 600 }) : '')).join('')) + read + chevron(W - PAD - 14, 25, 12, open)
   const source = withCrab(doc(W, h, body, ring), crab({ role: a.role, prop: need ? 'wait' : 'fail', walk: false, size: 'M' }), 2, 17)
   const alt = `${title} ${need ? `needs you, waiting ${age}: ${msg}` : `failed ${after}: ${msg}`}`
   return image(`row-${a.id}`, { source, alt, width: n(W), height: h, press: `row:${a.id}`, hover: true }, ring)
 }
 
-const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: number, read: number): El => {
-  const h = SIZE.row, BW = W - CRAB, textW = rowRoom(W, read), rx = BW - PAD - CHEV - GAP, tw = tagWidth(a.role)
+const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: number, edge: number): El => {
+  const h = SIZE.row, BW = W - CRAB, textW = rowRoom(W, edge), rx = BW - PAD - CHEV - GAP, tw = tagWidth(a.role), { titleW, read } = plainRead(a, now, 13, r => rowRoom(W, r), edge)
   const crabSvg = withCrab(svg(CRAB, h, ''), crab({ role: a.role, prop: a.prop, walk, size: 'M' }), 2, 10)
-  const act = activityRuns(a, now), aw = textW - tw - 4, { tip, cut } = activityLine(a, now, act, aw, 12)
-  const body = text(GAP, 20, 'fg', 13, fit(clean(a.title, 60), textW, 13, 600), { weight: 600 }) + tag(GAP, 38, a.role, `roleText-${a.role}`)
-    + withTip(tip, cut, runs(GAP + tw + 4, 38, 12, act, aw)) + runs(rx, 20, 13, reading(a, now), read, 'end')
+  // A note ("3 failed tries", "slower") that will not fit beside the tag takes the tag's slot; the crab still shows the role.
+  const act = activityRuns(a, now), [note] = act, noTag = note[1] === 'warn' && textWidth(note[0].replace(/ · $/, ''), 12) > textW - tw - 4
+  const ax = noTag ? GAP : GAP + tw + 4, aw = textW - (ax - GAP), { tip, cut } = activityLine(a, now, act, aw, 12)
+  const body = text(GAP, 20, 'fg', 13, fit(clean(a.title, 60), titleW, 13, 600), { weight: 600 }) + (noTag ? '' : tag(GAP, 38, a.role, `roleText-${a.role}`))
+    + withTip(tip, cut, runs(ax, 38, 12, act, aw)) + runs(rx, 20, 13, read, edge, 'end')
     + blocks(rx, 28, a.stepDone, a.stepTotal, a.role) + chevron(BW - PAD - 14, 18, 12, open)
   const press = `row:${a.id}`
   return { type: 'Box', props: { flexDirection: 'row' }, children: [
@@ -234,18 +256,20 @@ const drawer = (a: CrewAgent, W: number, now: number): El => {
 const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: number, edge: number): El => {
   const h = SIZE.helperRow, failed = a.prop === 'fail', need = a.state === 'need', alert = failed || need, indent = (depth - 1) * INDENT, cw = HELPER_CRAB + indent
   const title = clean(a.title, 60), age = waiting(a, now), failedW = textWidth('failed', 12, 600)
-  const col = alert ? alertColumn(textWidth(title, 12, 600), HELPER_READ, need ? textWidth(`waiting ${age}`, 12, 600) : failedW, need ? textWidth(age, 12, 600) : failedW, r => helperRoom(W, depth, r))
-    : { read: edge, brief: false }
-  const BW = W - cw, rx = BW - PAD - CHEV - GAP, textW = helperRoom(W, depth, col.read)
+  const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
+  // A question keeps at least half the text width, so a long title cannot push it out; any other helper keeps its title whole.
+  const titleRoom = (textW: number) => (need ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW)
+  const full = need ? textWidth(`waiting ${age}`, 12, 600) : failedW, titleFits = (r: number) => textWidth(title, 12, 600) <= titleRoom(helperRoom(W, depth, r))
+  const col = alert ? alertColumn(titleFits, Math.min(READ, full + READ_GAP), full, need ? textWidth(age, 12, 600) : failedW) : { read: edge, brief: false }
+  const plain = alert ? null : plainRead(a, now, 12, r => helperRoom(W, depth, r), edge)
+  const BW = W - cw, rx = BW - PAD - CHEV - GAP, textW = plain ? plain.titleW : helperRoom(W, depth, col.read)
   // The tint spans both images; each runs 8px past the seam, clipped there, so the band reads as one.
   const tint = (x: number, w: number) => (alert ? `<rect x="${x}" y="0" width="${n(w)}" height="${h}" rx="8" class="needTint"/>` : '')
   // A nested helper keeps its parent's tree line and reaches its indented crab with a longer branch.
   const tree = `${tint(20 + indent, HELPER_CRAB - 12)}<rect x="12" y="0" width="1.5" height="${h}" class="track"/><rect x="12" y="15.25" width="${9 + indent}" height="1.5" class="track"/>`
   const crabSvg = withCrab(svg(cw, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S' }), 23.25 + indent, 5.5)
-  const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
-  const read: Run[] = need ? [[col.brief ? age : `waiting ${age}`, 'er', 600]] : failed ? [['failed', 'er', 600]] : reading(a, now)
-  // A question keeps at least half the text width, so a long title cannot push it out; any other helper keeps its title whole.
-  const titleW = need ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW
+  const read: Run[] = need ? [[col.brief ? age : `waiting ${age}`, 'er', 600]] : failed ? [['failed', 'er', 600]] : plain!.read
+  const titleW = titleRoom(textW)
   let what: string, tip = msg, cut: boolean
   if (need) {
     // The question follows the title and wraps to a second line, cut there with an ellipsis.
@@ -269,7 +293,7 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   }
   what = withTip(tip, cut, what)
   const body = tint(-8, BW + 8) + what + runs(rx, 20, 12, read, need ? READ : col.read, 'end')  // "waiting 120m" may run into the gap before the column, never into the text
-  const alt = `${title}, ${need ? `waiting ${age}` : textOf(read)}${alert ? `: ${msg}` : cut ? `: ${clean(tip, TIP_MAX)}` : ''}`
+  const alt = `${title}, ${need ? `waiting ${age}` : alert ? textOf(read) : textOf(reading(a, now))}${alert ? `: ${msg}` : cut ? `: ${clean(tip, TIP_MAX)}` : ''}`
   return { type: 'Box', props: { flexDirection: 'row' }, children: [
     image(`crab-${a.id}`, { source: crabSvg, alt: `${a.role} crab`, width: cw, height: h }, walk),
     // A helper that waits on you is pressed to answer it: `ask:` puts it in the prompt. Helpers have no drawer.
@@ -291,13 +315,13 @@ const endedRow = (a: CrewAgent, W: number, now: number): El => {
   return image(`ended-${a.id}`, { source, alt: `${title} ${status}`, width: n(W), height: h }, false)
 }
 
-const drawItem = (item: PaneItem, W: number, now: number, edge: Edge = WIDE): El => {
+const drawItem = (item: PaneItem, W: number, now: number, edge = READ): El => {
   switch (item.kind) {
     case 'head': return head(item.crew, W)
     case 'section': return section(item, W)
-    case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now, edge.row)
+    case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now, edge)
     case 'drawer': return drawer(item.agent, W, now)
-    case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge.helper)
+    case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge)
     case 'kids': return kids(item, W)
     case 'ended': return endedRow(item.agent, W, now)
     case 'more': return image(`more-${item.section}`, { source: doc(W, 22, text(CRAB + GAP, 15, 'muted', 12, `+${item.count} more`)), alt: `${item.count} more agents`, width: n(W), height: 22 }, false)

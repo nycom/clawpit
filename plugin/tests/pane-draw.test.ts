@@ -187,7 +187,8 @@ test('pane: a waiting helper counts in the summary, reads waiting Nm, and cuts i
   const t = paneTree({ ...v, ui: { ...v.ui, shut: [] } }), row = find(t, 'helper-k1')!
   expect(words(find(t, 'head'))).toContain('1 needs you · 4 running')
   expect(inner(row).height).toBe(32); expect(src(row)).toContain('needTint')
-  expect(src(row)).toMatch(/text-anchor="end"><tspan class="er" font-weight="600">waiting 2m</)
+  // Its title is cut beside "waiting 2m", so the column reads only the age; the alt keeps the words.
+  expect(src(row)).toMatch(/text-anchor="end"><tspan class="er" font-weight="600">2m</)
   const first = src(row).match(/<tspan class="fg">find call[^<]* <\/tspan><tspan class="er">([^<]*)<\/tspan><\/text>/)!
   const second = [...src(row).matchAll(/<text x="10" y="27" class="er" font-size="12" font-weight="600">([^<]*)<\/text>/g)].map(m => unescape(m[1]))
   expect(first[1].startsWith('Should')).toBe(true); expect(second.length).toBe(1); expect(second[0].endsWith('…')).toBe(true)
@@ -267,8 +268,8 @@ test('pane: a cut fragment under 8 characters is dropped, never a bare ellipsis;
     if (s === 'failed') expect(words(find(t, 'row-rev'))).toMatch(/3 failed tr/)
   }
   expect(short).toEqual([])
-  // At 41 columns only a few letters of the verb fit after the note: they go, with the separator before them.
-  expect(src(find(paneTree(paneViewOf('failed', { columns: 41 })), 'row-rev'))).toMatch(/<tspan class="warn">3 failed tries<\/tspan><\/text>/)
+  // At 39 columns only a few letters of the verb fit after the note: they go, with the separator before them.
+  expect(src(find(paneTree(paneViewOf('failed', { columns: 39 })), 'row-rev'))).toMatch(/<tspan class="warn">3 failed tries<\/tspan><\/text>/)
 })
 
 test('pane: a reading column with no estimate reads the clock and a muted so far', () => {
@@ -432,4 +433,71 @@ test('pane: no text is ever a lone ellipsis, at 28 to 64 cells', () => {
   expect(bare).toEqual([])
   // A dropped second line hands its ellipsis back: a cut reason never reads as one whole word.
   expect(texts(find(paneTree(paneViewOf('failed', { columns: APP_COLUMNS })), 'row-e2e')!)).not.toContain('Could')
+})
+
+const NARROW = [28, 29, 30] as const
+// The er lines of an alert row's question or reason, in order.
+const why = (e: El) => [...src(e).matchAll(/<text x="[\d.]+" y="(?:37|53)" class="er" font-size="12" font-weight="600">([^<]*)<\/text>/g)].map(m => unescape(m[1]))
+
+test('pane: an alert row always shows its why at the width the app gives', () => {
+  for (const s of ['needsYou', 'failed', 'both', 'sizeGauges', 'sizeLine'] as const) for (const columns of NARROW) {
+    const v = paneViewOf(s, { columns }), t = paneTree(v)
+    for (const a of v.crew.agents.filter(x => x.state === 'need' || x.state === 'failed')) {
+      const shown = why(find(t, `row-${a.id}`)!).join(' ').replace(/…$/, '')
+      expect(`${s} ${columns} ${a.id}: ${[...shown].length >= 16 || shown === (a.question ?? a.reason)}`).toBe(`${s} ${columns} ${a.id}: true`)
+    }
+  }
+  // The second line wraps under the tag, from the title's x.
+  const row = find(paneTree(paneViewOf('needsYou', { columns: 28 })), 'row-e2e')!
+  expect(why(row)[0]).toBe('Postgres or'); expect(src(row)).toMatch(/<text x="48" y="53" class="er" font-size="12" font-weight="600">SQLite/)
+  expect(why(find(paneTree(paneViewOf('both', { columns: 28 })), 'row-pln')!)).toEqual(['Ship the', 'release notes in…'])
+})
+
+test('pane: the struggling note never drops; where it and the tag will not both fit it takes the tag slot', () => {
+  for (const s of ['failed', 'both'] as const) for (const columns of NARROW) {
+    const t = paneTree(paneViewOf(s, { columns })), row = find(t, 'row-rev')!
+    expect(texts(row).filter(p => p.startsWith('3 failed tries')).length).toBe(1)
+    if (!texts(row).includes('REVIEW')) expect(src(row)).toMatch(/<text x="10" y="38" font-size="12"><tspan class="warn">3 failed tries/)
+    expect(String(inner(find(t, 'crab-rev')!).alt)).toContain('review')
+  }
+})
+
+// Each row's title as drawn: its first fg piece, which must start the agent's title; '' when the title dropped.
+const titleIds = (as: CrewAgent[]): [string, string][] => as.flatMap(a => [[a.id, a.title] as [string, string], ...titleIds(a.helpers)])
+const shownTitles = (t: El, v: ReturnType<typeof paneViewOf>) => {
+  const titles = new Map(titleIds(v.crew.agents))
+  return all(t).filter(x => /^(row|helper)-/.test(String(x.props?.key ?? ''))).map(e => {
+    const key = String(e.props!.key), title = titles.get(key.replace(/^(row|helper)-/, ''))!
+    const p = (pieces(e).find(([cls]) => cls === 'fg')?.[1] ?? '').trim().replace(/…$/, '')
+    return { key, title, shown: p && title.startsWith(p) ? p : '' }
+  })
+}
+
+test('pane: a title never drops; the reading shortens first', () => {
+  const nested = paneViewOf('nestedHelper', { columns: 28 }), k3 = texts(find(paneTree({ ...nested, ui: { ...nested.ui, shut: [] } }), 'helper-k3')!)
+  expect(k3.some(p => 'read the guard tests'.startsWith(p.replace(/…$/, '')) && [...p.replace(/…$/, '')].length >= 8)).toBe(true)
+  for (const s of [...VIEWS, 'helpers', 'helperNeedsYou', 'nestedHelper'] as const) for (let columns = 28; columns <= 64; columns++) {
+    const v = paneViewOf(s, { columns }), t = paneTree({ ...v, ui: { ...v.ui, shut: [] } })
+    for (const { key, title, shown } of shownTitles(t, v)) expect(`${s} ${columns} ${key}: ${[...shown].length >= Math.min(8, [...title].length)}`).toBe(`${s} ${columns} ${key}: true`)
+  }
+})
+
+test('pane: one smooth reading edge: titles never shrink as the pane widens, helpers share the running rows\' edge', () => {
+  for (const s of [...VIEWS, 'helpers', 'helperNeedsYou', 'nestedHelper'] as const) {
+    const last = new Map<string, number>()
+    for (let columns = 28; columns <= 64; columns++) {
+      const v = paneViewOf(s, { columns }), t = paneTree({ ...v, ui: { ...v.ui, shut: [] } })
+      for (const { key, shown } of shownTitles(t, v)) {
+        const len = [...shown].length
+        expect(`${s} ${key} at ${columns}: ${len >= (last.get(key) ?? 0)}`).toBe(`${s} ${key} at ${columns}: true`)
+        last.set(key, len)
+      }
+    }
+  }
+  const long = 'Fixture runner for the login flow and the rest'
+  const v = withAgents(paneViewOf('hydra', { columns: APP_COLUMNS }), a => a.map(x => (x.id === 'imp' ? { ...x, title: long }
+    : x.id === 'rev' ? { ...x, helpers: x.helpers.map(h => (h.id === 'k2' ? { ...h, title: long } : h)) } : x)))
+  const t = paneTree({ ...v, ui: { ...v.ui, shut: [] } })
+  const end = (key: string, x0: number, size: number) => x0 + textWidth(pieces(find(t, key)!).find(([cls]) => cls === 'fg')![1], size, 600)
+  expect(Math.abs(end('row-imp', 38 + 10, 13) - end('helper-k2', 50 + 10, 12))).toBeLessThan(12)
 })
