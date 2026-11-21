@@ -70,3 +70,12 @@ Design: `ALIGNMENT.md`, "Failed state"; mockup `mockups-all.html?state=failed`.
 - **Struggling** (still running, 3+ failed tries) is amber words, "N failed tries", in the "slower" slot. Red is kept for failed or needs you. Costume order: needs you, then failed, then struggling, then finishing next.
 - **Sections:** Needs you, then Failed, then Running, then Ended. A failed run moves to Ended after the next prompt.
 - **Failure reason:** workers send a reason and an error line through savvy's step tool. The build plan adds the fields and the brief line. Re-arming stays as the data allows (a turn that starts without a prompt).
+
+## Build decisions: decided 2026-11-21
+Taken by the maintainer while the build ran, after seeing each behaviour drawn.
+- **Log drawer:** one image holds the lines and their ages; ages read in whole minutes ("<1m", "3m"), as the waiting age does. The drawer opens still. When a line arrives, only that line fades in from the right (300 ms, 100 ms late) while the lines below slide down one row; nothing else moves. The image changes only when a line arrives or an age crosses a minute, so nothing replays on the clock. Reduced motion: no movement. This replaces the drawer's open reveal and "entries stagger in" above.
+- **A helper that waits on you** needs you: it counts in "N needs you", its row is tinted and reads "waiting Nm" with its question, and a folded helpers toggle reads "N helpers · M needs you" in `er`, so an alert always points at something visible. It stays under its parent; the ring stays on top-level rows.
+- **Helpers of helpers** nest one more level under their helper, on the same tree line.
+- **Step blocks:** at most 11 in the reading column; more steps fill them in proportion.
+- **Pane summary:** when it does not fit one line, the cost and the time left move to a second line.
+- **Context so-what:** "learning your pace" only under 3 recorded turns. After that, with no growth to estimate from, it shows only the msgs share ("34% msgs"), or nothing.
