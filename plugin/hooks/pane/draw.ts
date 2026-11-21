@@ -253,7 +253,7 @@ const drawer = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   return image(`drawer-${a.id}`, { source: doc(W, h, `${oneShot}${line}${body}`), alt: `${clean(a.title, 60)} log`, width: n(W), height: h }, false)
 }
 
-const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: number, edge: number): El => {
+const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: number, edge: number, still: boolean): El => {
   const h = SIZE.helperRow, failed = a.prop === 'fail', need = a.state === 'need', alert = failed || need, indent = (depth - 1) * INDENT, cw = HELPER_CRAB + indent
   const title = clean(a.title, 60), age = waiting(a, now), failedW = textWidth('failed', 12, 600)
   const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
@@ -267,7 +267,7 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   const tint = (x: number, w: number) => (alert ? `<rect x="${x}" y="0" width="${n(w)}" height="${h}" rx="8" class="needTint"/>` : '')
   // A nested helper keeps its parent's tree line and reaches its indented crab with a longer branch.
   const tree = `${tint(20 + indent, HELPER_CRAB - 12)}<rect x="12" y="0" width="1.5" height="${h}" class="track"/><rect x="12" y="15.25" width="${9 + indent}" height="1.5" class="track"/>`
-  const crabSvg = withCrab(svg(cw, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S' }), 23.25 + indent, 5.5)
+  const crabSvg = withCrab(svg(cw, h, tree), crab({ role: a.role, prop: a.prop, walk, size: 'S', still }), 23.25 + indent, 5.5)
   const read: Run[] = need ? [[col.brief ? age : `waiting ${age}`, 'er', 600]] : failed ? [['failed', 'er', 600]] : plain!.read
   // Laid out at the words' column, so the age-only step widens the question, not the title; never under MIN_CUT of it.
   const titleW = need ? Math.max(titleRoom(helperRoom(W, depth, own)), Math.min(keepWidth(title, 12), textW)) : textW
@@ -308,11 +308,11 @@ const kids = (item: Extract<PaneItem, { kind: 'kids' }>, W: number): El => {
   return image(`kids-${item.parentId}`, { source: doc(W, 22, body), alt: rs.map(r => r[0]).join('') + (item.shut ? ', folded' : ', open'), width: n(W), height: 22, press: `kids:${item.parentId}` }, false)
 }
 
-const endedRow = (a: CrewAgent, W: number, now: number): El => {
+const endedRow = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   const h = SIZE.endedRow, failed = a.prop === 'fail', status = failed ? `failed after ${elapsed(a, now)}` : elapsed(a, now), cls = failed ? 'er' : 'okText'
   const sw = textWidth(status, 12), ix = W - PAD - sw - 14, title = fit(clean(a.title, 60), ix - CRAB - GAP, 12)
   const body = text(CRAB, 19, 'muted', 12, title) + `<g transform="translate(${n(ix)} 10)">${icon(failed ? 'cross' : 'check', 10, `s-${cls}`)}</g>` + text(W - PAD, 19, cls, 12, status, { anchor: 'end' })
-  const source = withCrab(doc(W, h, body), crab({ role: a.role, prop: failed ? 'fail' : 'done', walk: false, size: 'S' }), 1.25, 4.5)
+  const source = withCrab(doc(W, h, body), crab({ role: a.role, prop: failed ? 'fail' : 'done', walk: false, size: 'S', still }), 1.25, 4.5)
   return image(`ended-${a.id}`, { source, alt: `${title} ${status}`, width: n(W), height: h }, false)
 }
 
@@ -322,9 +322,9 @@ const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge =
     case 'section': return section(item, W)
     case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now, edge)
     case 'drawer': return drawer(item.agent, W, now, still)
-    case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge)
+    case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge, still)
     case 'kids': return kids(item, W)
-    case 'ended': return endedRow(item.agent, W, now)
+    case 'ended': return endedRow(item.agent, W, now, still)
     case 'more': return image(`more-${item.section}`, { source: doc(W, 22, text(CRAB + GAP, 15, 'muted', 12, `+${item.count} more`)), alt: `${item.count} more agents`, width: n(W), height: 22 }, false)
     case 'empty': {
       const [cw, ch] = SIZE.crab.L, x = (W - cw) / 2

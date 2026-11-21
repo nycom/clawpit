@@ -18,6 +18,7 @@ const setup = (on: OnT) => {
   on('session.id', () => ({ value: 's1' }))
   on('session.usage', () => ({ value: USAGE as never }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('agent.spawn', (_$, e) => ({ model: 'm', agentId: e.tool_use_id }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.panes', () => ({ value: [{ id: 'clawpit-agents', title: 'Agents', isShown: true, isFocused: false, isPlaced: true }] }) as never)
   on('ui.render', (h, e) => h.ui.resolve(e).Box({ key: 'beneath', children: [] }))
@@ -34,20 +35,24 @@ const savvy = {
   },
 }
 
-// A busy crew: walkers, a needs-you row, a failed row, a plan, and a fresh step line in an open drawer.
+// A busy crew: walkers, a needs-you row, a failed row, a plan, a fresh step line in an open drawer, and a done run under an open Ended, and a done helper.
 const draw = async ($: $T, on: OnT) => {
   setup(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.turn.start({ text: 'go', turnId: 't' } as never)
-  const runs = [run('a0', { blocked: 'Which schema?' }), run('f0', { status: 'failed', heldDone: true, endedAt: T0 }), run('r1', { stepDone: 1, stepTotal: 3, stepNote: 'Read the cache module.' }), run('r2'), run('r3'), run('r4')]
+  await $.agent.spawn({ tool_use_id: 'h0', prompt: '', description: 'worker h0', subagentType: 'implementer', provider: 'claude', parentModel: 'x', background: false, fork: false, parentAgentId: 'r1' } as never)
+  const runs = [run('a0', { blocked: 'Which schema?' }), run('f0', { status: 'failed', heldDone: true, endedAt: T0 }), run('r1', { stepDone: 1, stepTotal: 3, stepNote: 'Read the cache module.' }), run('r2'), run('r3'), run('r4'), run('d0', { status: 'done', endedAt: T0 }), run('h0', { status: 'done', endedAt: T0 })]
   await $.tool.call({ tool: 'savvy-flow', flow: { title: 'Cache', total: 2, done: 0, phase: 'delegate', isFinished: false, tasks: [{ title: 'one' }, { title: 'two' }] } } as never)
   await $.tool.call({ tool: 'savvy-set', runs } as never)
   const panel = await $.ui.mount({ plugin: 'clawpit', surface: 'desktop', component: 'AbovePrompt', props: { bodyColumns: 120, hasSurvey: false, maxRows: 5 } as never })
   const pane = await $.ui.mount({ plugin: 'clawpit', surface: 'desktop', component: 'Pane', requestId: 'clawpit-agents', props: { title: 'Agents', isFocused: false, bodyColumns: 64, placement: 'dock' } as never })
   await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'row-r1' })
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'ended' })
   const nodes = [...(await panel.findAll({})), ...(await pane.findAll({}))] as unknown as Node[]
   await panel.unmount(); await pane.unmount()
   const sources = nodes.filter(n => n.type === 'Client' || n.type === 'Svg').map(n => String((n.type === 'Client' ? (n.props.props as { source: string }) : n.props).source))
+  expect(nodes.some(n => String((n.type === 'Client' ? (n.props.props as { alt: string }) : n.props).alt ?? '').startsWith('worker d0'))).toBe(true)   // the Ended row is drawn
+  expect(nodes.some(n => String((n.type === 'Client' ? (n.props.props as { alt: string }) : n.props).alt ?? '').startsWith('worker h0'))).toBe(true)   // and the done helper
   return { looping: sources.filter(s => s.includes('infinite')), css: sources.filter(s => /animation|transition|@keyframes/.test(s)), sources }
 }
 

@@ -28,19 +28,20 @@ const propArt = (prop: Prop, onRed: boolean): string => {
   }
 }
 
-const FLAG = '<rect x="24" y="5" width="1" height="10" class="crab"/><g class="flag"><rect x="25" y="5" width="8" height="5" fill="#fff"/>'
+// `still` drops the flag's one-shot wave (the animations setting off).
+const flag = (still: boolean) => `<rect x="24" y="5" width="1" height="10" class="crab"/><g${still ? '' : ' class="flag"'}><rect x="25" y="5" width="8" height="5" fill="#fff"/>`
   + [[25, 5], [29, 5], [27, 6], [31, 6], [25, 7], [29, 7]].map(([x, y]) => fixed(x, y, 2, 1, '#111')).join('') + '</g>'
 
-export const crab = (o: { role: Role; prop: Prop; walk: boolean; size: CrabSize; onRed?: boolean; move?: 'hop' | 'sway' }): string => {
-  const { role, prop, walk, size, onRed = false, move } = o, k = K[size]
+export const crab = (o: { role: Role; prop: Prop; walk: boolean; size: CrabSize; onRed?: boolean; move?: 'hop' | 'sway'; still?: boolean }): string => {
+  const { role, prop, walk, size, onRed = false, move, still = false } = o, k = K[size]
   let body = rect(7, 10, 16, 12, 'crab') + rect(3, 14, 4, 4, 'crab') + rect(23, prop === 'wait' ? 8 : 14, 4, 4, 'crab') + (prop === 'wait' ? rect(24, 12, 2, 2, 'crab') : '')
   body += prop === 'fail'
     ? rect(9, 12, 2, 1, 'crabInk') + rect(10, 13, 1, 1, 'crabInk') + rect(19, 12, 2, 1, 'crabInk') + rect(20, 13, 1, 1, 'crabInk')
     : rect(9, 12, 2, 2, 'crabInk') + rect(19, 12, 2, 2, 'crabInk')
   body += costume(role)
   const leg = (c: string, xs: number[]) => `<g${walk ? ` class="${c}"` : ''}>${xs.map(x => rect(x, 22, 2, 4, 'crab')).join('')}</g>`
-  const inner = `<g${walk ? ' class="bd"' : ''}>${body}</g>${leg('la', [7, 17])}${leg('lb', [11, 21])}<g${walk ? ' class="pr"' : ''}>${propArt(prop, onRed)}</g>${prop === 'done' ? FLAG : ''}`
+  const inner = `<g${walk ? ' class="bd"' : ''}>${body}</g>${leg('la', [7, 17])}${leg('lb', [11, 21])}<g${walk ? ' class="pr"' : ''}>${propArt(prop, onRed)}</g>${prop === 'done' ? flag(still) : ''}`
   const pad = move ? 3 : 0
   const art = `<g shape-rendering="crispEdges" transform="translate(${pad} ${pad}) scale(${k})">${inner}</g>`
-  return svg(34 * k + 2 * pad, 28 * k + 2 * pad, move ? `<g class="${move}">${art}</g>` : art, walk || !!move || prop === 'done')
+  return svg(34 * k + 2 * pad, 28 * k + 2 * pad, move ? `<g class="${move}">${art}</g>` : art, walk || !!move || (prop === 'done' && !still))
 }
