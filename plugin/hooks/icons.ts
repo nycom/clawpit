@@ -29,8 +29,10 @@ const deg = (p: number) => n((180 * p) / 100)
 // A 34x22 half dial (x.75 when small). `base` is the grey base arc of the context dial, up to that percent.
 export const dial = (pct: number, tone: 'accent' | 'warn' | 'er', opts: { ghost?: number; small?: boolean; settle?: Settle; base?: number } = {}): string => {
   const p = Math.min(100, Math.max(0, Number.isFinite(pct) ? pct : 0)), base = opts.base ?? 0
-  const ghost = opts.ghost == null ? '' : `<g transform="rotate(${deg(opts.ghost)} ${CX} ${CY})"><line x1="${CX}" y1="${CY}" x2="${CX - R + 3}" y2="${CY}" class="s-muted" stroke-width="1.6" stroke-dasharray="2 1.6"/></g>`
-  const s = opts.settle
+  // The ghost is rounded to half a percent and a still settle draws no animation, so the image only changes when
+  // something moved: a source that differs every tick remounts an animated image in the app (2026-11-21).
+  const ghost = opts.ghost == null ? '' : `<g transform="rotate(${deg(Math.round(opts.ghost * 2) / 2)} ${CX} ${CY})"><line x1="${CX}" y1="${CY}" x2="${CX - R + 3}" y2="${CY}" class="s-muted" stroke-width="1.6" stroke-dasharray="2 1.6"/></g>`
+  const s = opts.settle && deg(opts.settle.from) !== deg(opts.settle.to) ? opts.settle : undefined
   const kfName = s ? `nd${deg(s.from)}-${deg(s.to)}`.replace(/\./g, 'p') : '' // a dot is not valid in a CSS identifier
   const anim = s ? `;animation:${kfName} ${MOTION.settleMs}ms ${MOTION.curve}` : ''
   const kf = s ? `<style>@keyframes ${kfName}{from{transform:rotate(${deg(s.from)}deg)}to{transform:rotate(${deg(s.to)}deg)}}</style>` : ''
