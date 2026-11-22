@@ -3,7 +3,8 @@ import type { Eta } from '../../types'
 export type History = Record<string, number[]>
 
 export const STAGES = ['implement', 'review', 'fix', 'validate', 'recheck', 'merge', 'docs']
-export const stageOf = (description: string, words: readonly string[] = STAGES): string => { const d = description.toLowerCase(); return words.find(s => new RegExp(`\\b${s}\\b`).test(d)) ?? '' }
+// Whole words of any script, as savvy splits them; a configured word is compared as text, never compiled.
+export const stageOf = (description: string, words: readonly string[] = STAGES): string => { const d = description.toLowerCase().split(/[^\p{L}\p{N}]+/u); return words.find(s => d.includes(s)) ?? '' }
 
 export const keysOf = (type: string, model: string, description: string, words: readonly string[] = STAGES): [string, string, string] =>
   [`${type} · ${model} · ${stageOf(description, words)}`, `${type} · ${model}`, type]

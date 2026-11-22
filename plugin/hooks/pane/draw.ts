@@ -162,7 +162,7 @@ const head = (crew: Crew, W: number, cost: boolean): El => {
       .map((a): Seg => ({ state: a.state === 'need' ? 'need' : a.state === 'failed' ? 'failed' : 'live', role: a.role, fill: Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0) })),
   ]
   // A narrow pane puts the cost and the time left on a second line.
-  const oneRow = runsWidth([...counts, ...tail], 12) <= W
+  const oneRow = !tail.length || runsWidth([...counts, ...tail], 12) <= W
   const sum = oneRow ? runs(0, 52, 12, [...counts, ...tail], W) : runs(0, 52, 12, counts, W) + runs(0, 68, 12, tail.map(([s, k]): Run => [s.replace(/^ · /, ''), k]).flatMap((r, i) => (i ? [[' · ', 'muted'] as Run, r] : [r])), W)
   const h = oneRow ? 60 : 76
   const body = text(0, 14, 'fg', 13, fit(title, W, 13, 600), { weight: 600 }) + (segs.length ? `<g transform="translate(0 26)">${segBar(segs, W, 'full')}</g>` : '') + sum

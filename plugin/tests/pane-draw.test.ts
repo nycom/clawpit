@@ -743,6 +743,11 @@ test('pane: the setup question wraps on words to two lines that fit the pane; a 
   expect(words(find(paneTree(paneViewOf('offer', { columns: 28 })), 'offer'))).toBe(`One-time setup ${OFFER_Q}`)
 })
 
+test('pane: with cost hidden and no time left, a narrow head keeps one row', () => {
+  const v = paneViewOf('both', { columns: 28 }), bare = { ...v, crew: { ...v.crew, leftMin: null } }
+  expect(inner(find(paneTree({ ...bare, showCost: false }), 'head')!).height).toBe(60); expect(inner(find(paneTree(bare), 'head')!).height).toBe(76)
+})
+
 test('pane: one setup offer costs the engine under 2,000 characters', () => {
   for (const columns of [28, 52]) {
     const t = paneTree(paneViewOf('offer', { columns })), offer = all(t).find(e => e.type === 'Box' && (e.children ?? []).some(c => typeof c !== 'string' && c.props?.key === 'offer'))!

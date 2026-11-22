@@ -118,6 +118,10 @@ const stagesWords = {
   name: 'savvy-progress',
   register(on: OnT) { on('session.start', async ($, e, next) => { await $.state.set({ plugin: 'savvy-progress', key: 'stages' } as never, ['build=delegate', 'ship'] as never); return next(e) }) },
 }
+const stagesOdd = {
+  name: 'savvy-progress',
+  register(on: OnT) { on('session.start', async ($, e, next) => { await $.state.set({ plugin: 'savvy-progress', key: 'stages' } as never, ['c++=review', 'fix'] as never); return next(e) }) },
+}
 const stagesJunk = {
   name: 'savvy-progress',
   register(on: OnT) { on('session.start', async ($, e, next) => { await $.state.set({ plugin: 'savvy-progress', key: 'stages' } as never, [1, 2] as never); return next(e) }) },
@@ -137,6 +141,14 @@ test('wiring: a stages value that is not a list of words keeps today\'s keys', {
   await spawn($, 'implement the fold')
   await done($, 'w1', 'answer', 300_000)
   expect(w.store.get('eta:implementer · claude-opus-5-5 · implement')).toEqual([300_000])
+})
+
+test('wiring: a published word with regex characters does not stop the ETA record', { plugins: [stagesOdd] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  await spawn($, 'schema fix c1')
+  await done($, 'w1', 'answer', 300_000)
+  expect(w.store.get('eta:implementer · claude-opus-5-5 · fix')).toEqual([300_000])
 })
 
 test('wiring: a failed or aborted agent turn records nothing', async ($, on) => {

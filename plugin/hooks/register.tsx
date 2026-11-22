@@ -35,11 +35,11 @@ const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
 const need = atom({ plugin: 'savvy-progress', key: 'need' } as const, null)
 const stages = atom({ plugin: 'savvy-progress', key: 'stages' } as const, [])
 
-// The stage words savvy publishes (the part before "="); anything but a non-empty list of strings falls back to STAGES.
+// The stage words savvy publishes (the part before "="); anything but a non-empty list of strings falls back to STAGES (a non-string throws in split).
 const stageWords = async ($: EngineInterface): Promise<readonly string[]> => {
   try {
     const v = await read($, stages)
-    return Array.isArray(v) && v.length > 0 && v.every(x => typeof x === 'string') ? v.map(x => x.split('=')[0]) : STAGES
+    return Array.isArray(v) && v.length > 0 ? v.map(x => x.split('=')[0]) : STAGES
   } catch { errors += 1; return STAGES }
 }
 
