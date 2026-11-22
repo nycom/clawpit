@@ -1,5 +1,5 @@
 // The Agents pane as a plain RenderElement tree (design §8.2). Pure: no host imports.
-import type { Crew, CrewAgent, LoopPlan, Role, SessionStat, Ui } from '../../types'
+import type { Crew, CrewAgent, LoopPlan, Offer, Role, SessionStat, Ui } from '../../types'
 import { image, type El } from '../draw'
 import { CELL_PX, FONT, MONO, MOTION, SIZE, cssOf, svg } from '../tokens'
 import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtLeft, modelLabel, oneLine, textWidth, wrap as wrapText, xml } from '../text'
@@ -7,9 +7,10 @@ import { icon, segBar, stepBlocks, type Seg } from '../icons'
 import { crab } from '../crab'
 import { alertsOf, helpersOf } from '../model'
 import { paneLayout, type PaneItem } from './layout'
+import { OFFER_NOTE } from '../setup'
 
 export type { El }
-export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean }
+export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean; offer?: Offer | null }
 
 // The row's four columns: crab 38, title and activity, the reading column (88px at most, see readEdge), the chevron.
 const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6
@@ -219,6 +220,24 @@ const sessionRow = (item: Extract<PaneItem, { kind: 'session' }>, W: number, now
   return image('session', { source, alt: `Claude needs you, waiting ${age}: ${msg}. Answer in the prompt.`, width: n(W), height: h }, item.ring)
 }
 
+// The one-time setup row: the question as a plain image, then Yes and No of equal weight, each its own press, left-aligned.
+// No is what declines: there is no "later". A button image is 30 tall: 6 px above its 24 px chip part it from the question.
+const OFFER_H = 56, CHIP_W = { yes: 42, no: 38 } as const
+const spacer: El = { type: 'Box', props: { flexGrow: 1 } }
+const offerRow = (o: Offer, W: number): El => {
+  const q = clean(o.question, 200), label = clean(o.label, 60), lines = wrap(q, W - 2 * PAD, 12, 2), note = OFFER_NOTE[o.key]
+  const body = `<rect x="0" y="0" width="${n(W)}" height="${OFFER_H}" rx="8" class="wash"/>` + text(PAD, 15, 'muted', 11, `One-time setup${o.more ? ` · 1 of ${o.more + 1}` : ''}`)
+    + withTip(q, lines.join(' ') !== q, lines.map((l, i) => text(PAD, 32 + i * 16, 'fg', 12, l)).join(''))
+  const button = (which: 'yes' | 'no', word: string, value: string, tail = '') => {
+    const w = CHIP_W[which], chip = `<rect x="0" y="6" width="${w}" height="24" rx="6" class="wash"/>` + text(w / 2, 22, 'fg', 12, word, { weight: 600, anchor: 'middle' })
+    return image(`offer-${which}`, { source: doc(w, 30, chip), alt: `${word}: ${label} set to ${value}${tail}`, width: w, height: 30, press: `offer:${which}`, hover: true }, false)
+  }
+  return { type: 'Box', props: { flexDirection: 'column' }, children: [
+    image('offer', { source: doc(W, OFFER_H, body), alt: `One-time setup: ${q}`, width: n(W), height: OFFER_H }, false),
+    { type: 'Box', props: { flexDirection: 'row', gap: 1 }, children: [button('yes', 'Yes', o.yes, note ? `. ${note}` : ''), button('no', 'No', o.no), spacer] },
+  ] }
+}
+
 const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: number, edge: number): El => {
   const h = SIZE.row, BW = W - CRAB, textW = rowRoom(W, edge), rx = BW - PAD - CHEV - GAP, tw = tagWidth(a.role), { titleW, read } = plainRead(a, now, 13, r => rowRoom(W, r), edge)
   const crabSvg = withCrab(svg(CRAB, h, ''), crab({ role: a.role, prop: a.prop, walk, size: 'M' }), 2, 10)
@@ -364,6 +383,7 @@ const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge =
     case 'section': return section(item, W)
     case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now, edge)
     case 'session': return sessionRow(item, W, now)
+    case 'offer': return offerRow(item.offer, W)
     case 'drawer': return drawer(item.agent, W, now, still)
     case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge, still)
     case 'kids': return kids(item, W)
@@ -410,7 +430,7 @@ const costsView = (s: SessionStat, W: number): El[] => {
 export const paneTree = (v: PaneView): El => {
   const W = v.columns * CELL_PX
   if (v.ui.view === 'costs') return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: costsView(v.session, W) }
-  const items = paneLayout(v.crew, v.ui, v.loops, itemCost), edge = readEdge(items, W, v.now)
+  const items = paneLayout(v.crew, v.ui, v.loops, itemCost, v.offer), edge = readEdge(items, W, v.now)
   return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge)) }
 }
 
