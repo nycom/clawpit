@@ -62,7 +62,7 @@ export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: Pan
     out.push(g.head)
     let hidden = -1
     for (const p of g.body) {
-      if (hidden >= 0) { hidden += p.agents; continue }
+      if (hidden >= 0 && p.item.kind !== 'session') { hidden += p.agents; continue }
       if (p.fixed) { out.push(p.item); continue }
       const c = cost(p.item)
       if (used.host + c.host > HOST_MAX || used.engine + c.engine > ENGINE_MAX) { hidden = p.agents; continue }

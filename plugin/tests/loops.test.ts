@@ -131,3 +131,8 @@ test('loops: a session need that waited longest takes the one ring; the count st
   expect(pickLoops(alone, ui('full', false), false, false)).toEqual({ walkers: [], chipPulse: true, ring: null, mascot: 'still', count: 1 })
   expect(pickLoops(alone, ui('gauges', false), false, false).mascot).toBe('hop')
 })
+
+test('loops: a session need and an agent that waited just as long: the tie goes to the session', () => {
+  const waiter = agent('need', { waitingSince: 500 })
+  expect(pickLoops({ ...crewOf(waiter), sessionNeed: { question: 'q', since: 500 } }, ui('full', true), true, false).ring).toBe('session')
+})

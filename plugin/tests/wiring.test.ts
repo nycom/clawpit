@@ -354,3 +354,16 @@ test('wiring: with no need atom the pane draws today\'s empty state; a session n
   expect(w.mine('tick').length).toBe(at)
   await ui.unmount()
 })
+
+test('wiring: the minute tick follows savvy\'s need atom from its own observer, with nothing drawn', { plugins: [needer] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  let at = w.mine('tick').length
+  await $.tool.call({ tool: 'savvy-need', need: { text: 'Which branch?', since: T0 } } as never)
+  await w.clock.advance(60_000)
+  expect(w.mine('tick').length).toBe(at + 1)
+  await $.tool.call({ tool: 'savvy-need', need: null } as never)
+  at = w.mine('tick').length
+  await w.clock.advance(120_000)
+  expect(w.mine('tick').length).toBe(at)
+})

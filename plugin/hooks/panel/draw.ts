@@ -210,11 +210,13 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
   return { f, body, w: cw + 7, h: ch + 3, animated: loops.mascot !== 'still' }
 }
 
+// Who the value slot names, up to one agent. The main session's need, when it is the face, so its line never sits under
+// an agent's name; with no agents it is that one, so a count of 0 is never drawn.
+const soloOf = (crew: Crew, f: Face): CrewAgent | null => crew.agents.length > 1 ? null : f.a.id === 'session' ? f.a : crew.agents[0] ?? null
 const agentsColumn = (v: PanelView, w: number): El => {
   const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
   // One agent: its name in the value slot and only its state under it; a count of 1 says nothing (maintainer, 2026-11-21).
-  // With no agents the main session's need is that one, so a count of 0 is never drawn.
-  const solo = n === 1 ? v.crew.agents[0] : n === 0 ? m.f.a : null, own = solo && m.f.a === solo
+  const solo = soloOf(v.crew, m.f), own = solo && m.f.a === solo
   const state = own ? (m.f.tail?.replace(/^ · /, '').trim() ?? m.f.say.replace(/^next: /, '').slice(clean(solo.title, 60).length).replace(/^ · /, '').trim()) : ''
   const value = solo ? text(vx, 35, fitTo(clean(solo.title, 60), w - 4 - vx, 14, 600), 14, 'fg', { w: 600 })
     : text(vx, 35, String(n), 16, 'fg', { w: 600 }) + text(ux, 35, fitWhole('agents', w - 4 - ux, 12), 12, 'muted')
@@ -445,10 +447,9 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
 // A lone agent's column claims the cells for its whole name and, short of them, keeps its even share; more agents
 // take an even share and claim nothing.
 const agentsNeed = (v: PanelView, priority: number): Need => {
-  const n = v.crew.agents.length, solo = n === 1 ? v.crew.agents[0] : n === 0 ? sessionAgent(v.crew) : null
+  const f = faceOf(v.crew), solo = soloOf(v.crew, f)
   // The state line under the name counts too, so a short title never leaves its note to be cut.
-  const f = solo ? faceOf(v.crew) : null
-  const cells = solo && f ? Math.ceil(Math.max(12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600), 12 + widthOf(f.say, 11, f.w)) / CELL_PX + 4 / CELL_PX) : Infinity
+  const cells = solo ? Math.ceil(Math.max(12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600), 12 + widthOf(f.say, 11, f.w)) / CELL_PX + 4 / CELL_PX) : Infinity
   return { cells, floor: Infinity, head: 0, claims: !!solo, warn: false, priority }
 }
 // An even share each; then the compact chip's cells, taken even when no column has slack; then the warnings, then the

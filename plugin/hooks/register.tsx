@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
 import type { SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
-import { crewOf } from './model'
+import { crewOf, needOf } from './model'
 import { pickLoops } from './loops'
 import { moving, nextSize, parseSize, settle } from './panel/fold'
 import { panelTree, type PanelView } from './panel/draw'
@@ -57,7 +57,7 @@ let ctxHistory: number[] = []
 let limits: SessionRateLimit[] = []
 let settles: Record<string, Settle> = {}
 let planSince: number | null = null            // when the plan bar first showed
-let needShown = false                           // a session need is drawn: its age reads in minutes
+let needShown = false                           // savvy's need atom holds a need: its age reads in minutes
 let errors = 0
 let ticker: Timer | null = null
 let period = 0
@@ -147,6 +147,7 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { if ((await $.ui.panes()).some(p => p.id === PANE_ID)) await update($, ui, u => ({ ...u, paneOpen: true })) } catch { errors += 1 }
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
+  try { needShown = !!needOf(await read($, need)) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
   try { await benchUp($) } catch { errors += 1 }
 })())
@@ -319,6 +320,13 @@ export const register: Register = (on, options) => {
     return out
   })
 
+  // savvy's session need: the minute tick runs while it is set, started from this observer's `$`, never a render's.
+  on('state.set', { plugin: 'savvy-progress', key: 'need' }, async ($, e, next) => {
+    const out = await next(e)
+    try { await boot($); if (out.value?.isSet) { needShown = !!needOf(e.value); await retick($) } } catch { errors += 1 }
+    return out
+  })
+
   // clawpit draws its own row only, never what `next(e)` returns; on desktop savvy's band stands down (takeover).
   // shortcut: vscode and mobile pass through like the terminal, and savvy draws its band there; draw clawpit there too if asked.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -393,7 +401,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description, words)
   const crew = crewOf({ flow: f, runs: Array.isArray(runs) ? runs : [], parents, activity: facts.activity, logs, now,
     etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)), need: n })
-  if (!!crew.sessionNeed !== needShown) { needShown = !!crew.sessionNeed; try { await retick($) } catch { errors += 1 } }
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
   if (s.context) settles.context = settle(settles.context, s.context.pct, now)
   for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct, now) }

@@ -703,3 +703,23 @@ test('panel: at the one-line size the session need shows the same face', () => {
     expect(propsOf(find(t, 'toggle')!).alt).toBe('Panel: one line. Show everything. Claude needs you')
   }
 })
+
+test('panel: folded, one agent and an older session need: the value slot names Claude, never the agent under "needs you"', () => {
+  const v = viewOf('oneRunning'), solo = v.crew.agents[0], crew = { ...v.crew, sessionNeed: { question: SESSION_Q, since: NOW - 60_000 } }
+  // From 34 cells, where the column has room for the tail whole.
+  for (let bodyColumns = 34; bodyColumns <= 96; bodyColumns += 2) {
+    const m = propsOf(find(panelTree(viewOf('oneRunning', { crew, bodyColumns })), 'mascot')!), texts = allTexts(m.source)
+    // The value slot holds "Claude" or a cut of it, and the agent's name nowhere.
+    expect([bodyColumns, 'Claude'.startsWith(texts[1].replace(/…$/, '')), ['Claude needs you', 'needs you'].includes(texts[2])]).toEqual([bodyColumns, true, true])
+    expect(texts.some(t => t.startsWith(solo.title.slice(0, 1)))).toBe(false)
+    // It reads as the session need does with no agents at all.
+    expect(texts).toEqual(allTexts(propsOf(find(panelTree(viewOf('sessionNeed', { ui: v.ui, bodyColumns })), 'mascot')!).source))
+  }
+})
+
+test('panel: the session chip is not an agent, so "+N more agents" counts only the agents it hides', () => {
+  const v = viewOf('sessionNeedCrew', { bodyColumns: 36 }), t = panelTree(v)
+  // The alert chip holds the session and e2e (as "1 more need you"); the three running agents are the ones left.
+  expect(propsOf(find(t, 'chips-alert')!).alt).toBe(`Claude needs you: ${SESSION_Q}; 1 more need you`)
+  expect(propsOf(find(t, 'chip-more')!).alt).toBe(`${v.crew.agents.filter(a => a.state === 'running').length} more agents`)
+})

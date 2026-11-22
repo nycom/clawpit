@@ -59,6 +59,10 @@ const order = (a: CrewAgent, b: CrewAgent): number =>
 
 const isLive = (a: CrewAgent | undefined) => a?.state === 'need' || a?.state === 'running'
 
+// Another plugin's atom: only a well-formed need counts.
+export const needOf = (n: SavvyNeed | null | undefined): { question: string; since: number } | null =>
+  n && typeof n.text === 'string' && Number.isFinite(n.since) ? { question: n.text, since: n.since } : null
+
 export const crewOf = (i: CrewInput): Crew => {
   const byId = new Map(i.runs.map(r => [r.id, agentOf(i, r)]))
   const all = [...byId.values()]
@@ -76,8 +80,7 @@ export const crewOf = (i: CrewInput): Crew => {
   const count = (s: CrewState) => agents.filter(a => a.state === s).length
   const minutes = all.flatMap(a => (a.state === 'running' && a.eta.kind === 'left' ? [a.eta.minutes] : []))
   const plan = planOf(i.flow, all)
-  // Another plugin's atom: only a well-formed need counts.
-  const n = i.need, need = n && typeof n.text === 'string' && Number.isFinite(n.since) ? { question: n.text, since: n.since } : null
+  const need = needOf(i.need)
   return {
     title: plan ? plan.title : 'Subagents', agents, ended,
     counts: { need: count('need'), failed: count('failed'), running: count('running'), done: ended.length },
