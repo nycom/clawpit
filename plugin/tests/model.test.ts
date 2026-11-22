@@ -146,3 +146,14 @@ test('crewOf: an agent carries its run effort, and none when the run has none', 
   const [a, b] = crewOf(input('idle', { runs: [run('a', { effort: 'high' }), run('b')] })).agents
   expect(a.effort).toBe('high'); expect(b.effort).toBeUndefined()
 })
+
+test('crewOf: a session need is its own field, counted once by alertsOf and never as an agent', () => {
+  const need = STATES.sessionNeedCrew.need!, c = crewOf(input('sessionNeedCrew')), plain = crewOf(input('sessionNeedCrew', { need: null }))
+  expect(c.sessionNeed).toEqual({ question: need.text, since: need.since }); expect(plain.sessionNeed).toBeUndefined()
+  expect(c.agents.length).toBe(plain.agents.length); expect(c.counts).toEqual(plain.counts)
+  expect(alertsOf(c)).toEqual({ ...alertsOf(plain), need: alertsOf(plain).need + 1 })
+  const alone = crewOf(input('sessionNeed'))
+  expect(alone.agents).toEqual([]); expect(alertsOf(alone)).toEqual({ need: 1, failed: 0 })
+  // Another plugin's atom: a malformed one is no need.
+  expect(crewOf(input('sessionNeed', { need: { text: 7, since: 'x' } as never })).sessionNeed).toBeUndefined()
+})

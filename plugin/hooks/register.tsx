@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
-import type { SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
+import type { SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
 import { crewOf } from './model'
 import { pickLoops } from './loops'
 import { moving, nextSize, parseSize, settle } from './panel/fold'
@@ -31,6 +31,7 @@ const tick = atom({ plugin: 'clawpit', key: 'tick' } as const, 0)
 const idleSince = atom({ plugin: 'clawpit', key: 'idleSince' } as const, null)
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
+const need = atom({ plugin: 'savvy-progress', key: 'need' } as const, null)
 
 // Module memory: facts that change per tool call never touch an atom; the tick repaints them.
 let facts = emptyFacts()
@@ -47,6 +48,7 @@ let ctxHistory: number[] = []
 let limits: SessionRateLimit[] = []
 let settles: Record<string, Settle> = {}
 let planSince: number | null = null            // when the plan bar first showed
+let needShown = false                           // a session need is drawn: its age reads in minutes
 let errors = 0
 let ticker: Timer | null = null
 let period = 0
@@ -63,7 +65,7 @@ const BENCH_MAX = 48
 
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
-  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null
+  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; bench = null
 }
 
@@ -82,11 +84,11 @@ const takeUsage = (u: { context: { percent?: number; breakdown?: CtxInput['break
 
 const writeStats = async ($: EngineInterface) => { const v = statsOf(await $.clock.now(), null); await update($, stats, () => v) }
 
-// The tick (design §4): 1 Hz while a main turn or an agent runs; once a minute while tests, a limit or an armed failed run is shown.
+// The tick (design §4): 1 Hz while a main turn or an agent runs; once a minute while tests, a limit, an armed failed run or a session need is shown.
 // shortcut: "on screen" is read as "present"; the render hooks know the fitted columns, so pass them in if idle minute ticks show up.
 const periodOf = (now: number) =>
   turn.turn || seen.some(r => r.status === 'running') ? 1000
-    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) ? 60_000 : 0
+    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) || needShown ? 60_000 : 0
 
 const writeTick = async ($: EngineInterface) => {
   try { const at = await $.clock.now(); await update($, tick, () => at); await retick($) } catch { errors += 1 }
@@ -374,10 +376,14 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   await read($, tick); await read($, stats)   // read only to subscribe the drawing to the repaints
   let code: Stats['code'] = null
   try { code = codeOf(await read($, { plugin: 'ponytail', key: 'band' } as const)) } catch { errors += 1 }
+  // An older savvy-progress writes no need: missing reads as none.
+  let n: SavvyNeed | null = null
+  try { n = (await read($, need)) ?? null } catch { errors += 1 }
   const now = await $.clock.now()
   const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description)
   const crew = crewOf({ flow: f, runs: Array.isArray(runs) ? runs : [], parents, activity: facts.activity, logs, now,
-    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)) })
+    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)), need: n })
+  if (!!crew.sessionNeed !== needShown) { needShown = !!crew.sessionNeed; try { await retick($) } catch { errors += 1 } }
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
   if (s.context) settles.context = settle(settles.context, s.context.pct, now)
   for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct, now) }

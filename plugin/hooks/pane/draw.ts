@@ -178,6 +178,8 @@ const section = (item: Extract<PaneItem, { kind: 'section' }>, W: number): El =>
   return image(ended ? 'ended' : `sec-${item.name}`, { source: doc(W, 28, body), alt, width: n(W), height: 28, ...(ended ? { press: 'ended' } : {}) }, false)
 }
 
+const ringArt = (W: number, h: number) =>
+  `<style>.ring{opacity:0;animation:ring ${MOTION.beat} infinite}@keyframes ring{50%{opacity:1}}</style><rect x="1" y="1" width="${n(W - 2)}" height="${h - 2}" rx="7" fill="none" class="s-ring60 ring" stroke-width="2"/>`
 // A needs-you or failed row: one image, so the ring is one drawing with one clock.
 const alertRow = (a: CrewAgent, ring: boolean, open: boolean, W: number, now: number): El => {
   const need = a.state === 'need', h = SIZE.needRow, rx = W - PAD - CHEV - GAP, title = clean(a.title, 60), age = waiting(a, now), after = `after ${elapsed(a, now)}`
@@ -192,14 +194,29 @@ const alertRow = (a: CrewAgent, ring: boolean, open: boolean, W: number, now: nu
   const read = need
     ? text(rx, 24, 'er', 13, col.brief ? age : `waiting ${age}`, { weight: 600, anchor: 'end' }) + blocks(rx, 32, a.stepDone, a.stepTotal, 'er')
     : text(rx, 20, 'er', 13, 'failed', { weight: 600, anchor: 'end' }) + (col.brief ? '' : text(rx, 36, 'fg', 12, after, { anchor: 'end' })) + blocks(rx, 42, a.stepDone, a.stepTotal, 'er')
-  const ringArt = ring ? `<style>.ring{opacity:0;animation:ring ${MOTION.beat} infinite}@keyframes ring{50%{opacity:1}}</style><rect x="1" y="1" width="${n(W - 2)}" height="${h - 2}" rx="7" fill="none" class="s-ring60 ring" stroke-width="2"/>` : ''
-  const body = `<rect x="0" y="0" width="${n(W)}" height="${h}" rx="8" class="needTint"/>${ringArt}`
+  const body = `<rect x="0" y="0" width="${n(W)}" height="${h}" rx="8" class="needTint"/>${ring ? ringArt(W, h) : ''}`
     + text(CRAB + GAP, 19, 'fg', 13, fit(title, textW, 13, 600), { weight: 600 }) + tag(CRAB + GAP, 37, a.role, 'er')
     + withTip(msg, lines.filter(Boolean).join(' ') !== msg, lines.map((l, i) => (l ? text(i ? CRAB + GAP : x, 37 + i * 16, 'er', 12, l, { weight: 600 }) : '')).join('')) + read + chevron(W - PAD - 14, 25, 12, open)
     + modelLine(rx, need ? 52 : 58, col.brief ? modelLabel(a.model).short : modelText(a, col.read - READ_GAP))
   const source = withCrab(doc(W, h, body, ring), crab({ role: a.role, prop: need ? 'wait' : 'fail', walk: false, size: 'M' }), 2, 17)
   const alt = `${title}${modelAlt(a)}${modelAlt(a) ? ',' : ''} ${need ? `needs you, waiting ${age}: ${msg}` : `failed ${after}: ${msg}`}`
   return image(`row-${a.id}`, { source, alt, width: n(W), height: h, press: `row:${a.id}`, hover: true }, ring)
+}
+
+// The main session waiting on you: a needs-you row titled "Claude", with no role tag and no press (there is no drawer and no
+// agent to name). Its chevron slot stays empty, so its reading lines up with the rows below.
+const sessionRow = (item: Extract<PaneItem, { kind: 'session' }>, W: number, now: number): El => {
+  const h = SIZE.needRow, rx = W - PAD - CHEV - GAP, age = minutes(now - item.since), msg = clean(item.question, TIP_MAX) || 'needs you'
+  const room = (r: number) => W - CRAB - GAP - GAP - r - CHEV - PAD
+  const titleW = textWidth('Claude', 13, 600), start = textWidth([...msg].slice(0, 2 * MIN_CUT).join(''), 12, 600)
+  const col = alertColumn(r => titleW <= room(r) && start <= room(r), READ, textWidth(`waiting ${age}`, 13, 600), textWidth(age, 13, 600))
+  const textW = room(col.read), lines = whyLines(msg, textW, textW)
+  const body = `<rect x="0" y="0" width="${n(W)}" height="${h}" rx="8" class="needTint"/>${item.ring ? ringArt(W, h) : ''}`
+    + text(CRAB + GAP, 19, 'fg', 13, fit('Claude', textW, 13, 600), { weight: 600 })
+    + withTip(msg, lines.filter(Boolean).join(' ') !== msg, lines.map((l, i) => (l ? text(CRAB + GAP, 37 + i * 16, 'er', 12, l, { weight: 600 }) : '')).join(''))
+    + text(rx, 24, 'er', 13, col.brief ? age : `waiting ${age}`, { weight: 600, anchor: 'end' })
+  const source = withCrab(doc(W, h, body, item.ring), crab({ role: 'explore', prop: 'wait', walk: false, size: 'M' }), 2, 17)
+  return image('session', { source, alt: `Claude needs you, waiting ${age}: ${msg}. Answer in the prompt.`, width: n(W), height: h }, item.ring)
 }
 
 const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: number, edge: number): El => {
@@ -346,6 +363,7 @@ const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge =
     case 'head': return head(item.crew, W)
     case 'section': return section(item, W)
     case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now, edge)
+    case 'session': return sessionRow(item, W, now)
     case 'drawer': return drawer(item.agent, W, now, still)
     case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge, still)
     case 'kids': return kids(item, W)

@@ -4,7 +4,7 @@ import { crab } from '../crab'
 import { dial, icon, segBar, toggleIcon } from '../icons'
 import { CELL_PX, FONT, LINE_CELL_PX, MOTION, SIZE, SURFACE, svg } from '../tokens'
 import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtDuration, fmtLeft, fmtTokens, oneLine, textWidth, xml } from '../text'
-import { alertsOf, helpersOf } from '../model'
+import { alertsOf, helpersOf, sessionFirst } from '../model'
 import { contextText } from '../track/context'
 import { paceText } from '../track/pace'
 import { candidates, fit, lineParts, maxColumns } from './columns'
@@ -163,6 +163,13 @@ const compactOf = (v: PanelView, c: Cell): { el: (iconOnly: boolean) => El; cell
 type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean; name?: string; tail?: string }
 // The top-level agents, then their helpers: a helper that waits on you or failed still dresses the crab.
 const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(helpersOf)]
+// The main session as its chip and the folded crab draw it: the slate crab with a question. It is never in crew.agents.
+const sessionAgent = (crew: Crew): CrewAgent | null => {
+  const s = crew.sessionNeed
+  return s ? { id: 'session', title: 'Claude', role: 'explore', model: '', state: 'need', struggling: false, tries: 0, prop: 'wait', activity: null,
+    question: s.question, stepDone: 0, stepTotal: 0, eta: { kind: 'none' }, usuallyMin: null, startedAt: s.since, waitingSince: s.since,
+    contextPct: 0, costUsd: 0, helpers: [], log: [] } : null
+}
 const nextUp = (agents: CrewAgent[]) => {
   const left = agents.filter(a => a.state === 'running' && a.eta.kind === 'left')
   return left.sort((x, y) => (x.eta.kind === 'left' && y.eta.kind === 'left' ? x.eta.minutes - y.eta.minutes : 0))[0]
@@ -170,7 +177,10 @@ const nextUp = (agents: CrewAgent[]) => {
 }
 const faceOf = (crew: Crew): Face => {
   const as = crew.agents, all = withHelpers(as), title = (a: CrewAgent) => clean(a.title, 60)
-  const need = all.find(a => a.state === 'need'), failed = all.find(a => a.state === 'failed'), hard = as.find(a => a.struggling)
+  // Needs you first; the main session's need when it has waited longest.
+  const waits = all.flatMap(a => (a.state === 'need' ? [a.waitingSince!] : [])), session = sessionAgent(crew)
+  const need = session && sessionFirst(crew, waits.length ? Math.min(...waits) : undefined) ? session : all.find(a => a.state === 'need')
+  const failed = all.find(a => a.state === 'failed'), hard = as.find(a => a.struggling)
   if (need) return { a: need, say: `${title(need)} needs you`, tone: 'er', w: 600, alert: true, name: title(need), tail: ' needs you' }
   if (failed) return { a: failed, say: `${title(failed)} failed`, tone: 'er', w: 600, alert: true, name: title(failed), tail: ' failed' }
   if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false }
@@ -203,7 +213,8 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
 const agentsColumn = (v: PanelView, w: number): El => {
   const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
   // One agent: its name in the value slot and only its state under it; a count of 1 says nothing (maintainer, 2026-11-21).
-  const solo = n === 1 ? v.crew.agents[0] : null, own = solo && m.f.a === solo
+  // With no agents the main session's need is that one, so a count of 0 is never drawn.
+  const solo = n === 1 ? v.crew.agents[0] : n === 0 ? m.f.a : null, own = solo && m.f.a === solo
   const state = own ? (m.f.tail?.replace(/^ · /, '').trim() ?? m.f.say.replace(/^next: /, '').slice(clean(solo.title, 60).length).replace(/^ · /, '').trim()) : ''
   const value = solo ? text(vx, 35, fitTo(clean(solo.title, 60), w - 4 - vx, 14, 600), 14, 'fg', { w: 600 })
     : text(vx, 35, String(n), 16, 'fg', { w: 600 }) + text(ux, 35, fitWhole('agents', w - 4 - ux, 12), 12, 'muted')
@@ -216,8 +227,9 @@ const agentsColumn = (v: PanelView, w: number): El => {
 // ---------- the toggle ----------
 const SIZE_ALT = { full: 'Panel: everything. Fold the agents', gauges: 'Panel: agents folded. Show one line', line: 'Panel: one line. Show everything' } as const
 const toggle = (v: PanelView): El => {
-  const dot = hasDot(v.ui.size, v.crew)
-  return image('toggle', { source: svg(24, 24, at(5, 5, toggleIcon(v.ui.size, dot))), alt: `${SIZE_ALT[v.ui.size]}${dot ? (alertsOf(v.crew).need ? '. An agent needs you' : '. An agent failed') : ''}`, width: 24, height: 24, press: 'size' }, true)
+  const dot = hasDot(v.ui.size, v.crew), { need } = alertsOf(v.crew)
+  const why = !need ? '. An agent failed' : need === 1 && v.crew.sessionNeed ? '. Claude needs you' : '. An agent needs you'
+  return image('toggle', { source: svg(24, 24, at(5, 5, toggleIcon(v.ui.size, dot))), alt: `${SIZE_ALT[v.ui.size]}${dot ? why : ''}`, width: 24, height: 24, press: 'size' }, true)
 }
 const spacer: El = { type: 'Box', props: { flexGrow: 1 } }
 
@@ -332,12 +344,13 @@ const fitsIn = (ws: number[], avail: number, rows: number) => {
 }
 const CHIP_ROWS = 2
 const chipRows = (v: PanelView, W: number): El | null => {
-  const { crew, loops } = v
-  if (!crew.agents.length) return null
+  const { crew, loops } = v, session = sessionAgent(crew), lead = session ? 1 : 0
+  if (!crew.agents.length && !session) return null
   // The alert chips share one row: as many as keep ALERT_MIN px each; the rest go into a red overflow chip at the row's end.
   const fitAlerts = (w: number) => Math.max(1, Math.floor((w - 2 * CHIP_PAD + CHIP_GAP) / (ALERT_MIN + CHIP_GAP)))
-  // Need first, a helper that waits on you included; a failed helper gets no chip, only the crab and the dot.
-  const allAlerts = [...withHelpers(crew.agents).filter(a => a.state === 'need'), ...crew.agents.filter(a => a.state === 'failed')], rest = crew.agents.filter(a => !isAlert(a))
+  // The main session's need, then the agents' needs, a helper that waits on you included; a failed helper gets no chip, only the crab and the dot.
+  const allAlerts = [...(session ? [session] : []), ...withHelpers(crew.agents).filter(a => a.state === 'need'), ...crew.agents.filter(a => a.state === 'failed')]
+  const rest = crew.agents.filter(a => !isAlert(a))
   const pulses = (a: CrewAgent) => loops.chipPulse && (a.state === 'need' || v.armed)
   const items: { el: El; agents: number }[] = []
   if (allAlerts.length) {
@@ -346,9 +359,10 @@ const chipRows = (v: PanelView, W: number): El | null => {
     const alerts = allAlerts.slice(0, overW ? fitAlerts(W - overW) : allAlerts.length), over = allAlerts.slice(alerts.length)
     const room = (W - overW - 2 * CHIP_PAD - CHIP_GAP * (alerts.length - 1)) / alerts.length
     const anim = allAlerts.some(pulses)
-    const arts = alerts.map(a => chipArt(a, false, pulses(a), room))
+    // The session's chip has no drawer to open, so it opens the pane.
+    const arts = alerts.map(a => (a === session ? { ...chipArt(a, false, pulses(a), room), alt: `Claude needs you: ${reading(a)[0]}`, press: 'open' } : chipArt(a, false, pulses(a), room)))
     if (over.length) arts.push(alertMoreArt(over, over.some(pulses)))
-    items.push({ el: chipImage('chips-alert', arts, anim, anim ? PULSE : ''), agents: allAlerts.length })
+    items.push({ el: chipImage('chips-alert', arts, anim, anim ? PULSE : ''), agents: allAlerts.length - lead })
   }
   for (const a of rest) {
     const walk = loops.walkers.includes(a.id)
@@ -357,7 +371,7 @@ const chipRows = (v: PanelView, W: number): El | null => {
   let shown = items
   if (!fitsIn(items.map(i => width(i.el)), W, CHIP_ROWS)) {
     let k = items.length
-    const total = allAlerts.length + rest.length, more = (k: number) => moreChip(total - items.slice(0, k).reduce((s, i) => s + i.agents, 0))
+    const total = allAlerts.length - lead + rest.length, more = (k: number) => moreChip(total - items.slice(0, k).reduce((s, i) => s + i.agents, 0))
     while (k > 1 && !fitsIn([...items.slice(0, k).map(i => width(i.el)), width(more(k))], W, CHIP_ROWS)) k--
     shown = [...items.slice(0, k), { el: more(k), agents: 0 }]
   }
@@ -390,7 +404,7 @@ const oneLineRow = (v: PanelView): El => {
     }
   }
   const children: El[] = [...items, spacer]
-  if (crew.agents.length) {
+  if (crew.agents.length || crew.sessionNeed) {
     const m = mascotArt(crew, v.loops, 'S'), used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX
     const room = W - used - m.w - 6, say = room >= 40 ? sayFit(m.f, room, 13) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
     const body = at(0, 1, m.body) + (say ? text(m.w + 6, 18, say, 13, m.f.tone, { w: m.f.w }) : '')
@@ -417,7 +431,7 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
 // A lone agent's column claims the cells for its whole name and, short of them, keeps its even share; more agents
 // take an even share and claim nothing.
 const agentsNeed = (v: PanelView, priority: number): Need => {
-  const solo = v.crew.agents.length === 1 ? v.crew.agents[0] : null
+  const n = v.crew.agents.length, solo = n === 1 ? v.crew.agents[0] : n === 0 ? sessionAgent(v.crew) : null
   // The state line under the name counts too, so a short title never leaves its note to be cut.
   const f = solo ? faceOf(v.crew) : null
   const cells = solo && f ? Math.ceil(Math.max(12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600), 12 + widthOf(f.say, 11, f.w)) / CELL_PX + 4 / CELL_PX) : Infinity
