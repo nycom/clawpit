@@ -120,6 +120,8 @@ const loadStore = async ($: EngineInterface) => {
 
 // savvy-progress stands its band down on the desktop surface while this is true and keeps drawing on every other surface.
 // Its panel auto-open stands down session-wide (known limit): a terminal on the same session gets no auto-open either.
+// Every session but a terminal one takes over: a session one session starts runs with no surface until the desktop
+// attaches, often after its first agent, and by then savvy would have opened its own pane.
 // Written only when not yet true, so the repaint it causes schedules nothing more: no render loop.
 const takeOver = async ($: EngineInterface) => {
   try { if ((await read($, takeover)) !== true) await update($, takeover, () => true) } catch { errors += 1 }
@@ -127,7 +129,7 @@ const takeOver = async ($: EngineInterface) => {
 
 // Once per plugin load: a reload inside a running session fires no session.start, so the first observer runs it there.
 const boot = ($: EngineInterface) => (booted ??= (async () => {
-  try { if ((await $.session.surfaces()).includes('desktop')) await takeOver($) } catch { errors += 1 }
+  try { const s = await $.session.surfaces(); if (s.includes('desktop') || !s.includes('terminal')) await takeOver($) } catch { errors += 1 }
   try { await loadStore($) } catch { errors += 1 }
   // The engine's record of panes outlives a reload; module memory and the ui atom's paneOpen do not.
   try { if ((await $.ui.panes()).some(p => p.id === PANE_ID)) await update($, ui, u => ({ ...u, paneOpen: true })) } catch { errors += 1 }
@@ -181,7 +183,7 @@ export const register: Register = (on, options) => {
     const out = await next(e)
     reset()
     booted = null
-    if (e.surface === 'desktop') await takeOver($)
+    if (e.surface !== 'terminal') await takeOver($)
     await boot($)
     return out
   })
@@ -192,10 +194,11 @@ export const register: Register = (on, options) => {
     return out
   })
 
+  // Booted before `next(e)`: savvy's progress tool and spawn auto-open read takeover beneath it.
   on('tool.call', async ($, e, next) => {
+    await boot($)
     const out = await next(e)
     try {
-      await boot($)
       const at = await $.clock.now()
       const isError = out.deny !== undefined || out.isError === true
       facts = onTool(facts, { tool: e.tool, agentId: e.agentId, input: e as Record<string, unknown>, result: out.result, isError, at })
@@ -213,9 +216,9 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
+    await boot($)
     const out = await next(e)
     try {
-      await boot($)
       if (out.deny === undefined) {
         const id = out.agentId ?? e.tool_use_id
         if (e.parentAgentId) parents = { ...parents, [id]: e.parentAgentId }
