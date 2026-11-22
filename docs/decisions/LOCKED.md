@@ -6,6 +6,7 @@
 
 - **Sections:** Needs you, then Failed, then Running, then Ended (folds away). See "Failed state" below.
 - **Rows:** every row uses the same four columns: crab (38px), title plus role tag and activity, a reading column (time left over step blocks) as wide as the widest reading in view plus 6, 88px at most (replaces the fixed 88px, 2026-11-21; see "Narrow pane"), then a chevron.
+- **Model:** the reading column's third line is the agent's model, muted: "Opus 5.5", or the family word alone where the edge has no room. The word is never cut and sets the edge's floor; a longer name never widens it. It is read from the id's shape, with no family table, so an unknown id shows trimmed, and an empty one draws nothing. Effort shows in the drawer and the alt only, and only when the run has one. Decided 2026-11-22.
 - **Needs-you row:** 62px tall, so the question wraps to two lines and is never cut off (narrowed 2026-11-21 by "Narrow pane"). It carries a soft red ring pulse.
 - **Log drawer:** a click opens it. Entries are newest first and stagger in; a footer shows steps, context, cost, and the usual time.
 - **Helpers:** nested under their parent on a tree line, with a "N helpers" toggle.
