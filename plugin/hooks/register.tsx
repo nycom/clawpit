@@ -10,7 +10,7 @@ import { benchTree, paneTree, type PaneView } from './pane/draw'
 import { emptyFacts, isEdit, linesOf, onThink, onTool } from './track/activity'
 import { diff, type Logs } from './track/steplog'
 import { parseTests } from './track/tests'
-import { estimate, keysOf, record, usually, type History } from './track/eta'
+import { STAGES, estimate, keysOf, record, usually, type History } from './track/eta'
 import { emptyTurn, IDLE_ARM_MS, isArmed, onComplete, onCost, onLines, onStart } from './track/turn'
 import { paceOf } from './track/pace'
 import { contextOf, pushTurn, type CtxInput } from './track/context'
@@ -32,6 +32,15 @@ const idleSince = atom({ plugin: 'clawpit', key: 'idleSince' } as const, null)
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
 const need = atom({ plugin: 'savvy-progress', key: 'need' } as const, null)
+const stages = atom({ plugin: 'savvy-progress', key: 'stages' } as const, [])
+
+// The stage words savvy publishes (the part before "="); anything but a non-empty list of strings falls back to STAGES.
+const stageWords = async ($: EngineInterface): Promise<readonly string[]> => {
+  try {
+    const v = await read($, stages)
+    return Array.isArray(v) && v.length > 0 && v.every(x => typeof x === 'string') ? v.map(x => x.split('=')[0]) : STAGES
+  } catch { errors += 1; return STAGES }
+}
 
 // Module memory: facts that change per tool call never touch an atom; the tick repaints them.
 let facts = emptyFacts()
@@ -105,7 +114,7 @@ const retick = async ($: EngineInterface) => {
 const recordEta = async ($: EngineInterface, id: string, ms: number) => {
   const run = (await read($, agents)).find(r => r.agentId === id || r.id === id) ?? spawns[id]
   if (!run) return
-  const keys = keysOf(run.type, run.model, run.description)
+  const keys = keysOf(run.type, run.model, run.description, await stageWords($))
   history = record(history, keys, ms)
   for (const k of keys) await $.store.set(`eta:${k}`, history[k])
 }
@@ -380,7 +389,8 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   let n: SavvyNeed | null = null
   try { n = (await read($, need)) ?? null } catch { errors += 1 }
   const now = await $.clock.now()
-  const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description)
+  const words = await stageWords($)
+  const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description, words)
   const crew = crewOf({ flow: f, runs: Array.isArray(runs) ? runs : [], parents, activity: facts.activity, logs, now,
     etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)), need: n })
   if (!!crew.sessionNeed !== needShown) { needShown = !!crew.sessionNeed; try { await retick($) } catch { errors += 1 } }

@@ -7,6 +7,8 @@ An instrument panel above the prompt and a crew pane beside it, for the Claude C
 - **Three sizes**, switched by one icon: everything, agents folded, or one line.
 - **Calm by rule:** nothing moves while idle, motion uses stepped loops only, and colours are fixed and contrast-checked in light and dark.
 
+The ETA is kept per stage list: a word added to or removed from savvy's stages starts a new ETA key and leaves the old one in the store (nothing prunes `eta:` keys).
+
 > **Status:** in development, not released. The preview below is the design mockup.
 
 <!-- preview: refreshed after every visual change, see AGENTS.md -->

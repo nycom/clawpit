@@ -235,6 +235,12 @@ const spacer: El = { type: 'Box', props: { flexGrow: 1 } }
 
 // ---------- the plan row ----------
 const PHASES = ['plan', 'delegate', 'review', 'close'] as const
+const NAME_MIN_PX = 56, NAME_MAX_TASKS = 8, PARTS_PAST = 40, NEXT_MIN = 8
+// The plan bar's segment width and gap, and whether its segments have room to name their tasks.
+const segsOf = (n: number, W: number) => {
+  const gap = Math.min(2, W / (n || 1) / 2), sw = (W - gap * (n - 1)) / (n || 1)
+  return { gap, sw, names: n <= NAME_MAX_TASKS && sw >= NAME_MIN_PX }
+}
 const planLine = (plan: Plan, crew: Crew, W: number): El => {
   const left = crew.leftMin === null ? '' : ` · ${fmtLeft(crew.leftMin)}`
   const right: Run[] = [[`${plan.done}/${plan.total}`, 'fg', 600], [` tasks${left}`, 'muted']], rw = runsWidth(right, 12)
@@ -253,14 +259,22 @@ const planLine = (plan: Plan, crew: Crew, W: number): El => {
   const full = stepper(true), st = W - rw - full.w - 24 >= 60 ? full : stepper(false)
   const room = W - rw - st.w - 24, title = clean(plan.title, 60)
   const tw = room >= 20 ? Math.min(room, widthOf(title, 12, 600)) : 0
-  const body = (tw ? text(0, 15, title, 12, 'fg', { w: 600, max: tw }) : '') + at(tw ? tw + 12 : 0, 0, st.out) + runs(W, 15, 12, right, rw + 1, true)
-  return image('plan-line', { source: doc(W, 22, body), alt: `${title}, phase ${plan.phase}, ${plan.done} of ${plan.total} tasks${left}`, width: W, height: 22 }, false)
+  // With nothing under way and no names on the bar, the first not-started task, in what the title and stepper leave;
+  // the name may be cut, but never under NEXT_MIN characters, else the clause goes whole.
+  const quiet = plan.tasks.every(t => t.state === 'done' || t.state === 'todo') && !segsOf(plan.tasks.length, W).names
+  const next = quiet ? clean(plan.tasks.find(t => t.state === 'todo')?.name, 60) : ''
+  const spare = W - rw - (tw ? tw + 12 : 0) - st.w - 12 - widthOf(' · next: ', 12)
+  const cut = next && spare > 0 ? fitTo(next, spare, 12) : ''
+  const clause: Run[] = cut && !(cut.endsWith('…') && [...cut.slice(0, -1).trim()].length < NEXT_MIN) ? [[` · next: ${cut}`, 'muted']] : []
+  const body = (tw ? text(0, 15, title, 12, 'fg', { w: 600, max: tw }) : '') + at(tw ? tw + 12 : 0, 0, st.out)
+    + runs(W, 15, 12, [...right, ...clause], rw + runsWidth(clause, 12) + 1, true)
+  const alt = `${title}, phase ${plan.phase}, ${plan.done} of ${plan.total} tasks${left}${next ? `, next: ${next}` : ''}`
+  return image('plan-line', { source: doc(W, 22, body), alt, width: W, height: 22 }, false)
 }
 
 const STATE_WORD = { done: 'done', live: 'in progress', need: 'needs you', failed: 'failed', todo: 'not started' } as const
 // shortcut: capped at 4,000 characters so a huge plan stays under the props cap; list fewer if plans grow past ~60 tasks.
 const taskList = (plan: Plan) => clip(plan.tasks.map(t => `${clean(t.name, 60)} ${STATE_WORD[t.state]}`).join(', '), 4000)
-const NAME_MIN_PX = 56, NAME_MAX_TASKS = 8, PARTS_PAST = 40
 const planBar = (plan: Plan, W: number, grow: boolean): El => {
   const n = plan.tasks.length, count = (s: string) => plan.tasks.filter(t => t.state === s).length
   const list = taskList(plan), alt = `tasks: ${list}`
@@ -269,7 +283,7 @@ const planBar = (plan: Plan, W: number, grow: boolean): El => {
     const body = ['ok', 'accent', 'track'].map((c, i) => `<rect x="${+ws.slice(0, i).reduce((a, b) => a + b, 0).toFixed(2)}" y="0" width="${+ws[i].toFixed(2)}" height="8" rx="3" class="${c}"/>`).join('')
     return image('plan-bar', { source: doc(W, 8, withTip(list, body, Infinity)), alt, width: W, height: 8 }, true)
   }
-  const gap = Math.min(2, W / (n || 1) / 2), sw = (W - gap * (n - 1)) / (n || 1), names = n <= NAME_MAX_TASKS && sw >= NAME_MIN_PX
+  const { gap, sw, names } = segsOf(n, W)
   const label = plan.tasks.map((t, i) => {
     const x = +(i * (sw + gap)).toFixed(2), name = clean(t.name, 24), max = sw - 2
     if (t.state === 'done') return at(x, 12, icon('check', 10, 's-ok')) + text(x + 12, 22, name, 10, 'muted', { max: max - 12 })

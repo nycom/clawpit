@@ -64,12 +64,13 @@ export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
 export type PonytailBand = { reused: string[]; created: string[]; openCallers: string[] }
 /** savvy's `need` atom: the main session waits on the person. */
 export type SavvyNeed = { text: string; since: number }
-export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[] }
+export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[]
+  doneTitles?: string[] }  // savvy's norm()-normalised titles of the tasks known done; older savvy leaves it out
 
 declare module 'claude-code' {
   interface PluginState {
     clawpit: { takeover: boolean; stats: Stats; ui: Ui; tick: number; idleSince: number | null }
-    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[]; need?: SavvyNeed | null }
+    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[]; need?: SavvyNeed | null; stages?: string[] }
     ponytail: { band: PonytailBand }
   }
 }

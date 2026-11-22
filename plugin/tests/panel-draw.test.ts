@@ -227,6 +227,49 @@ test('panel: a needs-you task on the plan bar carries a ? mark, not colour alone
   expect(sourceOf(panelTree(viewOf('hydra')), 'plan-bar')).not.toContain(ask)
 })
 
+test('panel: with nothing live and the task names hidden, the plan line names the next task', () => {
+  const line = (v: ReturnType<typeof viewOf>) => propsOf(find(panelTree(v), 'plan-line')!)
+  const wide = line(viewOf('filePlan'))
+  expect(words(wide.source)).toContain('5/12 tasks · next: auth flow')
+  expect(wide.source).toMatch(/<tspan class="muted">[^<]* · next: auth flow<\/tspan>/)
+  expect(wide.alt).toBe('Site rebuild, phase delegate, 5 of 12 tasks, next: auth flow')
+  // dropped whole where it does not fit; the alt keeps it
+  const narrow = line(viewOf('filePlan', { bodyColumns: 36 }))
+  expect(words(narrow.source)).not.toContain('next'); expect(narrow.alt).toContain('next: auth flow')
+  // a long name is cut with an ellipsis but never under 8 characters, else the clause goes
+  const v = viewOf('filePlan'), plan = v.crew.plan!, named = plan.tasks.map(t => (t.name === 'auth flow' ? { ...t, name: 'create the user model and its migration' } : t))
+  const seen = new Set<string>()
+  for (let bodyColumns = 36; bodyColumns <= 96; bodyColumns++) {
+    const said = words(line({ ...v, bodyColumns, crew: { ...v.crew, plan: { ...plan, tasks: named } } }).source).match(/next: (.*)$/)?.[1]
+    if (said?.endsWith('…')) expect([...said.slice(0, -1).trim()].length).toBeGreaterThanOrEqual(8)
+    seen.add(said === undefined ? 'none' : said.endsWith('…') ? 'cut' : 'whole')
+  }
+  expect([...seen].sort()).toEqual(['cut', 'none', 'whole'])
+})
+
+test('panel: no next clause while a task is live, waiting or failed, or while the bar names its tasks', () => {
+  const hasNext = (v: ReturnType<typeof viewOf>) => { const p = propsOf(find(panelTree(v), 'plan-line')!); return words(p.source).includes('next:') || p.alt.includes('next:') }
+  const v = viewOf('filePlan'), plan = v.crew.plan!
+  for (const state of ['live', 'need', 'failed'] as const)
+    expect(hasNext({ ...v, crew: { ...v.crew, plan: { ...plan, tasks: plan.tasks.map((t, i) => (i === 3 ? { ...t, state } : t)) } } })).toBe(false)
+  expect(hasNext(viewOf('planOutOfOrder'))).toBe(false)
+  const h = viewOf('hydra'), quiet = { ...h.crew.plan!, tasks: h.crew.plan!.tasks.map(t => (t.state === 'done' ? t : { ...t, state: 'todo' as const })) }
+  expect(hasNext({ ...h, crew: { ...h.crew, plan: quiet } })).toBe(false)
+})
+
+test('panel: the plan bar and the folded mini bars turn as many segments green as the plan count', () => {
+  const green = (src: string) => (src.match(/<rect [^>]*class="ok"/g) ?? []).length
+  for (const s of ['hydra', 'filePlan', 'planOutOfOrder'] as const) for (let bodyColumns = 36; bodyColumns <= 64; bodyColumns += 2) {
+    const v = viewOf(s, { bodyColumns }), done = v.crew.plan!.done
+    expect(green(sourceOf(panelTree(v), 'plan-bar'))).toBe(done)
+    for (const size of ['gauges', 'line'] as const) {
+      const col = sourceOf(panelTree({ ...v, ui: { ...v.ui, size } }), 'col-plan')
+      if (col) expect(green(col)).toBe(done)
+    }
+  }
+  expect(green(sourceOf(panelTree(gauges('filePlan')), 'col-plan'))).toBe(5)
+})
+
 // The words of the last <text> in a drawing: the folded column's alert line.
 const lastText = (src: string) => words([...src.matchAll(/<text[^>]*>(.*?)<\/text>/g)].at(-1)![1])
 test('panel: the folded alert line keeps " needs you" and " failed" whole and cuts only the title', () => {

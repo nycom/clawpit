@@ -8,6 +8,7 @@ export const NOW = 1_800_000_000_000
 export type StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead'
   | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns' | 'oneRunning' | 'oneNeedsYou'
   | 'sessionNeed' | 'sessionNeedCrew'
+  | 'filePlan' | 'planOutOfOrder'
 export type Fixture = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>
   logs: Record<string, LogLine[]>; stats: Stats; ui: Ui; busy: boolean; armed: boolean; need?: SavvyNeed | null }
 
@@ -64,6 +65,17 @@ const FLOW: SavvyFlow = {
   title: 'Hydra · retro fixes', total: 7, done: 2, phase: 'delegate', isFinished: false,
   tasks: ['schema', 'api', 'savvy-progress implement', 'e2e tests', 'cache-tax review c1', 'plan the release', 'merge'].map(title => ({ title })),
 }
+// A plan read from a checklist: 12 tasks, 5 checked out of order, no agents.
+const FILE_TASKS = ['schema', 'api', 'docs page', 'auth flow', 'login page', 'settings page', 'search index', 'export csv', 'import csv', 'error pages', 'release notes', 'changelog']
+const FILE_FLOW: SavvyFlow = {
+  title: 'Site rebuild', total: 12, done: 5, phase: 'delegate', isFinished: false, tasks: FILE_TASKS.map(title => ({ title })),
+  doneTitles: ['schema', 'api', 'docs page', 'login page', 'settings page'],
+}
+// api finished first while schema still runs.
+const OUT_OF_ORDER_FLOW: SavvyFlow = {
+  title: 'Site rebuild', total: 4, done: 1, phase: 'delegate', isFinished: false, tasks: ['schema', 'api', 'docs page', 'release notes'].map(title => ({ title })),
+  doneTitles: ['api'],
+}
 const STATS: Stats = {
   context: { pct: 58, msgsPct: 34, turnsLeft: 7, autoPct: 97, alarm: false },
   limits: [
@@ -115,6 +127,8 @@ export const STATES: Record<StateName, Fixture> = {
   // No flow in either, so no plan line changes these pictures.
   sessionNeed: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, stats: IDLE_STATS, busy: false, armed: false, need: SESSION_NEED }),
   sessionNeedCrew: base({ flow: null, runs: NEEDS, logs: NEEDS_LOGS, need: SESSION_NEED }),
+  filePlan: base({ flow: FILE_FLOW, runs: [], parents: {}, activity: {}, logs: {}, busy: false, armed: false }),
+  planOutOfOrder: base({ flow: OUT_OF_ORDER_FLOW, runs: HYDRA_RUNS.filter(r => r.id === 'imp').map(r => ({ ...r, description: 'schema' })), parents: {} }),
   manyAgents: base({
     flow: null, parents: {}, activity: {}, logs: {},
     runs: Array.from({ length: 80 }, (_, i) => run(`m${i}`, 'general-purpose', `worker ${i + 1}`, 'claude-sonnet-5-5', 10_000 + i * 1_000,

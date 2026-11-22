@@ -4,7 +4,7 @@ import { panelTree } from '../../plugin/hooks/panel/draw'
 import { BUDGET } from '../../plugin/hooks/loops'
 import { panelLoopCount, viewOf } from '../../plugin/tests/build'
 
-const SHOTS = ['idle', 'busy', 'hydra', 'needsYou', 'failed', 'both', 'context90', 'limitAhead', 'sizeGauges', 'sizeLine', 'codeColumns'] as const
+const SHOTS = ['idle', 'busy', 'hydra', 'needsYou', 'failed', 'both', 'context90', 'limitAhead', 'sizeGauges', 'sizeLine', 'codeColumns', 'filePlan', 'planOutOfOrder'] as const
 for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (const w of [60, 96] as const)   // narrow, wide
   test(`panel: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
     await show(page, panelTree(viewOf(s, { bodyColumns: w })), { surface: 'panel', widthCells: w, theme })
