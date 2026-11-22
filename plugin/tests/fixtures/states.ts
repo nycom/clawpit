@@ -18,7 +18,7 @@ const act = (kind: Activity['kind'], verb: string, target: string, ago: number):
 
 const HYDRA_RUNS: SavvyRun[] = [
   run('e2e', 'validator', 'e2e tests', 'claude-haiku-5-5', 210_000, { ...ctx(62), costUsd: 0.07, stepDone: 2, stepTotal: 4, stepNote: 'Seeded the fixture data.' }),
-  run('imp', 'implementer', 'savvy-progress implement', 'claude-sonnet-5-5', 260_000, { ...ctx(38), costUsd: 0.31, stepDone: 3, stepTotal: 5, stepNote: 'Wired the fold to isWorking. Writing the test next.' }),
+  run('imp', 'implementer', 'savvy-progress implement', 'claude-sonnet-5-5[1m]', 260_000, { ...ctx(38), effort: 'medium', costUsd: 0.31, stepDone: 3, stepTotal: 5, stepNote: 'Wired the fold to isWorking. Writing the test next.' }),
   run('rev', 'general-purpose', 'cache-tax review c1', 'claude-opus-5-5', 190_000, { ...ctx(21), costUsd: 0.18, stepDone: 1, stepTotal: 4, stepNote: 'Searching for UNATTENDED across hooks/.' }),
   run('k1', 'Explore', 'find callers of guard', 'claude-haiku-5-5', 90_000, { ...ctx(12), costUsd: 0.02, stepDone: 2, stepTotal: 3 }),
   run('k2', 'Explore', 'map the cache keys', 'claude-haiku-5-5', 60_000, { ...ctx(9), costUsd: 0.01, stepDone: 1, stepTotal: 3 }),

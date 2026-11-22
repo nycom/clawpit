@@ -4,7 +4,7 @@ import { paneTree } from '../../plugin/hooks/pane/draw'
 import { pickLoops, BUDGET } from '../../plugin/hooks/loops'
 import { paneLoopCount, paneViewOf } from '../../plugin/tests/build-pane'
 
-const SHOTS = ['hydra', 'needsYou', 'failed', 'both', 'drawerOpen', 'helpers', 'emptyPane', 'manyAgents', 'helperNeedsYou', 'nestedHelper', 'costs'] as const
+const SHOTS = ['hydra', 'needsYou', 'failed', 'both', 'drawerOpen', 'helpers', 'emptyPane', 'manyAgents', 'helperNeedsYou', 'nestedHelper', 'costs', 'endedOpen'] as const
 for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (const w of [28, 30, 36, 52] as const)   // around the ~29 cells the app gives, narrow, wide
   test(`pane: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
     await show(page, paneTree(paneViewOf(s, { columns: w })), { surface: 'pane', widthCells: w, theme })

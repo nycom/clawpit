@@ -171,7 +171,7 @@ test('pane: a waiting helper keeps its question and a readable wait at 36 column
     return find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k1')!
   }
   for (const [ms, age] of [[30_000, '<1m'], [720_000, '12m'], [7_200_000, '120m']] as const) {
-    expect(words(at(ms))).toMatch(new RegExp(`Keep\\b.* ${age} Haiku$`))
+    expect(words(at(ms))).toMatch(new RegExp(`Keep\\b.* ${age} Haiku( 5\\.5)?$`))
     expect(String(inner(at(ms)).alt)).toContain(`waiting ${age}: Keep the old cache key for now?`)
   }
 })
@@ -568,7 +568,8 @@ test('pane: an empty model id draws nothing and says nothing', () => {
 })
 
 test('pane: effort is in the alt and the drawer only when the run has one', () => {
-  const v = paneViewOf('drawerOpen'), withE = paneTree(setModel(v, a => a.model, { effort: 'high' })), without = paneTree(v)
+  const bare = (a: CrewAgent) => a.model.replace('[1m]', ''), v = paneViewOf('drawerOpen')
+  const withE = paneTree(setModel(v, bare, { effort: 'high' })), without = paneTree(setModel(v, bare, { effort: undefined }))
   expect(alt(find(withE, 'row-imp'))).toContain('Sonnet 5.5, high effort'); expect(words(find(withE, 'drawer-imp'))).toContain('effort high')
   expect(words(find(withE, 'row-imp'))).not.toContain('high')
   expect(alt(find(without, 'row-imp'))).not.toContain('effort'); expect(words(find(without, 'drawer-imp'))).not.toContain('effort')
@@ -576,7 +577,7 @@ test('pane: effort is in the alt and the drawer only when the run has one', () =
 })
 
 test('pane: a 1M id reads its window in the drawer context only', () => {
-  const v = paneViewOf('drawerOpen'), wide = paneTree(setModel(v, a => `${a.model}[1m]`)), plain = paneTree(v)
+  const v = setModel(paneViewOf('drawerOpen'), a => a.model.replace('[1m]', '')), wide = paneTree(setModel(v, a => `${a.model}[1m]`)), plain = paneTree(v)
   expect(words(find(wide, 'drawer-imp'))).toContain('context 38% of 1M'); expect(words(find(plain, 'drawer-imp'))).not.toContain('of 1M')
   expect(alt(find(wide, 'row-imp'))).toContain('Sonnet 5.5, 1M window')
 })
@@ -590,4 +591,19 @@ test('pane: 80 agents with models, efforts and a drawer stay under both bounds',
   const v = paneViewOf('manyAgents'), first = v.crew.agents[0].id
   const t = paneTree({ ...setModel(v, a => `${a.model}[1m]`, { effort: 'xhigh' }), ui: { ...v.ui, open: first } })
   expect(engine(t)).toBeLessThanOrEqual(ENGINE_MAX); expect(JSON.stringify(t).length).toBeLessThanOrEqual(HOST_MAX)
+})
+
+test('pane: an alert row and the drawer name the model in their alt, the state after a comma', () => {
+  const t = paneTree(setModel(open(paneViewOf('both')), a => a.model, { effort: 'high' }))
+  expect(alt(find(t, 'row-pln'))).toMatch(/^plan the release, Fable 5\.2, high effort, needs you, waiting /)
+  expect(alt(find(t, 'row-e2e'))).toMatch(/^e2e tests, Haiku 5\.5, high effort, failed after /)
+  const d = paneTree(paneViewOf('drawerOpen'))
+  expect(alt(find(d, 'drawer-imp'))).toMatch(/^savvy-progress implement log, Sonnet 5\.5/)
+})
+
+test('pane: a waiting or failed helper reads the full name where its column has room', () => {
+  for (const s of ['helperNeedsYou', 'both'] as const) {
+    const t = paneTree(open(paneViewOf(s, { columns: 52 }))), k = s === 'both' ? 'helper-k2' : 'helper-k1'
+    expect([s, words(find(t, k))]).toEqual([s, expect.stringMatching(/ Haiku 5\.5$/)])
+  }
 })

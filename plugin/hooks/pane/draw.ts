@@ -73,7 +73,6 @@ const waiting = (a: CrewAgent, now: number) => minutes(now - (a.waitingSince ?? 
 const reading = (a: CrewAgent, now: number): Run[] =>
   a.eta.kind === 'left' ? [[fmtLeft(a.eta.minutes).replace(/ left$/, ''), a.eta.slow ? 'warn' : 'fg', 600], [' left', 'muted']]
     : a.eta.kind === 'over' ? [['slower', 'warn', 600]] : [[elapsed(a, now), 'fg', 600], [' so far', 'muted']]
-// The activity's full words, and whether drawing `rs` in `maxW` cuts them.
 // The model, muted under the reading: its name where `room` holds it, else its one word, whole. Effort only when the run has one.
 const MODEL_PX = 10
 const effortOf = (a: CrewAgent) => clean(a.effort, 12)
@@ -84,6 +83,7 @@ const modelAlt = (a: CrewAgent) => {
   const m = modelLabel(a.model), e = effortOf(a)
   return m.name ? `, ${m.name}${m.window ? ', 1M window' : ''}${e ? `, ${e} effort` : ''}` : ''
 }
+// The activity's full words, and whether drawing `rs` in `maxW` cuts them.
 const activityLine = (a: CrewAgent, now: number, rs: Run[], maxW: number, size: number) => {
   const tip = textOf(activityRuns(a, now, true))
   return { tip, cut: runsWidth(rs, size) > maxW || textOf(activityRuns(a, now)) !== tip }
@@ -198,7 +198,7 @@ const alertRow = (a: CrewAgent, ring: boolean, open: boolean, W: number, now: nu
     + withTip(msg, lines.filter(Boolean).join(' ') !== msg, lines.map((l, i) => (l ? text(i ? CRAB + GAP : x, 37 + i * 16, 'er', 12, l, { weight: 600 }) : '')).join('')) + read + chevron(W - PAD - 14, 25, 12, open)
     + modelLine(rx, need ? 52 : 58, col.brief ? modelLabel(a.model).short : modelText(a, col.read - READ_GAP))
   const source = withCrab(doc(W, h, body, ring), crab({ role: a.role, prop: need ? 'wait' : 'fail', walk: false, size: 'M' }), 2, 17)
-  const alt = `${title}${modelAlt(a)} ${need ? `needs you, waiting ${age}: ${msg}` : `failed ${after}: ${msg}`}`
+  const alt = `${title}${modelAlt(a)}${modelAlt(a) ? ',' : ''} ${need ? `needs you, waiting ${age}: ${msg}` : `failed ${after}: ${msg}`}`
   return image(`row-${a.id}`, { source, alt, width: n(W), height: h, press: `row:${a.id}`, hover: true }, ring)
 }
 
@@ -268,7 +268,7 @@ const drawer = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   const ease = `${MOTION.revealMs}ms ${MOTION.curve}`
   // The reduced-motion rule comes last, after the one-shot it turns off.
   const oneShot = fresh ? `<style>.nw{animation:in ${ease} 100ms both}.old{animation:dn ${ease} both}@keyframes in{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}@keyframes dn{from{transform:translateY(-${n(row)}px)}to{transform:none}}</style>${cssOf([], true)}` : ''
-  return image(`drawer-${a.id}`, { source: doc(W, h, `${oneShot}${line}${body}`), alt: `${clean(a.title, 60)} log`, width: n(W), height: h }, false)
+  return image(`drawer-${a.id}`, { source: doc(W, h, `${oneShot}${line}${body}`), alt: `${clean(a.title, 60)} log${modelAlt(a)}`, width: n(W), height: h }, false)
 }
 
 const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: number, edge: number, still: boolean): El => {
@@ -277,7 +277,7 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
   // A question keeps at least half the text width, so a long title cannot push it out; any other helper keeps its title whole.
   const titleRoom = (textW: number) => (need ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW)
-  const mw = modelW(a), full = Math.max(mw, need ? textWidth(`waiting ${age}`, 12, 600) : failedW), own = Math.min(READ, full + READ_GAP)
+  const mw = modelW(a), full = Math.max(textWidth(modelLabel(a.model).name, MODEL_PX), need ? textWidth(`waiting ${age}`, 12, 600) : failedW), own = Math.min(READ, full + READ_GAP)
   const titleFits = (r: number) => textWidth(title, 12, 600) <= helperRoom(W, depth, r)
   const col = alert ? alertColumn(titleFits, own, full, Math.max(mw, need ? textWidth(age, 12, 600) : failedW)) : { read: edge, brief: false }
   const plain = alert ? null : plainRead(a, now, 12, r => helperRoom(W, depth, r), edge)
@@ -314,7 +314,7 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   what = withTip(tip, cut, what)
   // The reading over the model; "waiting 120m" may run into the gap before the column, never into the text.
   const body = tint(-8, BW + 8) + what + runs(rx, 14, 12, read, need ? READ : col.read, 'end')
-    + modelLine(rx, 27, alert ? modelLabel(a.model).short : modelText(a, edge - READ_GAP))
+    + modelLine(rx, 27, alert ? (col.brief ? modelLabel(a.model).short : modelText(a, col.read - READ_GAP)) : modelText(a, edge - READ_GAP))
   const alt = `${title}${modelAlt(a)}, ${need ? `waiting ${age}` : alert ? textOf(read) : textOf(reading(a, now))}${alert ? `: ${msg}` : cut ? `: ${clean(tip, TIP_MAX)}` : ''}`
   return { type: 'Box', props: { flexDirection: 'row' }, children: [
     image(`crab-${a.id}`, { source: crabSvg, alt: `${a.role} crab`, width: cw, height: h }, walk),
