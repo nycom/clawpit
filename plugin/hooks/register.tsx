@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
+import type { ConfigValue, EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
 import type { Offer, SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
 import { crewOf, needOf } from './model'
 import { pickLoops } from './loops'
@@ -17,7 +17,7 @@ import { contextOf, pushTurn, type CtxInput } from './track/context'
 import { codeOf } from './track/code'
 import { clip, oneLine } from './text'
 import { MOTION } from './tokens'
-import { OFFER_FROM, OFFER_NOTE, offersOf } from './setup'
+import { OFFER_FROM, OFFER_NOTE, offersOf, questionsOf, writesOf, type Answer } from './setup'
 
 // Wiring only: the atoms, the observers that feed the trackers, the render hooks, the Client presses, and `view`.
 
@@ -67,6 +67,7 @@ let booted: Promise<void> | null = null
 let paneAsked = false                           // the pane opened by itself this session
 let benchOn = false                             // the `bench` setting, read at each load: /clawpit-bench is registered
 let benchReg: Promise<unknown> | null = null
+let setupReg: Promise<unknown> | null = null
 let animations = true                           // the `animations` setting, read at each load: off draws nothing that moves
 let bench: { count: number; eased: boolean } | null = null
 let offers: Offer[] = []                       // the /config rows still to ask about once; the pane shows the first
@@ -78,7 +79,7 @@ const BENCH_MAX = 48
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
-  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; bench = null
+  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; setupReg = null; bench = null
   offers = []; refused = new Set()
 }
 
@@ -174,6 +175,9 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { needShown = !!needOf(await read($, need)) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
   try { await benchUp($) } catch { errors += 1 }
+  try { await setupUp($) } catch { errors += 1 }
+  // Not awaited: the write runs the config.set observer, which waits for this boot.
+  void applyPending($).catch(() => { errors += 1 })
 })())
 
 // Once per load and session, only with the `bench` setting on. The panel's render calls it too: after /reload-plugins
@@ -181,6 +185,32 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
 const benchUp = ($: EngineInterface) => benchOn ? (benchReg ??= $.command.register({
   name: 'clawpit-bench', description: 'Draws n walking crabs in the Agents pane, past the loop budget; 0 restores it.', argumentHint: '<n> [eased]',
 }).catch(() => { errors += 1 })) : undefined
+
+// Always registered at boot, like benchUp: a registered command is not in the model's context.
+const setupUp = ($: EngineInterface) => (setupReg ??= $.command.register({
+  name: 'clawpit-setup', description: 'Set up clawpit and savvy-progress',
+}).catch(() => { errors += 1 }))
+
+// Writes clawpit's own keys one by one. Writing one reloads clawpit and may end the running handler, so what is left
+// is stored first and applied at the next boot.
+const writeOwn = async ($: EngineInterface, list: { key: string; value: ConfigValue }[]) => {
+  let saved = 0
+  for (const [i, w] of list.entries()) { 
+    await $.store.set('setupPending', list.slice(i + 1))
+    try { if (!(await $.config.set(w)).deny) saved += 1 } catch { errors += 1 }
+  }
+  await $.store.delete('setupPending')
+  return saved
+}
+
+// Answers a reload cut short: only the ones whose row still differs are written, so the reload loop cannot start.
+const applyPending = async ($: EngineInterface) => {
+  const left = await $.store.get('setupPending')
+  if (!Array.isArray(left) || !left.length) return
+  const rows = await $.config.list()
+  const pending: Answer[] = left.flatMap(w => { const r = rows.find(x => x.key === w?.key); return r ? [{ key: r.key, value: w.value, was: r.value }] : [] })
+  await writeOwn($, writesOf(pending))
+}
 
 // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
 // loads a surface module only from a <Client> written here with a literal path.
@@ -383,6 +413,28 @@ export const register: Register = (on, options) => {
     if (bench) await openPane($)
     $.ui.invalidate('ui.render')
     return { text: bench ? `Bench: ${count} ${bench.eased ? 'eased' : 'stepped'} crabs in the Agents pane.` : 'Bench off: the Agents pane is back.' }
+  })
+
+  // `/clawpit-setup`: one engine dialog per boolean or choice row, no model call. Answers are written at the end.
+  on('command.run', { command: 'clawpit-setup' }, async ($, e, next) => {
+    const newer = { text: 'Setup needs a newer Claude Code; use /config.' }
+    let rows
+    try { rows = await $.config.list() } catch { return newer }
+    const { asks, skipped, more } = questionsOf(rows)
+    const answers: Answer[] = []
+    for (const q of asks) {
+      let said: string
+      try { said = await $.ui.ask(q.question, { options: q.labels, header: q.header }) } catch (err) { if (err instanceof TypeError) return newer; break }   // a missing $.ui.ask throws a TypeError; a dismissed dialog rejects
+      const i = q.labels.indexOf(said)
+      if (i >= 0) answers.push({ key: q.key, value: q.values[i], was: q.was })
+    }
+    const writes = writesOf(answers), own = writes.filter(w => w.key.startsWith('clawpit.'))
+    let saved = 0
+    for (const w of writes.filter(x => !own.includes(x))) { try { if (!(await $.config.set(w)).deny) saved += 1 } catch { errors += 1 } }
+    // clawpit's own hooks do not see its own writes, so the offers are read again here.
+    try { await readOffers($); await writeTick($) } catch { errors += 1 }
+    saved += await writeOwn($, own)
+    return { text: `Saved ${saved} settings. ${skipped} list settings are edited in /config.${more.length ? ` More values for ${more.join(', ')} are in /config.` : ''}` }
   })
 
   // paneOpen follows the pane itself. clawpit never closes it: the desktop leaves an emptied tile as a tab no one can close.

@@ -414,9 +414,10 @@ const configRows = (on: OnT) => {
     options: ['unasked', 'off', 'both', 'ask', 'tool'], provider: { plugin: 'savvy-progress', tier: 'user' }, isLocked: false }
   const writes: Write[] = [], toasts: string[] = []
   on('state.set', { plugin: 'menu', key: 'wrote' } as never, (_$, e, next) => { const x = e.value as unknown as Write; writes.push(x); if (x.key === NEED_KEY) row.value = x.value; return next(e) })
-  on('config.list', () => ({ value: [{ ...row }] }) as never)
+  const listed = { afterWrite: 0 }
+  on('config.list', () => { if (writes.length) listed.afterWrite += 1; return { value: [{ ...row }] } as never })
   on('ui.toast', (_$, e) => { toasts.push(e.text); return { value: undefined } as never })
-  return { toasts, writes }
+  return { toasts, writes, listed }
 }
 const offerShown = async (ui: Pane) => (await svgAlt(ui, /^One-time setup: /))?.alt
 
@@ -502,5 +503,22 @@ test('pane hook: with no $.config (an older CLI) the setup row never shows and n
   const ui = await pane($)
   expect(await offerShown(ui)).toBeUndefined()
   expect((await svgAlt(ui, /^No agents yet/))?.alt).toBe('No agents yet. Agents you start show up here')
+  await ui.unmount()
+})
+
+test('pane hook: /clawpit-setup answering the session-need row takes the one-time row down', { plugins: [savvy, menu] }, async ($, on) => {
+  setup(on)
+  const c = configRows(on)
+  on('store.delete', () => ({ value: undefined }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('tool.call', { tool: 'AskUserQuestion' } as never, ((_$: unknown, e: { questions: { question: string }[] }) => ({ result: { answers: { [e.questions[0].question]: 'ask' } } })) as never)
+  await start($)
+  const ui = await pane($)
+  expect(await offerShown(ui)).toMatch(/^One-time setup: /)
+  await $.command.run({ command: 'clawpit-setup', args: '' })
+  // The engine does not show clawpit its own writes, so the command reads the offers again itself: one list after the write besides the one the harness's observer makes.
+  expect(c.listed.afterWrite).toBe(2)
+  expect(c.writes).toEqual([{ key: NEED_KEY, value: 'ask', by: 'clawpit' }])
+  expect(await offerShown(ui)).toBeUndefined()
   await ui.unmount()
 })
