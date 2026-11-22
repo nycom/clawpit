@@ -749,3 +749,14 @@ test('pane: one setup offer costs the engine under 2,000 characters', () => {
     expect(engine(offer)).toBeLessThan(2_000)
   }
 })
+
+test('pane: showCost false hides the agent cost in the head and its alt and in the drawer; unset or true draws it', () => {
+  const v = paneViewOf('failed'), ui = { ...v.ui, open: 'e2e' }, open = { ...v, ui, loops: pickLoops(v.crew, ui, true, true) }
+  const head = (x: typeof v) => find(paneTree(x), 'head')!, drawer = (x: typeof v) => find(paneTree(x), 'drawer-e2e')!
+  for (const x of [open, { ...open, showCost: true }]) {
+    expect(words(head(x))).toContain('≈$'); expect(String(head(x).props!.alt)).toContain('≈$'); expect(words(drawer(x))).toContain('cost ≈$')
+  }
+  const off = { ...open, showCost: false }
+  expect(words(head(off))).not.toContain('≈$'); expect(String(head(off).props!.alt)).not.toContain('≈$')
+  expect(words(drawer(off))).not.toContain('cost'); expect(words(drawer(off))).toContain('context 62%')
+})

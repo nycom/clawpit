@@ -71,6 +71,7 @@ let setupReg: Promise<unknown> | null = null
 let animations = true                           // the `animations` setting, read at each load: off draws nothing that moves
 let bench: { count: number; eased: boolean } | null = null
 let offers: Offer[] = []                       // the /config rows still to ask about once; the pane shows the first
+let showCost = true                             // false when the savvy-progress showCost row reads false; a missing row shows
 let refused = new Set<string>()                 // keys a write was refused for, kept in the store as offerRefused:<key>
 
 // The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
@@ -80,7 +81,7 @@ const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; setupReg = null; bench = null
-  offers = []; refused = new Set()
+  offers = []; refused = new Set(); showCost = true
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -137,7 +138,11 @@ const loadStore = async ($: EngineInterface) => {
 
 // The setup offers from the /config list; an older CLI has no $.config, so nothing is offered.
 const readOffers = async ($: EngineInterface) => {
-  try { offers = offersOf((await $.config.list()).filter(r => !refused.has(r.key))) } catch { errors += 1; offers = [] }
+  try {
+    const rows = await $.config.list()
+    showCost = rows.find(r => r.key === 'savvy-progress.showCost')?.value !== false
+    offers = offersOf(rows.filter(r => !refused.has(r.key)))
+  } catch { errors += 1; offers = []; showCost = true }
 }
 
 // A Yes or No press on the offer shown: written as if in /config. A refused or rejected write is said once and not asked again.
@@ -493,6 +498,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   return {
     panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations,
       planGrow: animations && planSince !== null && now - planSince < MOTION.fillMs },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost },
   }
 }

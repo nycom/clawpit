@@ -10,7 +10,7 @@ import { paneLayout, type PaneItem } from './layout'
 import { OFFER_NOTE } from '../setup'
 
 export type { El }
-export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean; offer?: Offer | null }
+export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean; offer?: Offer | null; showCost?: boolean }
 
 // The row's four columns: crab 38, title and activity, the reading column (88px at most, see readEdge), the chevron.
 const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6
@@ -146,7 +146,7 @@ const activityRuns = (a: CrewAgent, now: number, full = false): Run[] => {
   return [...note, ...(verb ? [[`${verb} `, 'fg'] as Run] : []), [target, 'muted']]
 }
 
-const head = (crew: Crew, W: number): El => {
+const head = (crew: Crew, W: number, cost: boolean): El => {
   const title = clean(crew.title, 60), c = { ...crew.counts, need: alertsOf(crew).need }
   const part = (count: number, label: string, cls: string): Run[] => [[String(count), cls, 600], [` ${label}`, cls]]
   const counts: Run[] = [
@@ -154,7 +154,7 @@ const head = (crew: Crew, W: number): El => {
     ...(c.failed ? [...part(c.failed, 'failed', 'er'), [' · ', 'muted'] as Run] : []),
     ...part(c.running, 'running', 'fg'), [' · ', 'muted'], ...part(c.done, 'done', 'fg'),
   ]
-  const tail: Run[] = [[` · ${fmtCost(crew.costUsd)}`, 'muted'], ...(crew.leftMin == null ? [] : [[` · ${fmtLeft(crew.leftMin)}`, 'muted'] as Run])]
+  const tail: Run[] = [...(cost ? [[` · ${fmtCost(crew.costUsd)}`, 'muted'] as Run] : []), ...(crew.leftMin == null ? [] : [[` · ${fmtLeft(crew.leftMin)}`, 'muted'] as Run])]
   const segs: Seg[] = [
     ...crew.ended.map((a): Seg => ({ state: a.prop === 'fail' ? 'failed' : 'done', fill: 1 })),
     // A waiting helper needs you, so it gets a segment next to the top-level ones that do.
@@ -254,7 +254,7 @@ const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: 
   ] }
 }
 
-const drawer = (a: CrewAgent, W: number, now: number, still: boolean): El => {
+const drawer = (a: CrewAgent, W: number, now: number, still: boolean, cost: boolean): El => {
   const x = CRAB + GAP + 12, textW = W - x - GAP - 38 - PAD, failed = a.prop === 'fail'
   // A line under a second old plays the one-shot: it fades in from the right while the older lines slide down by its height.
   const fresh = !still && a.log.length > 0 && now - a.log[0].at < 1000
@@ -274,7 +274,7 @@ const drawer = (a: CrewAgent, W: number, now: number, still: boolean): El => {
     body += fresh ? `<g class="${i ? 'old' : 'nw'}">${entry}</g>` : entry
   })
   const foot: [string, string][] = [['steps', `${a.stepDone}/${a.stepTotal}`], ...(a.tries ? [['tries', String(a.tries)] as [string, string]] : []),
-    ['context', `${a.contextPct}%${modelLabel(a.model).window ? ` of ${modelLabel(a.model).window}` : ''}`], ['cost', fmtCost(a.costUsd)], ...(failed ? [['ran', elapsed(a, now)] as [string, string]] : []),
+    ['context', `${a.contextPct}%${modelLabel(a.model).window ? ` of ${modelLabel(a.model).window}` : ''}`], ...(cost ? [['cost', fmtCost(a.costUsd)] as [string, string]] : []), ...(failed ? [['ran', elapsed(a, now)] as [string, string]] : []),
     ...(a.usuallyMin == null ? [] : [['usually', `${a.usuallyMin}m`] as [string, string]])]
   body += `<rect x="${n(x)}" y="${y}" width="${n(W - x - PAD)}" height="1" class="track"/>`
   // Whole items per line; "usually" goes first, when it alone would take another line.
@@ -377,14 +377,14 @@ const endedRow = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   return image(`ended-${a.id}`, { source, alt: `${title} ${status}${modelAlt(a)}`, width: n(W), height: h }, false)
 }
 
-const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ): El => {
+const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ, cost = true): El => {
   switch (item.kind) {
-    case 'head': return head(item.crew, W)
+    case 'head': return head(item.crew, W, cost)
     case 'section': return section(item, W)
     case 'row': return item.agent.state === 'need' || item.agent.state === 'failed' ? alertRow(item.agent, item.ring, item.open, W, now) : runningRow(item.agent, item.walk, item.open, W, now, edge)
     case 'session': return sessionRow(item, W, now)
     case 'offer': return offerRow(item.offer, W)
-    case 'drawer': return drawer(item.agent, W, now, still)
+    case 'drawer': return drawer(item.agent, W, now, still, cost)
     case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge, still)
     case 'kids': return kids(item, W)
     case 'ended': return endedRow(item.agent, W, now, still)
@@ -431,7 +431,7 @@ export const paneTree = (v: PaneView): El => {
   const W = v.columns * CELL_PX
   if (v.ui.view === 'costs') return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: costsView(v.session, W) }
   const items = paneLayout(v.crew, v.ui, v.loops, itemCost, v.offer), edge = readEdge(items, W, v.now)
-  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge)) }
+  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge, v.showCost !== false)) }
 }
 
 // The measuring bench: `count` walking M crabs, past the loop budget. Eased keeps the walk's size and keyframes on an
