@@ -101,20 +101,26 @@ const titleOf = (titles: string[], description: string): string | undefined => {
   return titles.filter(t => d === t || d.startsWith(`${t} `)).sort((a, b) => b.length - a.length)[0]
 }
 
-// The session's first `accepted` tasks are done; a run only marks its own task live, waiting or failed. A finished run the
-// session has not accepted yet reads as live with a full bar: there is no awaiting-review state to tick.
-const taskOf = (name: string, accepted: boolean, agents: CrewAgent[], titles: string[]): PlanTask => {
+// A ticked task is done; a run only marks its own task live, waiting or failed. A finished run the session has not
+// accepted yet reads as live with a full bar: there is no awaiting-review state to tick.
+const taskOf = (name: string, accepted: boolean, a: CrewAgent | undefined): PlanTask => {
   if (accepted) return { name, state: 'done', fill: 1 }
-  const a = agents.filter(x => titleOf(titles, x.title) === norm(name)).sort((x, y) => y.startedAt - x.startedAt)[0]
   if (!a) return { name, state: 'todo', fill: 0 }
   const state = a.state === 'need' ? 'need' : a.prop === 'fail' ? 'failed' : 'live'
   const progress = Math.max(0.08, a.stepTotal ? a.stepDone / a.stepTotal : 0)
   return { name, state, role: a.role, fill: a.state === 'running' || a.state === 'need' ? progress : 1 }
 }
 
+// The session's count ticks, never more: first the tasks savvy names done, then plan order past tasks whose run is
+// running, waiting or held failed, then the earliest left.
 export const planOf = (flow: SavvyFlow | null, agents: CrewAgent[]): Plan | null => {
   if (!flow || flow.isFinished) return null
-  const titles = flow.tasks.map(t => norm(t.title))
-  const tasks = flow.tasks.map((t, i) => taskOf(t.title, i < flow.done, agents, titles))
+  const titles = flow.tasks.map(t => norm(t.title)), named = new Set((flow.doneTitles ?? []).map(norm))
+  const runs = titles.map(t => agents.filter(x => titleOf(titles, x.title) === t).sort((x, y) => y.startedAt - x.startedAt)[0])
+  const ticked = titles.map(() => false)
+  let left = flow.done
+  const tick = (ok: (i: number) => boolean) => titles.forEach((_, i) => { if (left > 0 && !ticked[i] && ok(i)) { ticked[i] = true; left-- } })
+  tick(i => named.has(titles[i])); tick(i => !runs[i] || runs[i].state === 'ended'); tick(() => true)
+  const tasks = flow.tasks.map((t, i) => taskOf(t.title, ticked[i], runs[i]))
   return { title: flow.title, phase: flow.phase === 'design' ? 'plan' : flow.phase, done: flow.done, total: flow.total, tasks }
 }

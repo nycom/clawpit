@@ -61,7 +61,8 @@ export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
   failNote?: string; failLine?: string }
 /** The fields of ponytail's `band` atom that clawpit reads (ponytail 5.3.3 `hooks/band/types.d.ts`). */
 export type PonytailBand = { reused: string[]; created: string[]; openCallers: string[] }
-export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[] }
+export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[]
+  doneTitles?: string[] }  // savvy's norm()-normalised titles of the tasks known done; older savvy leaves it out
 
 declare module 'claude-code' {
   interface PluginState {

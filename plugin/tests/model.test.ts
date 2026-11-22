@@ -104,6 +104,32 @@ test('planOf: the session accepted count ticks the first tasks; a finished run n
   expect(crewOf(input('hydra', { runs: [failedOnApi] })).plan!.tasks[1].state).toBe('done')
 })
 
+test('planOf: tasks savvy names done tick first, even after a live one', () => {
+  const p = crewOf(input('planOutOfOrder')).plan!
+  expect(p.tasks.map(t => t.state)).toEqual(['live', 'done', 'todo', 'todo']); expect(p.done).toBe(1)
+})
+
+test('planOf: the rest of the count ticks in plan order, skipping tasks with a live, waiting or failed run', () => {
+  const flow = STATES.planOutOfOrder.flow!, runs = STATES.planOutOfOrder.runs
+  const states = (o: Partial<typeof flow>, rs = runs) => crewOf(input('planOutOfOrder', { flow: { ...flow, ...o }, runs: rs })).plan!.tasks.map(t => t.state)
+  expect(states({}, [])).toEqual(['todo', 'done', 'todo', 'todo'])
+  expect(states({ done: 2 })).toEqual(['live', 'done', 'done', 'todo'])
+  expect(states({ done: 2 }, patch(runs, 'imp', { blocked: 'Which table?' }))).toEqual(['need', 'done', 'done', 'todo'])
+  expect(states({ done: 2 }, patch(runs, 'imp', { status: 'failed', heldDone: true, endedAt: NOW }))).toEqual(['failed', 'done', 'done', 'todo'])
+  // with no titles from savvy the count alone ticks, still past the live task; only when short does it tick that one
+  expect(states({ done: 1, doneTitles: undefined })).toEqual(['live', 'done', 'todo', 'todo'])
+  expect(states({ done: 4, doneTitles: undefined })).toEqual(['done', 'done', 'done', 'done'])
+  // titles no longer in the plan are ignored and their count flows on
+  expect(states({ done: 1, doneTitles: ['gone'] })).toEqual(['live', 'done', 'todo', 'todo'])
+})
+
+test('planOf: a done title shared by two tasks ticks both, but never more than the count', () => {
+  const flow = { ...STATES.planOutOfOrder.flow!, tasks: ['api', 'schema', 'api', 'api'].map(title => ({ title })) }
+  const plan = (done: number) => crewOf(input('planOutOfOrder', { flow: { ...flow, done } })).plan!
+  expect(plan(2).tasks.map(t => t.state)).toEqual(['done', 'live', 'done', 'todo'])
+  expect(plan(3).tasks.filter(t => t.state === 'done').length).toBe(3)
+})
+
 test('planOf: design phase reads as plan; a finished flow is null', () => {
   const flow = STATES.hydra.flow!
   expect(crewOf(input('hydra', { flow: { ...flow, phase: 'design' } })).plan!.phase).toBe('plan')
