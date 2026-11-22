@@ -318,3 +318,52 @@ test('wiring: after a reload in a headless session, the first tool call takes ov
   expect(at('takeover')).toBeGreaterThan(-1)
   expect(at('takeover')).toBeLessThan(at('tool'))
 })
+
+// savvy-progress's session need, set through a test-only tool; an older savvy never writes the atom.
+const needer = {
+  name: 'savvy-progress',
+  register(on: OnT) {
+    on('tool.call', { tool: 'savvy-need' }, async ($, e) => {
+      await $.state.set({ plugin: 'savvy-progress', key: 'need' }, (e as unknown as { need: never }).need)
+      return { result: {} } as never
+    })
+  },
+}
+test('wiring: with no need atom the pane draws today\'s empty state; a session need draws its row and ticks once a minute while it shows', { plugins: [needer] }, async ($, on) => {
+  const w = setup(on)
+  on('ui.render', (h, e) => h.ui.resolve(e).Box({ key: 'beneath', children: [] }))
+  await start($)
+  const ui = await $.ui.mount({ plugin: 'clawpit', surface: 'desktop', component: 'Pane', requestId: 'clawpit-agents',
+    props: { title: 'Agents', isFocused: false, bodyColumns: 52, placement: 'dock' } as never })
+  const alts = async () => ((await ui.findAll({})) as unknown as { type: string; props: Record<string, unknown> }[])
+    .flatMap(n => (n.type === 'Svg' ? [String(n.props.alt)] : n.type === 'Client' ? [String((n.props.props as { alt?: unknown } | undefined)?.alt)] : []))
+  expect(await alts()).toEqual(['No agents yet. Agents you start show up here'])
+  let at = w.mine('tick').length
+  await w.clock.advance(60_000)
+  expect(w.mine('tick').length).toBe(at)
+  await $.tool.call({ tool: 'savvy-need', need: { text: 'Which branch?', since: T0 + 60_000 } } as never)
+  expect(await alts()).toContain('Claude needs you, waiting <1m: Which branch?. Answer in the prompt.')
+  at = w.mine('tick').length
+  await w.clock.advance(60_000)
+  expect(w.mine('tick').length).toBe(at + 1)
+  expect(await alts()).toContain('Claude needs you, waiting 1m: Which branch?. Answer in the prompt.')
+  await $.tool.call({ tool: 'savvy-need', need: null } as never)
+  expect(await alts()).toEqual(['No agents yet. Agents you start show up here'])
+  at = w.mine('tick').length
+  await w.clock.advance(120_000)
+  expect(w.mine('tick').length).toBe(at)
+  await ui.unmount()
+})
+
+test('wiring: the minute tick follows savvy\'s need atom from its own observer, with nothing drawn', { plugins: [needer] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  let at = w.mine('tick').length
+  await $.tool.call({ tool: 'savvy-need', need: { text: 'Which branch?', since: T0 } } as never)
+  await w.clock.advance(60_000)
+  expect(w.mine('tick').length).toBe(at + 1)
+  await $.tool.call({ tool: 'savvy-need', need: null } as never)
+  at = w.mine('tick').length
+  await w.clock.advance(120_000)
+  expect(w.mine('tick').length).toBe(at)
+})

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
-import type { SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
-import { crewOf } from './model'
+import type { SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
+import { crewOf, needOf } from './model'
 import { pickLoops } from './loops'
 import { moving, nextSize, parseSize, settle } from './panel/fold'
 import { panelTree, type PanelView } from './panel/draw'
@@ -31,6 +31,7 @@ const tick = atom({ plugin: 'clawpit', key: 'tick' } as const, 0)
 const idleSince = atom({ plugin: 'clawpit', key: 'idleSince' } as const, null)
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
+const need = atom({ plugin: 'savvy-progress', key: 'need' } as const, null)
 const stages = atom({ plugin: 'savvy-progress', key: 'stages' } as const, [])
 
 // The stage words savvy publishes (the part before "="); anything but a non-empty list of strings falls back to STAGES.
@@ -56,6 +57,7 @@ let ctxHistory: number[] = []
 let limits: SessionRateLimit[] = []
 let settles: Record<string, Settle> = {}
 let planSince: number | null = null            // when the plan bar first showed
+let needShown = false                           // savvy's need atom holds a need: its age reads in minutes
 let errors = 0
 let ticker: Timer | null = null
 let period = 0
@@ -72,7 +74,7 @@ const BENCH_MAX = 48
 
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
-  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null
+  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; bench = null
 }
 
@@ -91,11 +93,11 @@ const takeUsage = (u: { context: { percent?: number; breakdown?: CtxInput['break
 
 const writeStats = async ($: EngineInterface) => { const v = statsOf(await $.clock.now(), null); await update($, stats, () => v) }
 
-// The tick (design §4): 1 Hz while a main turn or an agent runs; once a minute while tests, a limit or an armed failed run is shown.
+// The tick (design §4): 1 Hz while a main turn or an agent runs; once a minute while tests, a limit, an armed failed run or a session need is shown.
 // shortcut: "on screen" is read as "present"; the render hooks know the fitted columns, so pass them in if idle minute ticks show up.
 const periodOf = (now: number) =>
   turn.turn || seen.some(r => r.status === 'running') ? 1000
-    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) ? 60_000 : 0
+    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) || needShown ? 60_000 : 0
 
 const writeTick = async ($: EngineInterface) => {
   try { const at = await $.clock.now(); await update($, tick, () => at); await retick($) } catch { errors += 1 }
@@ -145,6 +147,7 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { if ((await $.ui.panes()).some(p => p.id === PANE_ID)) await update($, ui, u => ({ ...u, paneOpen: true })) } catch { errors += 1 }
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
+  try { needShown = !!needOf(await read($, need)) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
   try { await benchUp($) } catch { errors += 1 }
 })())
@@ -317,6 +320,13 @@ export const register: Register = (on, options) => {
     return out
   })
 
+  // savvy's session need: the minute tick runs while it is set, started from this observer's `$`, never a render's.
+  on('state.set', { plugin: 'savvy-progress', key: 'need' }, async ($, e, next) => {
+    const out = await next(e)
+    try { await boot($); if (out.value?.isSet) { needShown = !!needOf(e.value); await retick($) } } catch { errors += 1 }
+    return out
+  })
+
   // clawpit draws its own row only, never what `next(e)` returns; on desktop savvy's band stands down (takeover).
   // shortcut: vscode and mobile pass through like the terminal, and savvy draws its band there; draw clawpit there too if asked.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -383,11 +393,14 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   await read($, tick); await read($, stats)   // read only to subscribe the drawing to the repaints
   let code: Stats['code'] = null
   try { code = codeOf(await read($, { plugin: 'ponytail', key: 'band' } as const)) } catch { errors += 1 }
+  // An older savvy-progress writes no need: missing reads as none.
+  let n: SavvyNeed | null = null
+  try { n = (await read($, need)) ?? null } catch { errors += 1 }
   const now = await $.clock.now()
   const words = await stageWords($)
   const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description, words)
   const crew = crewOf({ flow: f, runs: Array.isArray(runs) ? runs : [], parents, activity: facts.activity, logs, now,
-    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)) })
+    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)), need: n })
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
   if (s.context) settles.context = settle(settles.context, s.context.pct, now)
   for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct, now) }

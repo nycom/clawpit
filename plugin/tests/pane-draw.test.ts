@@ -626,3 +626,55 @@ test('pane: a long ended title never runs under its model', () => {
     expect([model, columns, 38 + tw <= +mline[1] - textWidth(mline[2], 10) - 4]).toEqual([model, columns, true])
   }
 })
+
+// The main session waiting on you: a "Claude" row in Needs you, not an agent and not pressable.
+const QUESTION = 'Ship the schema change behind a flag, or migrate every row now?'
+test('pane: a session need alone draws the head, the Needs you header and its row, never the empty state', () => {
+  const t = paneTree(paneViewOf('sessionNeed'))
+  expect(keys(t).filter(k => k !== 'clawpit-pane')).toEqual(['head', 'sec-need', 'session'])
+  expect(words(find(t, 'head'))).toContain('1 needs you · 0 running · 0 done')
+  // No agent, so no crew bar: the bar is one segment per agent.
+  expect(src(find(t, 'head'))).not.toContain('translate(0 26)')
+})
+
+test('pane: the session row is a 62px needs-you row with no press, no hover and no chevron; its alt says where to answer', () => {
+  const row = find(paneTree(paneViewOf('sessionNeed')), 'session')!
+  expect(inner(row).height).toBe(62); expect(inner(row).press).toBeUndefined(); expect(inner(row).hover).toBeUndefined()
+  expect(src(row)).toContain('class="needTint"'); expect(src(row)).not.toContain('M4.5 2.5 8 6l-3.5 3.5')
+  expect(words(row).startsWith('Claude ')).toBe(true); expect(words(row)).not.toMatch(/EXPLORE/)
+  expect(String(inner(row).alt)).toBe(`Claude needs you, waiting 12m: ${QUESTION}. Answer in the prompt.`)
+})
+
+test('pane: the session row reads its age alone up to 30 cells and "waiting 12m" from 36; the question stays left of the reading', () => {
+  const reads: Record<number, string> = { 28: '12m', 30: '12m', 36: 'waiting 12m', 41: 'waiting 12m', 52: 'waiting 12m' }
+  for (const [w, want] of Object.entries(reads)) {
+    const row = find(paneTree(paneViewOf('sessionNeed', { columns: +w })), 'session')!, W = inner(row).width as number
+    const read = [...src(row).matchAll(/<text x="[\d.]+" y="24" class="er" font-size="13" font-weight="600" text-anchor="end">([^<]*)<\/text>/g)].map(m => m[1])
+    expect(read).toEqual([want])
+    const lines = [...src(row).matchAll(/<text x="([\d.]+)" y="(37|53)" class="er" font-size="12" font-weight="600">([^<]*)<\/text>/g)]
+    expect(lines.length).toBeGreaterThan(0)
+    for (const [, x, , s] of lines) { expect(+x).toBe(48); expect(+x + textWidth(unescape(s), 12, 600)).toBeLessThanOrEqual(W - 34 - textWidth(want, 13, 600)) }
+  }
+})
+
+test('pane: a cut session question keeps its full words in a title; a whole one has none', () => {
+  const tip = (cols: number) => src(find(paneTree(paneViewOf('sessionNeed', { columns: cols })), 'session')).match(/<title>([^<]*)<\/title>/)?.[1]
+  expect(unescape(tip(28)!)).toBe(QUESTION)
+  expect(tip(52)).toBeUndefined()
+})
+
+test('pane: the session row sits with the waiting agents by wait and takes the one ring when it waited longest', () => {
+  const v = paneViewOf('sessionNeedCrew'), t = paneTree(v), k = keys(t)
+  expect(k.indexOf('session')).toBeLessThan(k.indexOf('row-e2e')); expect(k.indexOf('sec-need')).toBeLessThan(k.indexOf('session'))
+  expect(src(find(t, 'session'))).toContain('class="s-ring60 ring"'); expect(src(find(t, 'row-e2e'))).not.toContain('animation')
+  expect(paneLoopCount(v)).toBe(paneLoopCount(paneViewOf('needsYou')))
+  // Asked after e2e: below it, still, and e2e rings.
+  const later = { ...v.crew, sessionNeed: { question: QUESTION, since: NOW - 1_000 } }, t2 = paneTree({ ...v, crew: later, loops: pickLoops(later, v.ui, true, true) })
+  const k2 = keys(t2)
+  expect(k2.indexOf('row-e2e')).toBeLessThan(k2.indexOf('session'))
+  expect(src(find(t2, 'session'))).not.toContain('animation'); expect(src(find(t2, 'row-e2e'))).toContain('class="s-ring60 ring"')
+  // The crew bar keeps one segment per agent; the summary counts the session.
+  const plain = paneTree(paneViewOf('sessionNeedCrew', { crew: { ...v.crew, sessionNeed: undefined } }))
+  const bar = (e: El | undefined) => src(e).split('translate(0 26)')[1].split('<text')[0]
+  expect(bar(find(t, 'head'))).toBe(bar(find(plain, 'head'))); expect(words(find(t, 'head'))).toContain('2 needs you')
+})
