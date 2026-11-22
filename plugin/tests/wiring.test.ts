@@ -16,6 +16,7 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: () => unkn
   const storeSets: string[] = []
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
   on('store.set', (_$, e) => { storeSets.push(e.key); store.set(e.key, e.value); return { value: undefined } })
+  on('store.delete', (_$, e) => { store.delete(e.key); return { value: undefined } })
   on('store.keys', () => ({ value: [...store.keys()] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.usage', async () => ({ value: (await (o.usage ?? (() => USAGE))()) as never }))
@@ -366,4 +367,102 @@ test('wiring: the minute tick follows savvy\'s need atom from its own observer, 
   at = w.mine('tick').length
   await w.clock.advance(120_000)
   expect(w.mine('tick').length).toBe(at)
+})
+
+// /clawpit-setup beneath a mocked /config list, engine dialog and config writes.
+type Row = { key: string; label: string; description: string; kind: string; value: unknown; options?: string[] }
+const row = (r: Row) => ({ ...r, provider: { plugin: r.key.split('.')[0], tier: 'user' }, isLocked: false })
+const ROWS = [
+  row({ key: 'savvy-progress.sessionNeed', label: 'Session needs', description: 'Light Needs you?', kind: 'choice', value: 'unasked', options: ['unasked', 'off', 'both', 'ask', 'tool'] }),
+  row({ key: 'savvy-progress.stages', label: 'Stages', description: 'Words', kind: 'text', value: ['a=b'] }),
+  row({ key: 'clawpit.animations', label: 'Animations', description: 'Walk the crabs?', kind: 'boolean', value: true }),
+  row({ key: 'savvy-progress.showCost', label: 'Show cost', description: 'Show the cost?', kind: 'boolean', value: true }),
+]
+// `said` answers each dialog in turn; a thrown one is a dismissed dialog.
+const config = (on: OnT, said: (string | Error)[], rows: unknown[] = ROWS, onSet?: (key: string) => void) => {
+  const asked: { question: string; options: string[]; header: string }[] = [], sets: { key: string; value: unknown }[] = []
+  let n = 0
+  on('config.list', () => ({ value: rows }) as never)
+  on('tool.call', { tool: 'AskUserQuestion' } as never, ((_$: unknown, e: { questions: { question: string; header: string; options: { label: string }[] }[] }) => {
+    const q = e.questions[0]
+    asked.push({ question: q.question, header: q.header, options: q.options.map(o => o.label) })
+    const a = said[n++]
+    if (a instanceof Error) throw a
+    return { result: { answers: { [q.question]: a } } }
+  }) as never)
+  on('config.set', (_$, e) => { sets.push({ key: e.key, value: e.value }); onSet?.(e.key); return { value: e.value } })
+  return { asked, sets }
+}
+const registered = (on: OnT) => { const names: { name: string; description: string }[] = []; on('command.register', (_$, e) => { names.push({ name: e.name, description: e.description }); return { value: { command: e.name } } }); return names }
+const setupRun = ($: $T) => $.command.run({ command: 'clawpit-setup', args: '' })
+
+test('setup command: registered at boot with its one-line description', async ($, on) => {
+  setup(on)
+  const names = registered(on)
+  await start($)
+  expect(names).toContainEqual({ name: 'clawpit-setup', description: 'Set up clawpit and savvy-progress' })
+})
+
+test('setup command: one dialog per boolean or choice row, answers written at the end, savvy keys first', async ($, on) => {
+  const w = setup(on)
+  const c = config(on, ['both', 'Off', 'On (current)'])
+  await start($)
+  const out = await setupRun($)
+  expect(c.asked.map(a => [a.header, a.question, a.options])).toEqual([
+    ['Session need', 'Light Needs you?', ['off (current)', 'both', 'ask', 'tool']],
+    ['Animations', 'Walk the crabs?', ['On (current)', 'Off']],
+    ['Show cost', 'Show the cost?', ['On (current)', 'Off']],
+  ])
+  expect(c.sets).toEqual([{ key: 'savvy-progress.sessionNeed', value: 'both' }, { key: 'clawpit.animations', value: false }])
+  expect(out.text).toBe('Saved 2 settings. 1 list settings are edited in /config.')
+  expect(w.store.has('setupPending')).toBe(false)
+})
+
+test('setup command: the answers still to write are stored before each own-key write', async ($, on) => {
+  const w = setup(on)
+  const rows = [row({ key: 'clawpit.animations', label: 'Animations', description: 'Walk?', kind: 'boolean', value: true }),
+    row({ key: 'clawpit.other', label: 'Other', description: 'Other?', kind: 'boolean', value: false })]
+  const seen: unknown[] = []
+  const c = config(on, ['Off', 'On'], rows, key => seen.push([key, w.store.get('setupPending')]))
+  await start($)
+  await setupRun($)
+  expect(c.sets.map(s => s.key)).toEqual(['clawpit.animations', 'clawpit.other'])
+  expect(seen).toEqual([['clawpit.animations', [{ key: 'clawpit.other', value: true }]], ['clawpit.other', []]])
+})
+
+test('setup command: a dismissed dialog ends the walk and the earlier answers are still written', async ($, on) => {
+  setup(on)
+  const c = config(on, ['ask', new Error('dismissed')])
+  await start($)
+  const out = await setupRun($)
+  expect(c.asked).toHaveLength(2)
+  expect(c.sets).toEqual([{ key: 'savvy-progress.sessionNeed', value: 'ask' }])
+  expect(out.text).toBe('Saved 1 settings. 1 list settings are edited in /config.')
+})
+
+test('setup command: Other text is ignored unless it equals an option; an unchanged answer is not written', async ($, on) => {
+  setup(on)
+  const c = config(on, ['whatever', 'On (current)', 'Off'])
+  await start($)
+  const out = await setupRun($)
+  expect(c.sets).toEqual([{ key: 'savvy-progress.showCost', value: false }])
+  expect(out.text).toContain('Saved 1 settings.')
+})
+
+test('setup command: a CLI with no config list answers with the upgrade line and asks nothing', async ($, on) => {
+  setup(on)
+  on('config.list', () => { throw new Error('no such call') })
+  await start($)
+  expect((await setupRun($)).text).toBe('Setup needs a newer Claude Code; use /config.')
+})
+
+test('setup command: pending answers are applied at the next boot, once, and only where the row differs', async ($, on) => {
+  const w = setup(on, { store: { setupPending: [{ key: 'clawpit.animations', value: false }, { key: 'clawpit.other', value: true }] } })
+  const rows = [row({ key: 'clawpit.animations', label: 'Animations', description: 'Walk?', kind: 'boolean', value: true }),
+    row({ key: 'clawpit.other', label: 'Other', description: 'Other?', kind: 'boolean', value: true })]
+  const c = config(on, [], rows)
+  await start($)
+  await w.clock.advance(1)   // the apply runs beside boot, not inside it
+  expect(c.sets).toEqual([{ key: 'clawpit.animations', value: false }])
+  expect(w.store.has('setupPending')).toBe(false)
 })
