@@ -283,3 +283,12 @@ test('wiring: after a reload in a headless session, the first agent.spawn takes 
   await spawn($, 'design the pane')
   expect(w.takenAtSpawn()).toEqual([true])
 })
+
+test('wiring: after a reload in a headless session, the first tool call takes over before the tool runs beneath', async ($, on) => {
+  const w = setup(on, { surfaces: () => [] })
+  on('tool.call', () => { w.writes.push({ plugin: 'engine', key: 'tool', value: null }); return { result: {} } as never })
+  await $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
+  const at = (key: string) => w.writes.findIndex(x => x.key === key)
+  expect(at('takeover')).toBeGreaterThan(-1)
+  expect(at('takeover')).toBeLessThan(at('tool'))
+})

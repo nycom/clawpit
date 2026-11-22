@@ -121,7 +121,8 @@ const loadStore = async ($: EngineInterface) => {
 // savvy-progress stands its band down on the desktop surface while this is true and keeps drawing on every other surface.
 // Its panel auto-open stands down session-wide (known limit): a terminal on the same session gets no auto-open either.
 // Every session but a terminal one takes over: a session one session starts runs with no surface until the desktop
-// attaches, often after its first agent, and by then savvy would have opened its own pane.
+// attaches, often after its first agent, and by then savvy would have opened its own pane. Accepted limit (LOCKED.md,
+// "Takeover outside the terminal"): a session opened only in VS Code or on mobile gets no savvy auto-open and an empty pane.
 // Written only when not yet true, so the repaint it causes schedules nothing more: no render loop.
 const takeOver = async ($: EngineInterface) => {
   try { if ((await read($, takeover)) !== true) await update($, takeover, () => true) } catch { errors += 1 }
@@ -224,7 +225,7 @@ export const register: Register = (on, options) => {
         if (e.parentAgentId) parents = { ...parents, [id]: e.parentAgentId }
         spawns[id] = { type: e.subagentType, model: out.model, description: e.description }
         if (e.resume) recorded.add(id)
-        // Once per session, on its first agent, and only where clawpit draws the pane; after that only the open press.
+        // Once per session, on its first agent, in every session but a terminal one (takeover); after that only the open press.
         // The store keeps the session it opened for, so a reload mid-session does not open it again.
         if (!paneAsked && (await read($, takeover)) === true) {
           paneAsked = true
