@@ -186,6 +186,7 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 .cl span:nth-child(odd){color:var(--mu)}
 /* BUILD Empty pane: the title in fg, the hint muted */
 .empty{display:flex;flex-direction:column;align-items:center;padding:24px 0;font-size:13px}
+.ofq{display:flex;flex-direction:column;gap:4px;height:56px;box-sizing:border-box;padding:6px 8px;border-radius:8px;background:var(--wash);font-size:12px;line-height:16px}.ofq .m{font-size:11px}.ofb{display:flex;gap:8px;margin:6px 0 0}.ofb button{all:unset;height:24px;border-radius:6px;background:var(--wash);color:var(--fg);font-size:12px;font-weight:600;text-align:center;cursor:pointer}.ofb button:first-child{width:42px}.ofb button+button{width:38px}
 .empty .m{font-size:12px}
 /* ALIGN F12: specimen sheet for the failed chip's timer and the A/B row. A legend, not a surface of the app. */
 .spec{width:1440px;margin:0 auto;box-sizing:border-box;border-radius:12px;border:1px solid var(--tr);background:var(--g);color:var(--fg);padding:12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;font:13px/18px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
@@ -222,7 +223,7 @@ body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 -apple-syste
 <body>
 <div class="doc">
 <h1>Code tab: the panel, the Agents pane and the file tree, together</h1>
-<p>One window per view, dark then light. Click the top-right icon to step the panel's size, the tabs to switch panes, and a row to open its log. Add <code>?theme=dark</code> or <code>?theme=light</code> to show one theme. The session column opens the cost list; a chip or the folded agents column opens the Agents pane. States: <a href="?">needs you</a>, <a href="?state=failed">failed</a>, <a href="?state=both">failed and needs you together</a>, <a href="?state=costs">the cost list</a>, <a href="?state=empty">no agents yet</a>, <a href="?state=fileplan">a plan from a file</a>, <a href="?state=outoforder">a plan ticked out of order</a>.</p>
+<p>One window per view, dark then light. Click the top-right icon to step the panel's size, the tabs to switch panes, and a row to open its log. Add <code>?theme=dark</code> or <code>?theme=light</code> to show one theme. The session column opens the cost list; a chip or the folded agents column opens the Agents pane. States: <a href="?">needs you</a>, <a href="?state=failed">failed</a>, <a href="?state=both">failed and needs you together</a>, <a href="?state=costs">the cost list</a>, <a href="?state=empty">no agents yet</a>, <a href="?state=fileplan">a plan from a file</a>, <a href="?state=outoforder">a plan ticked out of order</a>, <a href="?state=offer">a one-time setup question</a>, <a href="?state=offerCrew">a setup question over running agents</a>.</p>
 </div>
 <div id="root"></div>
 <script>
@@ -284,6 +285,7 @@ if(FAILED){
 /* BUILD Empty pane (?state=empty): no agents and no plan */
 const EMPTY=STATE==='empty';if(EMPTY){A.length=0;ENDED.length=0}
 /* BUILD Session need (?state=session alone, ?state=sessionCrew above the crew): the main session waits on you. A "Claude" row in Needs you, not an agent: no crew-bar segment, no press, no chevron (its slot kept). */ const SESSION=STATE==='session'||STATE==='sessionCrew',SQ='Ship the schema change behind a flag, or migrate every row now?';if(STATE==='session'){A.length=0;ENDED.length=0}
+/* BUILD One-time setup (?state=offer alone, ?state=offerCrew over two running agents): an unasked /config choice row from clawpit or savvy-progress, one at a time, directly under the head; hidden while anything needs you or has failed; Yes and No are equal wash chips, no later. */ const OFFER=STATE==='offer'||STATE==='offerCrew',OQ='Light Needs you when this session asks you a question?';if(STATE==='offer'){A.length=0;ENDED.length=0}if(STATE==='offerCrew'){A.splice(0,A.length,...A.filter(a=>a.id==='imp'||a.id==='pln'));ENDED.length=0}
 const hard=a=>a.tries>=3&&a.prop!=='fail'; /* struggling: live, may recover */
 /* ALIGN M2: walkers are capped window-wide and are the same agents in chips and rows:
    2 while someone needs you (the needs-you beat takes the third slot), else 3. Helpers walk only if a slot is left.
@@ -372,7 +374,8 @@ const readEdge=run=>Math.ceil(Math.min(88,Math.max(0,...run.map(a=>Math.max(read
 const costs=()=>{const n=TURNS.length,list=TURNS.map((v,i)=>[ST.turns-(n-1-i),v]).reverse();
  return `<div class="pane costs"><button class="back" data-act="crew" aria-label="Back to the agents">${ICON.small}Agents</button><div class="t">Session cost</div><div class="tot tn"><b>$267</b><span class="m"> · ${ST.turns} turns</span></div><div class="sec">Last ${n} turns</div><div class="cl tn">${list.map(([t,v])=>`<span>turn ${t}</span><span>$${v.toFixed(2)}</span>`).join('')}</div></div>`};
 function pane(c,w){if(w.view==='costs')return costs();
- if(!A.length&&!SESSION)return `<div class="pane"><div class="empty">${crab('explore','none',0,c,L)}<span style="margin-top:12px">No agents yet</span><span class="m">Agents you start show up here</span></div></div>`;
+ const ofr=OFFER?`<div class="ofr"><div class="ofq" role="img" aria-label="One-time setup: ${OQ}"><span class="m">One-time setup</span><span>${OQ}</span></div><div class="ofb"><button aria-label="Yes: Session needs you set to both. This opts into about 40 schema tokens; the progress field takes effect from the next session.">Yes</button><button aria-label="No: Session needs you set to off">No</button></div></div>`:'';
+ if(!A.length&&!SESSION)return `<div class="pane">${ofr}<div class="empty">${crab('explore','none',0,c,L)}<span style="margin-top:12px">No agents yet</span><span class="m">Agents you start show up here</span></div></div>`;
  const need=A.filter(a=>a.prop==='wait'),bad=A.filter(a=>a.prop==='fail'),run=A.filter(a=>!alertOf(a)).sort((x,y)=>hard(y)-hard(x)),order=[...need,...bad,...run];
  const crew=[...ENDED.map(()=>'<span class="d"></span>'),...order.map(a=>seg({a},c))].join('');
  const sum=`${need.length||SESSION?`<span style="color:${c.er}"><b class="tn">${need.length+(SESSION?1:0)}</b> needs you</span><span class="m"> · </span>`:''}${bad.length?`<span style="color:${c.er}"><b class="tn">${bad.length}</b> failed</span><span class="m"> · </span>`:''}<b class="tn">${run.length}</b> running<span class="m"> · </span><b class="tn">${ENDED.length}</b> done<span class="m"> · ≈$${COST.toFixed(2)} · ${LEFT}</span>`;
@@ -380,7 +383,7 @@ function pane(c,w){if(w.view==='costs')return costs();
  const kids=a=>a.kids?`<div class="kids${w.shut[a.id]?' shut':''}"${w.shut[a.id]?' inert':''}><div><div class="tree">${a.kids.map(k=>row(k,c,w,1)).join('')}</div></div></div><button class="kidtog" data-act="tog" data-id="${a.id}" aria-expanded="${!w.shut[a.id]}">${ICON.small}${a.kids.length} helpers${a.kids.some(k=>k.prop==='fail')?`<span style="color:${c.er}"> · ${a.kids.filter(k=>k.prop==='fail').length} failed</span>`:''}</button>`:'';
  const block=a=>`<div>${row(a,c,w)}${drawer(a,w)}${kids(a)}</div>`;
  return `<div class="pane" style="--rd:${readEdge(run)}px"><div class="hd"><span class="t">Hydra · retro fixes</span></div>
- <div class="crew" role="img" aria-label="${ENDED.length} done, ${need.length} needs you, ${bad.length} failed, ${run.length} running">${crew}</div><div class="sum tn">${sum}</div>
+ <div class="crew" role="img" aria-label="${ENDED.length} done, ${need.length} needs you, ${bad.length} failed, ${run.length} running">${crew}</div><div class="sum tn">${sum}</div>${OFFER&&!need.length&&!bad.length&&!SESSION?ofr:''}
  ${need.length||SESSION?`<div class="sec need">Needs you</div>${sess}${need.map(block).join('')}`:''}
  ${bad.length?`<div class="sec need">Failed <span class="tn" style="font-weight:400">${bad.length}</span></div>${bad.map(block).join('')}`:''}
  <div class="sec">Running <span class="tn" style="font-weight:400">${run.length}</span></div>${run.map(block).join('')}
