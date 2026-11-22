@@ -12,6 +12,8 @@ export const EXTRA = {
   helperNeedsYou: { ...hydra, runs: hydra.runs.map(r => (r.id === 'k1' ? { ...r, blocked: 'Keep the old cache key for one release, or drop it now that every caller moved?' } : r)) },
   nestedHelper: { ...hydra, runs: [...hydra.runs, { ...k1, id: 'k3', agentId: 'k3', description: 'read the guard tests', startedAt: NOW - 30_000, stepDone: 1, stepTotal: 2 }],
     parents: { ...hydra.parents, k3: 'k1' }, activity: { ...hydra.activity, k3: { kind: 'read', verb: 'Reading', target: 'tests/guard.test.ts', at: NOW - 5_000 } } },
+  // Ended unfolded, so its row (mark, time, model) has a picture.
+  endedOpen: { ...hydra, ui: { ...hydra.ui, shut: [] } },
   // The pane on its costs view: the last 20 of 44 turns, newest last.
   costs: { ...hydra, ui: { ...hydra.ui, view: 'costs' },
     stats: { ...hydra.stats, session: { ...hydra.stats.session, turnCosts: [...Array.from({ length: 17 }, (_, i) => +(0.2 + i * 0.03).toFixed(2)), 0.85, 1.1, 2.46] } } },

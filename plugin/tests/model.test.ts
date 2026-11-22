@@ -140,3 +140,9 @@ test('crewOf and alertsOf: a helper that waits on you needs you, at either depth
   expect(alertsOf(c)).toEqual({ need: 2, failed: 1 })
   expect(alertsOf(handCrew([live('p', { blocked: 'Go?' }), live('h')], { h: 'p' }))).toEqual({ need: 1, failed: 0 })
 })
+
+test('crewOf: an agent carries its run effort, and none when the run has none', () => {
+  const run = (id: string, o: Partial<SavvyRun> = {}) => ({ id, type: 'x', description: id, model: 'claude-opus-5-5', status: 'running', startedAt: 0, contextTokens: 0, contextMax: 1, costUsd: 0, ...o }) as SavvyRun
+  const [a, b] = crewOf(input('idle', { runs: [run('a', { effort: 'high' }), run('b')] })).agents
+  expect(a.effort).toBe('high'); expect(b.effort).toBeUndefined()
+})

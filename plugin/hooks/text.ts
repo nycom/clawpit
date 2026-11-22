@@ -47,3 +47,21 @@ export const fmtDuration = (ms: number): string => {
   const m = Math.floor(ms / 60000), h = Math.floor(m / 60)
   return h ? `${h}h ${m % 60}m` : ms > 0 && ms < 60000 ? '<1m' : `${m}m`
 }
+
+// Any model id to a label, by its shape alone: no family table, so a family that ships tomorrow reads right today.
+// `short` is the one word a row always shows, `name` adds the version, `window` marks a `[1m]` id. An empty id gives three ''.
+const capWord = (t: string) => (t.length <= 3 ? t.toUpperCase() : t[0].toUpperCase() + t.slice(1).toLowerCase())
+export const modelLabel = (raw: unknown): { short: string; name: string; window: string } => {
+  const id = oneLine(raw).replace(/\s+/g, ''), window = /\[1m\]/i.test(id) ? '1M' : '', unbracketed = id.replace(/\[[^\]]*\]/g, '')
+  const bare = unbracketed.replace(/^.*\//, '').replace(/^(?:[a-z0-9]+\.)*(?=claude-)/i, '').replace(/^claude-/i, '')
+    .replace(/[-@](?:\d{8}|\d{4}-\d{2}-\d{2})(?=$|[-:])/, '').replace(/-v\d+(?::\d+)?$/i, '').replace(/-latest$/i, '')
+  const label = (short: string, name: string) => ({ short: clip(short, 9), name: clip(name, 20), window })
+  if (!bare) { const left = unbracketed.replace(/[^a-z0-9]+/gi, ' ').trim(); return left ? label(capWord(left), capWord(left)) : label('', '') }
+  const ver = (major: string, minor?: string) => `${major}${minor ? '.' + minor : ''}`
+  const old = /^(\d+)(?:[-.](\d{1,2}))?-([a-z]+)$/i.exec(bare)   // claude-3-5-sonnet
+  if (old) return label(capWord(old[3]), `${capWord(old[3])} ${ver(old[1], old[2])}`)
+  const m = /^([a-z]{2,})(?:-(\d+)(?:[-.](\d{1,2})(?!\d))?)?(?:[-:](.+))?$/i.exec(bare)   // opus-5-5, gpt-5-codex, opus
+  if (m && (m[2] || !m[4])) { const f = capWord(m[1]); return label(f, `${f}${m[2] ? ' ' + ver(m[2], m[3]) : ''}${m[4] ? ' ' + m[4] : ''}`) }
+  const lead = /^[a-z]{2,}/i.exec(bare)?.[0]
+  return label(lead ? capWord(lead) : bare, bare)
+}

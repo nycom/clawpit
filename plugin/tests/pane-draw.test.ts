@@ -3,7 +3,8 @@ import type { CrewAgent } from '../types'
 import { paneTree, type El } from '../hooks/pane/draw'
 import { ENGINE_MAX, HOST_MAX } from '../hooks/pane/layout'
 import { pickLoops } from '../hooks/loops'
-import { textWidth } from '../hooks/text'
+import { modelLabel, textWidth } from '../hooks/text'
+import { helpersOf } from '../hooks/model'
 import { FONT, MONO } from '../hooks/tokens'
 import { NOW } from './fixtures/states'
 import { paneLoopCount, paneViewOf } from './build-pane'
@@ -15,8 +16,9 @@ const inner = (e: El) => (e.type === 'Client' ? (e.props!.props as Record<string
 const src = (e: El | undefined) => String(e ? inner(e).source : '')
 const unescape = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
 // Visible words of an image: styles dropped, every text element read in order.
-const words = (e: El | undefined) =>
-  unescape(src(e).replace(/<style>.*?<\/style>/g, '').replace(/<\/text>/g, ' ').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
+const wordsOf = (source: string) =>
+  unescape(source.replace(/<style>.*?<\/style>/g, '').replace(/<\/text>/g, ' ').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
+const words = (e: El | undefined) => wordsOf(src(e))
 const clients = (tree: El) => all(tree).filter(e => e.type === 'Client')
 const looping = (tree: El) => clients(tree).filter(c => src(c).includes('infinite'))
 // savvy-progress's count of what the engine's text budget sees: never an Svg's source.
@@ -109,8 +111,8 @@ test('pane: an ended failed row has the cross and failed after m:ss; a done one 
   const crew = { ...v.crew, agents: v.crew.agents.filter(a => a.id !== 'e2e'), ended: [{ ...e2e, state: 'ended' as const }, ...v.crew.ended] }
   const t = paneTree({ ...v, crew, ui: { ...v.ui, shut: [] } })
   const bad = find(t, 'ended-e2e')!, done = find(t, 'ended-docs')!
-  expect(words(bad)).toBe('e2e tests failed after 2:10'); expect(src(bad)).toContain('M3 3l6 6M9 3 3 9'); expect(src(bad)).toMatch(/class="er"[^>]*>failed after 2:10</)
-  expect(words(done)).toBe('docs pass 1:05'); expect(src(done)).toContain('M2.5 6.3 5 8.8l4.5-5.3'); expect(src(done)).toMatch(/class="okText"[^>]*>1:05</)
+  expect(words(bad)).toBe('e2e tests failed after 2:10 Haiku 5.5'); expect(src(bad)).toContain('M3 3l6 6M9 3 3 9'); expect(src(bad)).toMatch(/class="er"[^>]*>failed after 2:10</)
+  expect(words(done)).toBe('docs pass 1:05 Haiku 5.5'); expect(src(done)).toContain('M2.5 6.3 5 8.8l4.5-5.3'); expect(src(done)).toMatch(/class="okText"[^>]*>1:05</)
 })
 
 test('pane: the empty state', () => {
@@ -169,7 +171,7 @@ test('pane: a waiting helper keeps its question and a readable wait at 36 column
     return find(paneTree({ ...v, ui: { ...v.ui, shut: [] } }), 'helper-k1')!
   }
   for (const [ms, age] of [[30_000, '<1m'], [720_000, '12m'], [7_200_000, '120m']] as const) {
-    expect(words(at(ms))).toMatch(new RegExp(`Keep\\b.* ${age}$`))
+    expect(words(at(ms))).toMatch(new RegExp(`Keep\\b.* ${age} Haiku( 5\\.5)?$`))
     expect(String(inner(at(ms)).alt)).toContain(`waiting ${age}: Keep the old cache key for now?`)
   }
 })
@@ -513,4 +515,114 @@ test('pane: every image names the whole font list, its quotes escaped in the sty
     .flatMap(e => [...src(e).matchAll(/style="font-family:([^"]*?);font-variant/g)].map(m => unescape(m[1]))))
   expect(fonts.length).toBeGreaterThan(0)
   expect(fonts.every(f => f === FONT)).toBe(true)
+})
+
+// The model: one muted word under the reading on every row, never cut; effort in the drawer and the alt only.
+const alt = (e: El | undefined) => String(e ? inner(e).alt : '')
+const open = (v: ReturnType<typeof paneViewOf>) => ({ ...v, ui: { ...v.ui, shut: [] } })
+const rowKeys = (t: El) => keys(t).filter(k => /^(row|helper|ended)-/.test(k))
+const modelOf = (v: ReturnType<typeof paneViewOf>) => {
+  const m = new Map<string, string>()
+  for (const a of [...v.crew.agents, ...v.crew.agents.flatMap(helpersOf), ...v.crew.ended]) m.set(a.id, a.model)
+  return m
+}
+const setModel = (v: ReturnType<typeof paneViewOf>, model: (a: CrewAgent) => string, o: Partial<CrewAgent> = {}) => {
+  const f = (a: CrewAgent): CrewAgent => ({ ...a, model: model(a), ...o, helpers: a.helpers.map(f) })
+  return { ...v, crew: { ...v.crew, agents: v.crew.agents.map(f), ended: v.crew.ended.map(f) } }
+}
+
+test('pane: every row shows its model word whole, at every width', () => {
+  for (const s of ['hydra', 'both', 'nestedHelper', 'helperNeedsYou'] as const) for (const columns of [28, 30, 36, 52]) {
+    const v = open(paneViewOf(s, { columns })), models = modelOf(v), t = paneTree(v), ks = rowKeys(t)
+    expect(ks.length).toBeGreaterThan(0)
+    for (const k of ks) {
+      const id = k.replace(/^(row|helper|ended)-/, ''), m = modelLabel(models.get(id))
+      expect([s, columns, k, words(find(t, k)).includes(m.short)]).toEqual([s, columns, k, true])
+      expect(alt(find(t, k))).toContain(m.name)
+    }
+  }
+})
+
+test('pane: an unknown family reads as its word, whole, at 28 columns', () => {
+  const v = setModel(open(paneViewOf('both', { columns: 28 })), () => 'claude-supercalifragilistic-9'), t = paneTree(v)
+  const m = modelLabel('claude-supercalifragilistic-9')
+  for (const k of rowKeys(t)) { const w = words(find(t, k)); expect([k, w.includes(m.short) || w.includes(m.name)]).toEqual([k, true]) }
+})
+
+test('pane: the model takes nothing from titles, tags or activity', () => {
+  const cases: [Parameters<typeof paneViewOf>[0], number[]][] = [['hydra', [28, 30, 52]], ['nestedHelper', [28, 30, 52]],
+    ['both', [28, 30, 32, 33, 46, 47, 52]], ['failed', [32, 33, 46, 47]], ['helperNeedsYou', [46, 47, 52]]]
+  for (const [s, widths] of cases) for (const columns of widths) {
+    const v = open(paneViewOf(s, { columns })), bare = paneTree(setModel(v, () => '')), t = paneTree(v)
+    for (const k of rowKeys(t)) {
+      const m = modelLabel(modelOf(v).get(k.replace(/^(row|helper|ended)-/, '')))
+      // The image's words with its one model line taken out: the muted 10px text holding the name or the word.
+      const line = new RegExp(`<text [^>]*class="muted" font-size="10"[^>]*>(${[m.name, m.short].map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})</text>`)
+      const e = find(t, k)!, s0 = src(e), cut = s0.replace(line, '')
+      expect([s, columns, k, cut !== s0, wordsOf(cut)]).toEqual([s, columns, k, true, words(find(bare, k))])
+    }
+  }
+})
+
+test('pane: an empty model id draws nothing and says nothing', () => {
+  const v = setModel(paneViewOf('hydra'), () => ''), t = paneTree(v)
+  expect(alt(find(t, 'row-rev'))).toMatch(/^cache-tax review c1, ~/)
+  for (const k of rowKeys(t)) expect(words(find(t, k))).not.toMatch(/Opus|Sonnet|Haiku|Fable/)
+})
+
+test('pane: effort is in the alt and the drawer only when the run has one', () => {
+  const bare = (a: CrewAgent) => a.model.replace('[1m]', ''), v = paneViewOf('drawerOpen')
+  const withE = paneTree(setModel(v, bare, { effort: 'high' })), without = paneTree(setModel(v, bare, { effort: undefined }))
+  expect(alt(find(withE, 'row-imp'))).toContain('Sonnet 5.5, high effort'); expect(words(find(withE, 'drawer-imp'))).toContain('effort high')
+  expect(words(find(withE, 'row-imp'))).not.toContain('high')
+  expect(alt(find(without, 'row-imp'))).not.toContain('effort'); expect(words(find(without, 'drawer-imp'))).not.toContain('effort')
+  expect(words(find(without, 'drawer-imp'))).toContain('model Sonnet 5.5')
+})
+
+test('pane: a 1M id reads its window in the drawer context only', () => {
+  const v = setModel(paneViewOf('drawerOpen'), a => a.model.replace('[1m]', '')), wide = paneTree(setModel(v, a => `${a.model}[1m]`)), plain = paneTree(v)
+  expect(words(find(wide, 'drawer-imp'))).toContain('context 38% of 1M'); expect(words(find(plain, 'drawer-imp'))).not.toContain('of 1M')
+  expect(alt(find(wide, 'row-imp'))).toContain('Sonnet 5.5, 1M window')
+})
+
+test('pane: a long model name does not move the reading edge', () => {
+  const v = paneViewOf('hydra', { columns: 30 }), long = paneTree(setModel(v, a => (a.id === 'rev' ? 'gpt-5-codex-max-preview' : a.model))), t = paneTree(v)
+  for (const k of ['row-e2e', 'row-imp', 'helper-k1']) expect(words(find(long, k))).toBe(words(find(t, k)))
+})
+
+test('pane: 80 agents with models, efforts and a drawer stay under both bounds at every width', () => {
+  // Odd widths draw fractional pixels, so each is checked, not only a reference one.
+  for (let columns = 20; columns <= 120; columns++) for (const rich of [false, true]) {
+    const v0 = paneViewOf('manyAgents', { columns }), v = rich ? setModel(v0, a => `${a.model}[1m]`, { effort: 'xhigh' }) : v0
+    for (const t of [paneTree(v), paneTree({ ...v, ui: { ...v.ui, open: v.crew.agents[0].id } })])
+      expect([columns, rich, engine(t) <= ENGINE_MAX, JSON.stringify(t).length <= HOST_MAX]).toEqual([columns, rich, true, true])
+  }
+})
+
+test('pane: an alert row and the drawer name the model in their alt, the state after a comma', () => {
+  const t = paneTree(setModel(open(paneViewOf('both')), a => a.model, { effort: 'high' }))
+  expect(alt(find(t, 'row-pln'))).toMatch(/^plan the release, Fable 5\.2, high effort, needs you, waiting /)
+  expect(alt(find(t, 'row-e2e'))).toMatch(/^e2e tests, Haiku 5\.5, high effort, failed after /)
+  const d = paneTree(paneViewOf('drawerOpen'))
+  expect(alt(find(d, 'drawer-imp'))).toMatch(/^savvy-progress implement log, Sonnet 5\.5/)
+})
+
+test('pane: an alert helper sizes its column on the word; the name shows only where that column holds it', () => {
+  const wait = paneTree(open(paneViewOf('helperNeedsYou', { columns: 52 }))), fail = paneTree(open(paneViewOf('both', { columns: 52 })))
+  expect(words(find(wait, 'helper-k1'))).toMatch(/waiting 1m Haiku 5\.5$/)   // "waiting 1m" is wider than the name
+  expect(words(find(fail, 'helper-k2'))).toMatch(/failed Haiku$/)            // "failed" is not
+  // A long name never costs a waiting helper its question.
+  const long = (m: string) => words(find(paneTree(setModel(open(paneViewOf('helperNeedsYou', { columns: 40 })), () => m)), 'helper-k1'))
+  expect(long('claude-opus-4-6-thinking').replace(/ Opus( 4\.6 thinking)?$/, '')).toBe(long('opus').replace(/ Opus$/, ''))
+})
+
+test('pane: a long ended title never runs under its model', () => {
+  const title = 'refactor the payment gateway retry policy and typings'
+  for (const model of ['claude-sonnet-5-5', 'gemini-2.5-pro', 'claude-opus-4-6-thinking']) for (const columns of [30, 36, 40, 52]) {
+    const v = paneViewOf('endedOpen', { columns }), crew = { ...v.crew, ended: v.crew.ended.map(a => ({ ...a, title, model })) }
+    const e = find(paneTree({ ...v, crew }), `ended-${crew.ended[0].id}`)!, s0 = src(e)
+    const tw = textWidth(unescape(/<text x="38"[^>]*>([^<]*)<\/text>/.exec(s0)![1]), 12)
+    const mline = /<text x="([\d.]+)" y="26"[^>]*>([^<]*)<\/text>/.exec(s0)!
+    expect([model, columns, 38 + tw <= +mline[1] - textWidth(mline[2], 10) - 4]).toEqual([model, columns, true])
+  }
 })
