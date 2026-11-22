@@ -105,7 +105,7 @@ scripts/leak-check.sh, preview.sh    existing
 
 | Key | Type | Written when | Read by |
 |---|---|---|---|
-| `takeover` | `boolean` | `true` at `session.start` on a desktop surface | savvy-progress (section 14) |
+| `takeover` | `boolean` | `true` at `session.start` in every session but a terminal one, and when a desktop surface attaches (updated 2026-11-22, LOCKED.md "Takeover outside the terminal") | savvy-progress (section 14) |
 | `stats` | `Stats` | `session.measure`, main `turn.start`/`turn.complete`, at most once per second from the turn tracker while a main turn runs | panel |
 | `ui` | `Ui` | Client presses (`view` by the `costs` and `crew` presses), pane open/close, `session.start` (restores `size` from `$.store`) | panel, pane |
 | `tick` | `number` | 1 Hz while a main turn or any agent runs; once a minute while a tests column, an armed failed chip or a limit column is on screen; never otherwise | panel, pane |

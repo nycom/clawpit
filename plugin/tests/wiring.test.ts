@@ -25,12 +25,15 @@ const setup = (on: OnT, o: { store?: Record<string, unknown>; usage?: () => unkn
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   let agent = 0
-  on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `w${++agent}` }))
   const writes: Write[] = []
+  // Beneath clawpit, where savvy's auto-open reads takeover on agent.spawn: the spawn joins the write log, so a test sees what came first.
+  on('agent.spawn', () => { writes.push({ plugin: 'engine', key: 'spawn', value: null }); return { model: 'claude-opus-5-5', agentId: `w${++agent}` } })
   on('state.set', (_$, e, next) => { writes.push({ plugin: e.plugin, key: e.key, value: e.value }); return next(e) })
   const mine = (key?: string) => writes.filter(w => w.plugin === 'clawpit' && (key === undefined || w.key === key))
   const last = (key: string) => mine(key).at(-1)?.value
-  return { clock, store, storeSets, writes, mine, last }
+    // Whether clawpit's takeover read true when each spawn reached beneath clawpit.
+  const takenAtSpawn = () => writes.flatMap((w, i) => w.key === 'spawn' ? [writes.slice(0, i).some(x => x.plugin === 'clawpit' && x.key === 'takeover' && x.value === true)] : [])
+  return { clock, store, storeSets, writes, mine, last, takenAtSpawn }
 }
 
 const start = ($: $T, surface: 'desktop' | 'terminal' = 'desktop') => $.session.start({ cwd: '/', surface, isInteractive: true })
@@ -260,4 +263,32 @@ test('wiring: a desktop surface attaching sets takeover', async ($, on) => {
   const out = await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
   expect(out).toEqual({ clientId: 'desktop:default' })
   expect(w.last('takeover')).toBe(true)
+})
+
+test('wiring: a session started headless, as one session starts another, takes over before its first agent', async ($, on) => {
+  let roster: string[] = []
+  const w = setup(on, { surfaces: () => roster })
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  await $.turn.start({ text: 'go', turnId: 'm' } as never)
+  await spawn($, 'design the pane')
+  expect(w.takenAtSpawn()).toEqual([true])
+  roster = ['desktop']
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(w.last('takeover')).toBe(true)
+  expect(w.mine('takeover')).toHaveLength(1)
+})
+
+test('wiring: after a reload in a headless session, the first agent.spawn takes over before savvy reads it', async ($, on) => {
+  const w = setup(on, { surfaces: () => [] })
+  await spawn($, 'design the pane')
+  expect(w.takenAtSpawn()).toEqual([true])
+})
+
+test('wiring: after a reload in a headless session, the first tool call takes over before the tool runs beneath', async ($, on) => {
+  const w = setup(on, { surfaces: () => [] })
+  on('tool.call', () => { w.writes.push({ plugin: 'engine', key: 'tool', value: null }); return { result: {} } as never })
+  await $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
+  const at = (key: string) => w.writes.findIndex(x => x.key === key)
+  expect(at('takeover')).toBeGreaterThan(-1)
+  expect(at('takeover')).toBeLessThan(at('tool'))
 })
