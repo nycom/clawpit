@@ -112,6 +112,32 @@ test('wiring: an answered agent turn records its duration once, a second run of 
   expect(w.store.get('eta:implementer')).toEqual([300_000])
 })
 
+// savvy-progress publishing its stage list: entries are "word=phase", a bare word is accepted.
+const stagesWords = {
+  name: 'savvy-progress',
+  register(on: OnT) { on('session.start', async ($, e, next) => { await $.state.set({ plugin: 'savvy-progress', key: 'stages' } as never, ['build=delegate', 'ship'] as never); return next(e) }) },
+}
+const stagesJunk = {
+  name: 'savvy-progress',
+  register(on: OnT) { on('session.start', async ($, e, next) => { await $.state.set({ plugin: 'savvy-progress', key: 'stages' } as never, [1, 2] as never); return next(e) }) },
+}
+
+test('wiring: the ETA keys use the stage words savvy publishes', { plugins: [stagesWords] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  await spawn($, 'build the fold')
+  await done($, 'w1', 'answer', 300_000)
+  expect(w.store.get('eta:implementer · claude-opus-5-5 · build')).toEqual([300_000])
+})
+
+test('wiring: a stages value that is not a list of words keeps today\'s keys', { plugins: [stagesJunk] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  await spawn($, 'implement the fold')
+  await done($, 'w1', 'answer', 300_000)
+  expect(w.store.get('eta:implementer · claude-opus-5-5 · implement')).toEqual([300_000])
+})
+
 test('wiring: a failed or aborted agent turn records nothing', async ($, on) => {
   const w = setup(on)
   await start($)

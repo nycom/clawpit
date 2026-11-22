@@ -66,7 +66,7 @@ export type SavvyFlow = { title: string; total: number; done: number; phase: 'pl
 declare module 'claude-code' {
   interface PluginState {
     clawpit: { takeover: boolean; stats: Stats; ui: Ui; tick: number; idleSince: number | null }
-    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[] }
+    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[]; stages?: string[] }
     ponytail: { band: PonytailBand }
   }
 }

@@ -2,11 +2,11 @@ import type { Eta } from '../../types'
 
 export type History = Record<string, number[]>
 
-const STAGES = ['implement', 'review', 'fix', 'validate', 'recheck', 'merge', 'docs']
-export const stageOf = (description: string): string => { const d = description.toLowerCase(); return STAGES.find(s => new RegExp(`\\b${s}\\b`).test(d)) ?? '' }
+export const STAGES = ['implement', 'review', 'fix', 'validate', 'recheck', 'merge', 'docs']
+export const stageOf = (description: string, words: readonly string[] = STAGES): string => { const d = description.toLowerCase(); return words.find(s => new RegExp(`\\b${s}\\b`).test(d)) ?? '' }
 
-export const keysOf = (type: string, model: string, description: string): [string, string, string] =>
-  [`${type} · ${model} · ${stageOf(description)}`, `${type} · ${model}`, type]
+export const keysOf = (type: string, model: string, description: string, words: readonly string[] = STAGES): [string, string, string] =>
+  [`${type} · ${model} · ${stageOf(description, words)}`, `${type} · ${model}`, type]
 
 export const record = (h: History, keys: readonly string[], ms: number): History => {
   const next = { ...h }
