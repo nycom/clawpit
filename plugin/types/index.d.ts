@@ -51,6 +51,8 @@ export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: bo
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
 export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }   // ring: an agent id, or 'session'
 export type Settle = { from: number; to: number; at: number }   // at: when the value moved, so the sweep runs once
+/** A `/config` row offered once in the pane: Yes writes `yes`, No writes `no`; `more`: how many offers wait after it. */
+export type Offer = { key: string; label: string; question: string; yes: string; no: string; more: number }
 export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; zones?: { to: number; press: string }[] }   // zones: presses by x, each up to `to` px
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */

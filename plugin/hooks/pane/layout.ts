@@ -1,6 +1,6 @@
 // What the Agents pane draws, top to bottom, cut to the host's and the engine's size bounds.
-import type { Crew, CrewAgent, LoopPlan, Ui } from '../../types'
-import { helpersOf, sessionFirst } from '../model'
+import type { Crew, CrewAgent, LoopPlan, Offer, Ui } from '../../types'
+import { alertsOf, helpersOf, sessionFirst } from '../model'
 
 type SectionName = 'need' | 'failed' | 'running' | 'ended'
 export type PaneItem =
@@ -13,6 +13,7 @@ export type PaneItem =
   | { kind: 'kids'; parentId: string; count: number; failed: number; need?: number; shut: boolean }
   | { kind: 'ended'; agent: CrewAgent }
   | { kind: 'more'; section: SectionName; count: number }
+  | { kind: 'offer'; offer: Offer }
   | { kind: 'empty' }
 
 // The desktop drops a pane past 262,144 characters of JSON and the engine blanks Clients past 100,000; both with margin.
@@ -23,8 +24,10 @@ type Size = { host: number; engine: number }
 type Part = { item: PaneItem; fixed: boolean; agents: number }
 type Group = { head: PaneItem; name: SectionName; count: number; body: Part[] }
 
-export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: PaneItem) => Size): PaneItem[] => {
-  if (!crew.agents.length && !crew.ended.length && !crew.sessionNeed) return [{ kind: 'empty' }]
+export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: PaneItem) => Size, offer?: Offer | null): PaneItem[] => {
+  // A setup question waits while anything needs you or has failed; it is never cut.
+  const alerts = alertsOf(crew), ask: PaneItem[] = offer && !alerts.need && !alerts.failed ? [{ kind: 'offer', offer }] : []
+  if (!crew.agents.length && !crew.ended.length && !crew.sessionNeed) return [...ask, { kind: 'empty' }]
   const walk = (a: CrewAgent) => loops.walkers.includes(a.id)
   const rowParts = (a: CrewAgent): Part[] => {
     const shut = ui.shut.includes(a.id), hs = helpersOf(a), need = hs.filter(h => h.state === 'need').length
@@ -54,10 +57,10 @@ export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: Pan
 
   const head: PaneItem = { kind: 'head', crew }
   // Fixed items and one `+N more` line per section are reserved first, so whatever is cut, the total stays in bounds.
-  const reserved = [head, ...groups.flatMap(g => [g.head, { kind: 'more', section: g.name, count: g.count } as PaneItem,
+  const reserved = [head, ...ask, ...groups.flatMap(g => [g.head, { kind: 'more', section: g.name, count: g.count } as PaneItem,
     ...g.body.filter(p => p.fixed).map(p => p.item)])]
   let used = reserved.map(cost).reduce((a, c) => ({ host: a.host + c.host, engine: a.engine + c.engine }), { host: 0, engine: 0 })
-  const out: PaneItem[] = [head]
+  const out: PaneItem[] = [head, ...ask]
   for (const g of groups) {
     out.push(g.head)
     let hidden = -1

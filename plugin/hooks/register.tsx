@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
-import type { SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
+import type { Offer, SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
 import { crewOf, needOf } from './model'
 import { pickLoops } from './loops'
 import { moving, nextSize, parseSize, settle } from './panel/fold'
@@ -17,6 +17,7 @@ import { contextOf, pushTurn, type CtxInput } from './track/context'
 import { codeOf } from './track/code'
 import { clip, oneLine } from './text'
 import { MOTION } from './tokens'
+import { OFFER_FROM, OFFER_NOTE, offersOf } from './setup'
 
 // Wiring only: the atoms, the observers that feed the trackers, the render hooks, the Client presses, and `view`.
 
@@ -68,6 +69,8 @@ let benchOn = false                             // the `bench` setting, read at 
 let benchReg: Promise<unknown> | null = null
 let animations = true                           // the `animations` setting, read at each load: off draws nothing that moves
 let bench: { count: number; eased: boolean } | null = null
+let offers: Offer[] = []                       // the /config rows still to ask about once; the pane shows the first
+let refused = new Set<string>()                 // keys a write was refused for, kept in the store as offerRefused:<key>
 
 // The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
 const BENCH_MAX = 48
@@ -76,6 +79,7 @@ const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; bench = null
+  offers = []; refused = new Set()
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -123,10 +127,29 @@ const loadStore = async ($: EngineInterface) => {
   const size = parseSize(await $.store.get('size'))
   await update($, ui, () => ({ ...UI0, size }))
   for (const k of await $.store.keys()) {
+    if (k.startsWith('offerRefused:')) refused.add(k.slice(13))
     if (!k.startsWith('eta:')) continue
     const v = await $.store.get(k)
     if (Array.isArray(v)) history[k.slice(4)] = v.filter((n): n is number => typeof n === 'number' && Number.isFinite(n)).slice(-20)
   }
+}
+
+// The setup offers from the /config list; an older CLI has no $.config, so nothing is offered.
+const readOffers = async ($: EngineInterface) => {
+  try { offers = offersOf((await $.config.list()).filter(r => !refused.has(r.key))) } catch { errors += 1; offers = [] }
+}
+
+// A Yes or No press on the offer shown: written as if in /config. A refused or rejected write is said once and not asked again.
+const answer = async ($: EngineInterface, yes: boolean) => {
+  const o = offers[0]
+  if (!o) return
+  offers = offers.slice(1)
+  let deny: string | undefined
+  try { ({ deny } = await $.config.set({ key: o.key, value: yes ? o.yes : o.no })) } catch (err) { deny = err instanceof Error ? err.message : String(err) }
+  if (deny !== undefined) { refused.add(o.key); await $.store.set(`offerRefused:${o.key}`, true) }
+  await readOffers($)
+  await writeTick($)
+  $.ui.toast(deny === undefined ? `Saved. Change it any time in /config.${yes && OFFER_NOTE[o.key] ? ` ${OFFER_NOTE[o.key]}` : ''}` : `Not saved: ${clip(oneLine(deny), 200)}`)
 }
 
 // savvy-progress stands its band down on the desktop surface while this is true and keeps drawing on every other surface.
@@ -143,6 +166,7 @@ const takeOver = async ($: EngineInterface) => {
 const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { const s = await $.session.surfaces(); if (s.includes('desktop') || !s.includes('terminal')) await takeOver($) } catch { errors += 1 }
   try { await loadStore($) } catch { errors += 1 }
+  await readOffers($)
   // The engine's record of panes outlives a reload; module memory and the ui atom's paneOpen do not.
   try { if ((await $.ui.panes()).some(p => p.id === PANE_ID)) await update($, ui, u => ({ ...u, paneOpen: true })) } catch { errors += 1 }
   try { seen = await read($, agents) } catch { errors += 1 }
@@ -327,6 +351,13 @@ export const register: Register = (on, options) => {
     return out
   })
 
+  // A row changed in /config: a setup offer for it goes (a plugin's key is `<plugin>.<field>`). clawpit's own writes skip this hook, so `answer` reads the list itself.
+  on('config.set', async ($, e, next) => {
+    const out = await next(e)
+    try { await boot($); if (out.deny === undefined && OFFER_FROM.includes(e.key.split('.')[0])) { await readOffers($); await writeTick($) } } catch { errors += 1 }
+    return out
+  })
+
   // clawpit draws its own row only, never what `next(e)` returns; on desktop savvy's band stands down (takeover).
   // shortcut: vscode and mobile pass through like the terminal, and savvy draws its band there; draw clawpit there too if asked.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -381,6 +412,7 @@ export const register: Register = (on, options) => {
       else if (press.startsWith('ask:') && press.length > 4) await jumpIn($, press.slice(4))
       else if (press === 'costs') { await update($, ui, u => ({ ...u, view: 'costs' })); await openPane($) }
       else if (press === 'crew') await update($, ui, u => ({ ...u, view: 'crew' }))
+      else if (press === 'offer:yes' || press === 'offer:no') await answer($, press === 'offer:yes')
       else if (press.startsWith('kids:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, shut: toggle(u.shut, id) })) }
     } catch { errors += 1 }
     return {}
@@ -409,6 +441,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   return {
     panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations,
       planGrow: animations && planSince !== null && now - planSince < MOTION.fillMs },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null },
   }
 }
