@@ -545,11 +545,14 @@ test('pane: every row shows its model word whole, at every width', () => {
 
 test('pane: an unknown family reads as its word, whole, at 28 columns', () => {
   const v = setModel(open(paneViewOf('both', { columns: 28 })), () => 'claude-supercalifragilistic-9'), t = paneTree(v)
-  for (const k of rowKeys(t)) expect(words(find(t, k))).toContain(modelLabel('claude-supercalifragilistic-9').short)
+  const m = modelLabel('claude-supercalifragilistic-9')
+  for (const k of rowKeys(t)) { const w = words(find(t, k)); expect([k, w.includes(m.short) || w.includes(m.name)]).toEqual([k, true]) }
 })
 
 test('pane: the model takes nothing from titles, tags or activity', () => {
-  for (const s of ['hydra', 'both', 'nestedHelper'] as const) for (const columns of [28, 30, 52]) {
+  const cases: [Parameters<typeof paneViewOf>[0], number[]][] = [['hydra', [28, 30, 52]], ['nestedHelper', [28, 30, 52]],
+    ['both', [28, 30, 32, 33, 46, 47, 52]], ['failed', [32, 33, 46, 47]], ['helperNeedsYou', [46, 47, 52]]]
+  for (const [s, widths] of cases) for (const columns of widths) {
     const v = open(paneViewOf(s, { columns })), bare = paneTree(setModel(v, () => '')), t = paneTree(v)
     for (const k of rowKeys(t)) {
       const m = modelLabel(modelOf(v).get(k.replace(/^(row|helper|ended)-/, '')))
@@ -587,10 +590,13 @@ test('pane: a long model name does not move the reading edge', () => {
   for (const k of ['row-e2e', 'row-imp', 'helper-k1']) expect(words(find(long, k))).toBe(words(find(t, k)))
 })
 
-test('pane: 80 agents with models, efforts and a drawer stay under both bounds', () => {
-  const v = paneViewOf('manyAgents'), first = v.crew.agents[0].id
-  const t = paneTree({ ...setModel(v, a => `${a.model}[1m]`, { effort: 'xhigh' }), ui: { ...v.ui, open: first } })
-  expect(engine(t)).toBeLessThanOrEqual(ENGINE_MAX); expect(JSON.stringify(t).length).toBeLessThanOrEqual(HOST_MAX)
+test('pane: 80 agents with models, efforts and a drawer stay under both bounds at every width', () => {
+  // Odd widths draw fractional pixels, so each is checked, not only a reference one.
+  for (let columns = 20; columns <= 120; columns++) for (const rich of [false, true]) {
+    const v0 = paneViewOf('manyAgents', { columns }), v = rich ? setModel(v0, a => `${a.model}[1m]`, { effort: 'xhigh' }) : v0
+    for (const t of [paneTree(v), paneTree({ ...v, ui: { ...v.ui, open: v.crew.agents[0].id } })])
+      expect([columns, rich, engine(t) <= ENGINE_MAX, JSON.stringify(t).length <= HOST_MAX]).toEqual([columns, rich, true, true])
+  }
 })
 
 test('pane: an alert row and the drawer name the model in their alt, the state after a comma', () => {
@@ -601,9 +607,22 @@ test('pane: an alert row and the drawer name the model in their alt, the state a
   expect(alt(find(d, 'drawer-imp'))).toMatch(/^savvy-progress implement log, Sonnet 5\.5/)
 })
 
-test('pane: a waiting or failed helper reads the full name where its column has room', () => {
-  for (const s of ['helperNeedsYou', 'both'] as const) {
-    const t = paneTree(open(paneViewOf(s, { columns: 52 }))), k = s === 'both' ? 'helper-k2' : 'helper-k1'
-    expect([s, words(find(t, k))]).toEqual([s, expect.stringMatching(/ Haiku 5\.5$/)])
+test('pane: an alert helper sizes its column on the word; the name shows only where that column holds it', () => {
+  const wait = paneTree(open(paneViewOf('helperNeedsYou', { columns: 52 }))), fail = paneTree(open(paneViewOf('both', { columns: 52 })))
+  expect(words(find(wait, 'helper-k1'))).toMatch(/waiting 1m Haiku 5\.5$/)   // "waiting 1m" is wider than the name
+  expect(words(find(fail, 'helper-k2'))).toMatch(/failed Haiku$/)            // "failed" is not
+  // A long name never costs a waiting helper its question.
+  const long = (m: string) => words(find(paneTree(setModel(open(paneViewOf('helperNeedsYou', { columns: 40 })), () => m)), 'helper-k1'))
+  expect(long('claude-opus-4-6-thinking').replace(/ Opus( 4\.6 thinking)?$/, '')).toBe(long('opus').replace(/ Opus$/, ''))
+})
+
+test('pane: a long ended title never runs under its model', () => {
+  const title = 'refactor the payment gateway retry policy and typings'
+  for (const model of ['claude-sonnet-5-5', 'gemini-2.5-pro', 'claude-opus-4-6-thinking']) for (const columns of [30, 36, 40, 52]) {
+    const v = paneViewOf('endedOpen', { columns }), crew = { ...v.crew, ended: v.crew.ended.map(a => ({ ...a, title, model })) }
+    const e = find(paneTree({ ...v, crew }), `ended-${crew.ended[0].id}`)!, s0 = src(e)
+    const tw = textWidth(unescape(/<text x="38"[^>]*>([^<]*)<\/text>/.exec(s0)![1]), 12)
+    const mline = /<text x="([\d.]+)" y="26"[^>]*>([^<]*)<\/text>/.exec(s0)!
+    expect([model, columns, 38 + tw <= +mline[1] - textWidth(mline[2], 10) - 4]).toEqual([model, columns, true])
   }
 })

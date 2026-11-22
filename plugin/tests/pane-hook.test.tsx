@@ -343,7 +343,7 @@ test('pane hook: pressing a needs-you row puts @ and its title into the prompt o
   expect((await svgAlt(ui, /^fix the cache log, Opus 5\.5$/))?.alt).toBe('fix the cache log, Opus 5.5')
   // Pressed again, it folds the drawer and leaves a draft that already names the agent.
   await press(ui, 'row-w1')
-  expect(p.fills.length).toBe(1); expect(await svgAlt(ui, /^fix the cache log$/)).toBeUndefined()
+  expect(p.fills.length).toBe(1); expect(await svgAlt(ui, /^fix the cache log(, |$)/)).toBeUndefined()
   // A running row only opens its drawer.
   await press(ui, 'row-w2')
   expect(p.fills.length).toBe(1)

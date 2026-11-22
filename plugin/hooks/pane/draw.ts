@@ -277,7 +277,7 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
   // A question keeps at least half the text width, so a long title cannot push it out; any other helper keeps its title whole.
   const titleRoom = (textW: number) => (need ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW)
-  const mw = modelW(a), full = Math.max(textWidth(modelLabel(a.model).name, MODEL_PX), need ? textWidth(`waiting ${age}`, 12, 600) : failedW), own = Math.min(READ, full + READ_GAP)
+  const mw = modelW(a), full = Math.max(mw, need ? textWidth(`waiting ${age}`, 12, 600) : failedW), own = Math.min(READ, full + READ_GAP)
   const titleFits = (r: number) => textWidth(title, 12, 600) <= helperRoom(W, depth, r)
   const col = alert ? alertColumn(titleFits, own, full, Math.max(mw, need ? textWidth(age, 12, 600) : failedW)) : { read: edge, brief: false }
   const plain = alert ? null : plainRead(a, now, 12, r => helperRoom(W, depth, r), edge)
@@ -331,9 +331,12 @@ const kids = (item: Extract<PaneItem, { kind: 'kids' }>, W: number): El => {
 
 const endedRow = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   const h = SIZE.endedRow, failed = a.prop === 'fail', status = failed ? `failed after ${elapsed(a, now)}` : elapsed(a, now), cls = failed ? 'er' : 'okText'
-  const sw = textWidth(status, 12), ix = W - PAD - sw - 14, title = fit(clean(a.title, 60), ix - CRAB - GAP, 12)
+  // The model under the status takes the room the title leaves, else its one word; the title gives way to whichever is wider.
+  const sw = textWidth(status, 12), ix = W - PAD - sw - 14, words = clean(a.title, 60)
+  const free = W - PAD - CRAB - textWidth(fit(words, ix - CRAB - GAP, 12), 12) - GAP, model = modelText(a, Math.max(sw + 14, free))
+  const title = fit(words, W - PAD - Math.max(sw + 14, model ? textWidth(model, MODEL_PX) : 0) - CRAB - GAP, 12)
   const body = text(CRAB, 19, 'muted', 12, title) + `<g transform="translate(${n(ix)} 4)">${icon(failed ? 'cross' : 'check', 10, `s-${cls}`)}</g>` + text(W - PAD, 13, cls, 12, status, { anchor: 'end' })
-    + modelLine(W - PAD, 26, modelText(a, READ - READ_GAP))
+    + modelLine(W - PAD, 26, model)
   const source = withCrab(doc(W, h, body), crab({ role: a.role, prop: failed ? 'fail' : 'done', walk: false, size: 'S', still }), 1.25, 4.5)
   return image(`ended-${a.id}`, { source, alt: `${title} ${status}${modelAlt(a)}`, width: n(W), height: h }, false)
 }
@@ -362,7 +365,8 @@ const engineChars = (e: El | string): number => typeof e === 'string' ? e.length
   : String(e.props?.key ?? '').length + String(e.props?.label ?? '').length + (e.children ?? []).reduce((s: number, c) => s + engineChars(c), 0)
 
 // shortcut: measured at a reference width and clock, so wraps and ages may differ by a few characters from the drawn pane; the bounds keep a wide margin.
-const COST_COLUMNS = 64
+// An odd column count, so the reference draws the fractional pixels an odd-width pane does (W = columns × 8.5).
+const COST_COLUMNS = 63
 export const itemCost = (item: PaneItem): { host: number; engine: number } => {
   const el = drawItem(item, COST_COLUMNS * CELL_PX, 0, false)
   return { host: JSON.stringify(el).length, engine: engineChars(el) }
