@@ -112,6 +112,7 @@ test('planOf: tasks savvy names done tick first, even after a live one', () => {
 test('planOf: the rest of the count ticks in plan order, skipping tasks with a live, waiting or failed run', () => {
   const flow = STATES.planOutOfOrder.flow!, runs = STATES.planOutOfOrder.runs
   const states = (o: Partial<typeof flow>, rs = runs) => crewOf(input('planOutOfOrder', { flow: { ...flow, ...o }, runs: rs })).plan!.tasks.map(t => t.state)
+  expect(states({}, [])).toEqual(['todo', 'done', 'todo', 'todo'])
   expect(states({ done: 2 })).toEqual(['live', 'done', 'done', 'todo'])
   expect(states({ done: 2 }, patch(runs, 'imp', { blocked: 'Which table?' }))).toEqual(['need', 'done', 'done', 'todo'])
   expect(states({ done: 2 }, patch(runs, 'imp', { status: 'failed', heldDone: true, endedAt: NOW }))).toEqual(['failed', 'done', 'done', 'todo'])
