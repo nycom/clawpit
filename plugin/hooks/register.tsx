@@ -431,6 +431,8 @@ export const register: Register = (on, options) => {
     const writes = writesOf(answers), own = writes.filter(w => w.key.startsWith('clawpit.'))
     let saved = 0
     for (const w of writes.filter(x => !own.includes(x))) { try { if (!(await $.config.set(w)).deny) saved += 1 } catch { errors += 1 } }
+    // clawpit's own hooks do not see its own writes, so the offers are read again here.
+    try { await readOffers($); await writeTick($) } catch { errors += 1 }
     saved += await writeOwn($, own)
     return { text: `Saved ${saved} settings. ${skipped} list settings are edited in /config.${more.length ? ` More values for ${more.join(', ')} are in /config.` : ''}` }
   })
