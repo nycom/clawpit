@@ -522,3 +522,18 @@ test('pane hook: /clawpit-setup answering the session-need row takes the one-tim
   expect(await offerShown(ui)).toBeUndefined()
   await ui.unmount()
 })
+
+test('pane hook: the head hides agent cost when the showCost row reads false, and shows it when the row is true or missing', { plugins: [savvy, person] }, async ($, on) => {
+  setup(on)
+  let rows: unknown[] = []
+  on('config.list', () => ({ value: rows }) as never)
+  const cost = { key: 'savvy-progress.showCost', label: 'Show cost', description: 'Show the cost?', kind: 'boolean', isLocked: false, provider: { plugin: 'savvy-progress', tier: 'user' } }
+  for (const [list, shown] of [[[], true], [[{ ...cost, value: true }], true], [[{ ...cost, value: false }], false]] as const) {
+    rows = [...list]
+    await start($)
+    await spawn($, 'fix the cache')
+    const ui = await pane($)
+    expect(String((await svgAlt(ui, /: .*running/))?.alt).includes('≈$')).toBe(shown)
+    await ui.unmount()
+  }
+})
