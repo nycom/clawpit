@@ -68,6 +68,11 @@ test('crewOf: tolerates a run with only the required fields', () => {
 test('crewOf: null flow and empty agents give the empty crew', () =>
   expect(crewOf(input('idle'))).toMatchObject({ title: 'Subagents', agents: [], ended: [], plan: null, leftMin: null }))
 
+test('roleOf: a plugin prefix is stripped before the type lookup', () => {
+  expect(roleOf('x:implementer', '')).toBe('implement'); expect(roleOf('x:Explore', '')).toBe('explore'); expect(roleOf('x:reviewer', '')).toBe('review')
+  expect(roleOf('implementer', '')).toBe('implement'); expect(roleOf('plugin:code-reviewer', '')).toBe('review'); expect(roleOf('x:unknown', 'fix it')).toBe('implement')
+})
+
 test('roleOf: by type, then by description, else explore', () => {
   expect(roleOf('implementer', 'x')).toBe('implement'); expect(roleOf('validator', 'x')).toBe('test'); expect(roleOf('general-purpose', 'cache-tax review c1')).toBe('review')
   expect(roleOf('general-purpose', 'plan the release')).toBe('design'); expect(roleOf('whatever', 'look around')).toBe('explore')

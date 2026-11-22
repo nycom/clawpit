@@ -11,7 +11,7 @@ const ROLE_WORD = /(implement|fix|build|merge|wire)|(review|recheck|audit)|(test
 const ROLE_OF_WORD: Role[] = ['implement', 'review', 'test', 'design']
 
 export const roleOf = (type: string, description: string): Role => {
-  const byType = ROLE_OF_TYPE.get(type) ?? (type.endsWith('code-reviewer') ? 'review' : undefined)
+  const byType = ROLE_OF_TYPE.get(type.replace(/^[^:]*:/, '')) ?? (type.endsWith('code-reviewer') ? 'review' : undefined)
   if (byType) return byType
   const m = ROLE_WORD.exec(description.toLowerCase())
   return m ? ROLE_OF_WORD[m.slice(1).findIndex(Boolean)] : 'explore'
