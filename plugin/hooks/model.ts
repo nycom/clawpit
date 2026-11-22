@@ -35,7 +35,7 @@ const agentOf = (i: CrewInput, r: SavvyRun): CrewAgent => {
   const log = i.logs[r.id] ?? []
   const asks = log.filter(l => l.kind === 'ask').map(l => l.at)
   return {
-    id: r.id, title: r.description, role: roleOf(r.type, r.description), model: r.model,
+    id: r.id, title: r.description, role: roleOf(r.type, r.description), model: r.model, effort: r.effort,
     state, struggling: state === 'running' && tries >= 3, tries,
     prop: propOf(state, r, activity), activity,
     question: r.blocked, reason: r.failNote, errorLine: r.failLine,

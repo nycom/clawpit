@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { oneLine, xml, clip, fit, wrap, textWidth, fmtClock, fmtAge, fmtLeft, fmtCost, fmtTokens, fmtDuration } from '../hooks/text'
+import { oneLine, xml, clip, fit, wrap, textWidth, fmtClock, fmtAge, fmtLeft, fmtCost, fmtTokens, fmtDuration, modelLabel } from '../hooks/text'
 
 test('text: oneLine strips control characters', () => expect(oneLine('a\u0000b\n c\u001b[31m')).toBe('ab c[31m'))
 test('text: xml escapes the five characters', () => expect(xml(`<&>"'`)).toBe('&lt;&amp;&gt;&quot;&apos;'))
@@ -39,3 +39,32 @@ test('text: a cut never splits a token with a digit', () => {
 test('text: a duration under a minute reads <1m, none reads 0m', () => {
   expect(fmtDuration(1)).toBe('<1m'); expect(fmtDuration(59_999)).toBe('<1m'); expect(fmtDuration(60_000)).toBe('1m'); expect(fmtDuration(0)).toBe('0m')
 })
+
+// Any id the run tracker reports reads as a model: no family table, nothing tied to one orchestrator.
+test('text: modelLabel reads any id', () => {
+  const cases: [string, string, string, string][] = [
+    ['claude-opus-5-5', 'Opus', 'Opus 5.5', ''],
+    ['claude-fable-5-2', 'Fable', 'Fable 5.2', ''],
+    ['claude-sonnet-5-5[1m]', 'Sonnet', 'Sonnet 5.5', '1M'],
+    ['claude-opus-5-5[1m][beta]', 'Opus', 'Opus 5.5', '1M'],
+    ['claude-haiku-4-5-20251001', 'Haiku', 'Haiku 4.5', ''],
+    ['claude-sonnet-4-20250514', 'Sonnet', 'Sonnet 4', ''],
+    ['claude-3-5-sonnet-20241022', 'Sonnet', 'Sonnet 3.5', ''],
+    ['opus', 'Opus', 'Opus', ''], ['sonnet', 'Sonnet', 'Sonnet', ''], ['haiku', 'Haiku', 'Haiku', ''], ['fable', 'Fable', 'Fable', ''],
+    ['opus[1m]', 'Opus', 'Opus', '1M'],
+    ['us.anthropic.claude-sonnet-4-5-20250929-v1:0', 'Sonnet', 'Sonnet 4.5', ''],
+    ['anthropic/claude-opus-5-5', 'Opus', 'Opus 5.5', ''],
+    ['claude-nova-7-1', 'Nova', 'Nova 7.1', ''],
+    ['gpt-5-codex', 'GPT', 'GPT 5 codex', ''],
+    ['gemini-2.5-pro', 'Gemini', 'Gemini 2.5 pro', ''],
+    ['qwen2.5-coder:32b', 'Qwen', 'qwen2.5-coder:32b', ''],
+    ['o3', 'o3', 'o3', ''],
+    ['internal-router-experimental-build-7', 'Internal', 'internal-router-exp…', ''],
+    ['claude-', 'Claude', 'Claude', ''],
+    ['', '', '', ''], ['   ', '', '', ''],
+    ['claude-opus-\n5-5\u0007', 'Opus', 'Opus 5.5', ''],
+  ]
+  for (const [id, short, name, window] of cases) expect([id, modelLabel(id)]).toEqual([id, { short, name, window }])
+  expect(modelLabel(undefined)).toEqual({ short: '', name: '', window: '' })
+})
+test('text: modelLabel never gives a short word past 9 characters', () => expect(modelLabel('claude-supercalifragilistic-9').short.length).toBeLessThanOrEqual(9))

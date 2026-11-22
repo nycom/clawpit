@@ -14,7 +14,7 @@ export type Eta = { kind: 'none' } | { kind: 'left'; minutes: number; slow: bool
 
 export type CrewState = 'need' | 'failed' | 'running' | 'ended'
 export type CrewAgent = {
-  id: string; title: string; role: Role; model: string
+  id: string; title: string; role: Role; model: string; effort?: string
   state: CrewState; struggling: boolean; tries: number
   prop: Prop; activity: Activity | null
   question?: string; reason?: string; errorLine?: string
@@ -53,7 +53,7 @@ export type Settle = { from: number; to: number; at: number }   // at: when the 
 export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; zones?: { to: number; press: string }[] }   // zones: presses by x, each up to `to` px
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
-  id: string; agentId?: string; type: string; description: string; model: string
+  id: string; agentId?: string; type: string; description: string; model: string; effort?: string
   status: 'running' | 'done' | 'failed'; startedAt: number; endedAt?: number
   contextTokens: number; contextMax: number; costUsd: number
   stepDone?: number; stepTotal?: number; stepNote?: string

@@ -2,7 +2,7 @@
 import type { Crew, CrewAgent, LoopPlan, Role, SessionStat, Ui } from '../../types'
 import { image, type El } from '../draw'
 import { CELL_PX, FONT, MONO, MOTION, SIZE, cssOf, svg } from '../tokens'
-import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtLeft, oneLine, textWidth, wrap as wrapText, xml } from '../text'
+import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtLeft, modelLabel, oneLine, textWidth, wrap as wrapText, xml } from '../text'
 import { icon, segBar, stepBlocks, type Seg } from '../icons'
 import { crab } from '../crab'
 import { alertsOf, helpersOf } from '../model'
@@ -74,6 +74,16 @@ const reading = (a: CrewAgent, now: number): Run[] =>
   a.eta.kind === 'left' ? [[fmtLeft(a.eta.minutes).replace(/ left$/, ''), a.eta.slow ? 'warn' : 'fg', 600], [' left', 'muted']]
     : a.eta.kind === 'over' ? [['slower', 'warn', 600]] : [[elapsed(a, now), 'fg', 600], [' so far', 'muted']]
 // The activity's full words, and whether drawing `rs` in `maxW` cuts them.
+// The model, muted under the reading: its name where `room` holds it, else its one word, whole. Effort only when the run has one.
+const MODEL_PX = 10
+const effortOf = (a: CrewAgent) => clean(a.effort, 12)
+const modelW = (a: CrewAgent) => textWidth(modelLabel(a.model).short, MODEL_PX)
+const modelText = (a: CrewAgent, room: number) => { const m = modelLabel(a.model); return textWidth(m.name, MODEL_PX) <= room ? m.name : m.short }
+const modelLine = (x: number, y: number, s: string) => (s ? text(x, y, 'muted', MODEL_PX, s, { anchor: 'end' }) : '')
+const modelAlt = (a: CrewAgent) => {
+  const m = modelLabel(a.model), e = effortOf(a)
+  return m.name ? `, ${m.name}${m.window ? ', 1M window' : ''}${e ? `, ${e} effort` : ''}` : ''
+}
 const activityLine = (a: CrewAgent, now: number, rs: Run[], maxW: number, size: number) => {
   const tip = textOf(activityRuns(a, now, true))
   return { tip, cut: runsWidth(rs, size) > maxW || textOf(activityRuns(a, now)) !== tip }
@@ -81,7 +91,7 @@ const activityLine = (a: CrewAgent, now: number, rs: Run[], maxW: number, size: 
 
 // Where the reading column starts. Running rows and plain helpers share one edge per pane: the widest reading in view plus
 // READ_GAP, 88 at most. Where a title would cut under MIN_CUT there, the edge pulls in to keep MIN_CUT of it, down to the
-// widest number-only reading ("~1m", "0:30"); readings that no longer fit read only their number. Moving the edge with the
+// widest number-only reading ("~1m", "0:30") or model word; readings that no longer fit read only their number. Moving the edge with the
 // width, never jumping, keeps every title growing as the pane widens. A title that still will not fit runs over its reading.
 const rowRoom = (W: number, read: number) => W - CRAB - 3 * GAP - read - CHEV - PAD
 const helperRoom = (W: number, depth: 1 | 2, read: number) => W - HELPER_CRAB - (depth - 1) * INDENT - PAD - CHEV - 3 * GAP - read
@@ -98,7 +108,7 @@ const plainOf = (i: PaneItem, W: number): Plain | null =>
 const readEdge = (items: PaneItem[], W: number, now: number): number => {
   const plain = items.flatMap(i => plainOf(i, W) ?? [])
   if (!plain.length) return READ
-  const widest = (of: (a: CrewAgent, now: number) => Run[]) => Math.min(READ, Math.max(...plain.map(p => Math.max(p.dots, runsWidth(of(p.a, now), p.size)))) + READ_GAP)
+  const widest = (of: (a: CrewAgent, now: number) => Run[]) => Math.min(READ, Math.max(...plain.map(p => Math.max(p.dots, runsWidth(of(p.a, now), p.size), modelW(p.a)))) + READ_GAP)
   const keep = Math.min(...plain.map(p => p.room(0) - keepWidth(clean(p.a.title, 60), p.size)))
   return Math.min(widest(reading), Math.max(widest(shortReading), keep))
 }
@@ -175,7 +185,7 @@ const alertRow = (a: CrewAgent, ring: boolean, open: boolean, W: number, now: nu
   const tw = tagWidth(a.role), x = CRAB + GAP + tw + 4, room = (r: number) => W - CRAB - GAP - GAP - r - CHEV - PAD
   // It fits where its title is whole and the first 2 × MIN_CUT characters of its why sit beside the tag.
   const titleW = textWidth(title, 13, 600), start = textWidth([...msg].slice(0, 2 * MIN_CUT).join(''), 12, 600)
-  const dots = blocksWidth(a.stepTotal), failedW = textWidth('failed', 13, 600)
+  const dots = Math.max(blocksWidth(a.stepTotal), modelW(a)), failedW = textWidth('failed', 13, 600)
   const col = alertColumn(r => titleW <= room(r) && start <= room(r) - tw - 4, READ,
     Math.max(dots, need ? textWidth(`waiting ${age}`, 13, 600) : Math.max(failedW, textWidth(after, 12))), Math.max(dots, need ? textWidth(age, 13, 600) : failedW))
   const textW = room(col.read), lines = whyLines(msg, textW - tw - 4, textW)
@@ -186,8 +196,9 @@ const alertRow = (a: CrewAgent, ring: boolean, open: boolean, W: number, now: nu
   const body = `<rect x="0" y="0" width="${n(W)}" height="${h}" rx="8" class="needTint"/>${ringArt}`
     + text(CRAB + GAP, 19, 'fg', 13, fit(title, textW, 13, 600), { weight: 600 }) + tag(CRAB + GAP, 37, a.role, 'er')
     + withTip(msg, lines.filter(Boolean).join(' ') !== msg, lines.map((l, i) => (l ? text(i ? CRAB + GAP : x, 37 + i * 16, 'er', 12, l, { weight: 600 }) : '')).join('')) + read + chevron(W - PAD - 14, 25, 12, open)
+    + modelLine(rx, need ? 52 : 58, col.brief ? modelLabel(a.model).short : modelText(a, col.read - READ_GAP))
   const source = withCrab(doc(W, h, body, ring), crab({ role: a.role, prop: need ? 'wait' : 'fail', walk: false, size: 'M' }), 2, 17)
-  const alt = `${title} ${need ? `needs you, waiting ${age}: ${msg}` : `failed ${after}: ${msg}`}`
+  const alt = `${title}${modelAlt(a)} ${need ? `needs you, waiting ${age}: ${msg}` : `failed ${after}: ${msg}`}`
   return image(`row-${a.id}`, { source, alt, width: n(W), height: h, press: `row:${a.id}`, hover: true }, ring)
 }
 
@@ -199,11 +210,11 @@ const runningRow = (a: CrewAgent, walk: boolean, open: boolean, W: number, now: 
   const ax = noTag ? GAP : GAP + tw + 4, aw = textW - (ax - GAP), { tip, cut } = activityLine(a, now, act, aw, 12)
   const body = text(GAP, 20, 'fg', 13, fit(clean(a.title, 60), titleW, 13, 600), { weight: 600 }) + (noTag ? '' : tag(GAP, 38, a.role, `roleText-${a.role}`))
     + withTip(tip, cut, runs(ax, 38, 12, act, aw)) + runs(rx, 20, 13, read, edge, 'end')
-    + blocks(rx, 28, a.stepDone, a.stepTotal, a.role) + chevron(BW - PAD - 14, 18, 12, open)
+    + blocks(rx, 28, a.stepDone, a.stepTotal, a.role) + chevron(BW - PAD - 14, 18, 12, open) + modelLine(rx, 44, modelText(a, edge - READ_GAP))
   const press = `row:${a.id}`
   return { type: 'Box', props: { flexDirection: 'row' }, children: [
     image(`crab-${a.id}`, { source: crabSvg, alt: `${a.role} crab`, width: CRAB, height: h, press }, walk),
-    image(`row-${a.id}`, { source: doc(BW, h, body), alt: `${clean(a.title, 60)}, ${textOf(reading(a, now))}${cut ? `: ${clean(tip, TIP_MAX)}` : ''}`, width: n(BW), height: h, press, hover: true }, false),
+    image(`row-${a.id}`, { source: doc(BW, h, body), alt: `${clean(a.title, 60)}${modelAlt(a)}, ${textOf(reading(a, now))}${cut ? `: ${clean(tip, TIP_MAX)}` : ''}`, width: n(BW), height: h, press, hover: true }, false),
   ] }
 }
 
@@ -227,7 +238,7 @@ const drawer = (a: CrewAgent, W: number, now: number, still: boolean): El => {
     body += fresh ? `<g class="${i ? 'old' : 'nw'}">${entry}</g>` : entry
   })
   const foot: [string, string][] = [['steps', `${a.stepDone}/${a.stepTotal}`], ...(a.tries ? [['tries', String(a.tries)] as [string, string]] : []),
-    ['context', `${a.contextPct}%`], ['cost', fmtCost(a.costUsd)], ...(failed ? [['ran', elapsed(a, now)] as [string, string]] : []),
+    ['context', `${a.contextPct}%${modelLabel(a.model).window ? ` of ${modelLabel(a.model).window}` : ''}`], ['cost', fmtCost(a.costUsd)], ...(failed ? [['ran', elapsed(a, now)] as [string, string]] : []),
     ...(a.usuallyMin == null ? [] : [['usually', `${a.usuallyMin}m`] as [string, string]])]
   body += `<rect x="${n(x)}" y="${y}" width="${n(W - x - PAD)}" height="1" class="track"/>`
   // Whole items per line; "usually" goes first, when it alone would take another line.
@@ -243,6 +254,13 @@ const drawer = (a: CrewAgent, W: number, now: number, still: boolean): El => {
     return { at, lines: line + 1 }
   }
   const full = place(foot), short = place(foot.filter(([label]) => label !== 'usually')), placed = full.lines > short.lines ? short : full
+  // The model's own line above the counters, whole items wrapped like them.
+  const name = modelLabel(a.model).name, effort = effortOf(a)
+  if (name) {
+    const id = place([['model', name], ...(effort ? [['effort', effort] as [string, string]] : [])])
+    for (const q of id.at) body += runs(q.fx, y + 16 + q.line * 15, 11, q.rs, W - PAD - q.fx)
+    y += id.lines * 15
+  }
   y += 16
   for (const p of placed.at) body += runs(p.fx, y + p.line * 15, 11, p.rs, W - PAD - p.fx)
   y += (placed.lines - 1) * 15
@@ -259,8 +277,9 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
   const msg = alert ? clean(need ? a.question : a.reason, TIP_MAX) || (need ? 'needs you' : 'failed') : ''
   // A question keeps at least half the text width, so a long title cannot push it out; any other helper keeps its title whole.
   const titleRoom = (textW: number) => (need ? Math.max(textW / 2, textW - runsWidth([[` ${msg}`, '', 600]], 12)) : textW)
-  const full = need ? textWidth(`waiting ${age}`, 12, 600) : failedW, own = Math.min(READ, full + READ_GAP), titleFits = (r: number) => textWidth(title, 12, 600) <= helperRoom(W, depth, r)
-  const col = alert ? alertColumn(titleFits, own, full, need ? textWidth(age, 12, 600) : failedW) : { read: edge, brief: false }
+  const mw = modelW(a), full = Math.max(mw, need ? textWidth(`waiting ${age}`, 12, 600) : failedW), own = Math.min(READ, full + READ_GAP)
+  const titleFits = (r: number) => textWidth(title, 12, 600) <= helperRoom(W, depth, r)
+  const col = alert ? alertColumn(titleFits, own, full, Math.max(mw, need ? textWidth(age, 12, 600) : failedW)) : { read: edge, brief: false }
   const plain = alert ? null : plainRead(a, now, 12, r => helperRoom(W, depth, r), edge)
   const BW = W - cw, rx = BW - PAD - CHEV - GAP, textW = plain ? plain.titleW : helperRoom(W, depth, col.read)
   // The tint spans both images; each runs 8px past the seam, clipped there, so the band reads as one.
@@ -293,8 +312,10 @@ const helper = (a: CrewAgent, walk: boolean, depth: 1 | 2, W: number, now: numbe
     }
   }
   what = withTip(tip, cut, what)
-  const body = tint(-8, BW + 8) + what + runs(rx, 20, 12, read, need ? READ : col.read, 'end')  // "waiting 120m" may run into the gap before the column, never into the text
-  const alt = `${title}, ${need ? `waiting ${age}` : alert ? textOf(read) : textOf(reading(a, now))}${alert ? `: ${msg}` : cut ? `: ${clean(tip, TIP_MAX)}` : ''}`
+  // The reading over the model; "waiting 120m" may run into the gap before the column, never into the text.
+  const body = tint(-8, BW + 8) + what + runs(rx, 14, 12, read, need ? READ : col.read, 'end')
+    + modelLine(rx, 27, alert ? modelLabel(a.model).short : modelText(a, edge - READ_GAP))
+  const alt = `${title}${modelAlt(a)}, ${need ? `waiting ${age}` : alert ? textOf(read) : textOf(reading(a, now))}${alert ? `: ${msg}` : cut ? `: ${clean(tip, TIP_MAX)}` : ''}`
   return { type: 'Box', props: { flexDirection: 'row' }, children: [
     image(`crab-${a.id}`, { source: crabSvg, alt: `${a.role} crab`, width: cw, height: h }, walk),
     // A helper that waits on you is pressed to answer it: `ask:` puts it in the prompt. Helpers have no drawer.
@@ -311,9 +332,10 @@ const kids = (item: Extract<PaneItem, { kind: 'kids' }>, W: number): El => {
 const endedRow = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   const h = SIZE.endedRow, failed = a.prop === 'fail', status = failed ? `failed after ${elapsed(a, now)}` : elapsed(a, now), cls = failed ? 'er' : 'okText'
   const sw = textWidth(status, 12), ix = W - PAD - sw - 14, title = fit(clean(a.title, 60), ix - CRAB - GAP, 12)
-  const body = text(CRAB, 19, 'muted', 12, title) + `<g transform="translate(${n(ix)} 10)">${icon(failed ? 'cross' : 'check', 10, `s-${cls}`)}</g>` + text(W - PAD, 19, cls, 12, status, { anchor: 'end' })
+  const body = text(CRAB, 19, 'muted', 12, title) + `<g transform="translate(${n(ix)} 4)">${icon(failed ? 'cross' : 'check', 10, `s-${cls}`)}</g>` + text(W - PAD, 13, cls, 12, status, { anchor: 'end' })
+    + modelLine(W - PAD, 26, modelText(a, READ - READ_GAP))
   const source = withCrab(doc(W, h, body), crab({ role: a.role, prop: failed ? 'fail' : 'done', walk: false, size: 'S', still }), 1.25, 4.5)
-  return image(`ended-${a.id}`, { source, alt: `${title} ${status}`, width: n(W), height: h }, false)
+  return image(`ended-${a.id}`, { source, alt: `${title} ${status}${modelAlt(a)}`, width: n(W), height: h }, false)
 }
 
 const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ): El => {
