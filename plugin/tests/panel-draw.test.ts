@@ -34,6 +34,12 @@ const wellFormed = (src: string): boolean => {
 }
 const SHOTS: StateName[] = ['idle', 'busy', 'hydra', 'needsYou', 'failed', 'both', 'context90', 'limitAhead', 'sizeGauges', 'sizeLine', 'codeColumns', 'manyAgents']
 
+test('panel: a flow with no tasks keeps its plan line and draws no empty plan bar', () => {
+  const v = viewOf('hydra')
+  const t = panelTree({ ...v, crew: { ...v.crew, plan: { ...v.crew.plan!, tasks: [], total: 0, done: 0 } } })
+  expect(keys(t)).toEqual(['cols', 'plan-line', 'chips'])
+})
+
 test('panel: full size is columns, then the plan, then the chips', () => {
   const t = panelTree(viewOf('hydra'))
   expect(t.type).toBe('Box'); expect(keyOf(t)).toBe('clawpit-panel')
