@@ -723,3 +723,32 @@ test('panel: the session chip is not an agent, so "+N more agents" counts only t
   expect(propsOf(find(t, 'chips-alert')!).alt).toBe(`Claude needs you: ${SESSION_Q}; 1 more need you`)
   expect(propsOf(find(t, 'chip-more')!).alt).toBe(`${v.crew.agents.filter(a => a.state === 'running').length} more agents`)
 })
+
+// Background work: the folded agents column and, at full size, one muted chip; neither is an agent.
+const bgOnly = (size: 'full' | 'gauges' | 'line', background = { active: 2, failed: 1 }) => {
+  const v = viewOf('idle'); return viewOf('idle', { crew: { ...v.crew, background }, ui: { ...v.ui, size } })
+}
+test('panel: with background work alone, the folded agents column reads it, still, with no badge, and opens the pane', () => {
+  const t = panelTree(bgOnly('gauges')), m = propsOf(find(t, 'mascot')!)
+  expect(cols(t)).toContain('col-agents'); expect(m.press).toBe('open')
+  expect(words(m.source)).toBe('agents2background · 1 failed'); expect(m.alt).toBe('Agents: show them all. 2 background tasks, 1 failed')
+  expect(m.source).not.toMatch(/animation|infinite/); expect(m.source).not.toContain('class="red"')
+  const failedOnly = propsOf(find(panelTree(bgOnly('gauges', { active: 0, failed: 1 })), 'mascot')!)
+  expect(words(failedOnly.source)).toBe('agents1failed background'); expect(failedOnly.source).toContain('class="er"')
+  expect(panelLoopCount(bgOnly('gauges'))).toBe(0)
+})
+test('panel: at one line, background work alone shows the agents crab and its words', () => {
+  const m = propsOf(find(panelTree(bgOnly('line')), 'mascot')!)
+  expect(words(m.source)).toBe('2 background · 1 failed'); expect(m.press).toBe('open')
+})
+test('panel: at full size, background work alone draws one muted chip that opens the pane; an agent chip or a session need replaces it', () => {
+  const t = panelTree(bgOnly('full')), chip = propsOf(find(t, 'chip-background')!)
+  expect(chip.press).toBe('open'); expect(words(chip.source)).toBe('2 background · 1 failed'); expect(chip.alt).toBe('2 background tasks, 1 failed')
+  expect(chip.source).toContain('class="wash"'); expect(chip.source).not.toMatch(/class="red"|pulse/)
+  expect(words(propsOf(find(panelTree(bgOnly('full', { active: 1, failed: 0 })), 'chip-background')!).source)).toBe('1 background')
+  const crewed = viewOf('hydra')
+  expect(find(panelTree({ ...crewed, crew: { ...crewed.crew, background: { active: 2, failed: 0 } } }), 'chip-background')).toBeUndefined()
+  const s = viewOf('sessionNeed')
+  expect(find(panelTree({ ...s, crew: { ...s.crew, background: { active: 2, failed: 0 } } }), 'chip-background')).toBeUndefined()
+  expect(find(panelTree(viewOf('idle')), 'chip-background')).toBeUndefined()
+})

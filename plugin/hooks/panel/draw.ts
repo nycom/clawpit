@@ -210,10 +210,30 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
   return { f, body, w: cw + 7, h: ch + 3, animated: loops.mascot !== 'still' }
 }
 
+// ---------- background work: not agents; with no agent and no session need, it alone reaches the pane ----------
+type Bg = { active: number; failed: number }
+const bgOnly = (crew: Crew): Bg | null => (!crew.agents.length && !crew.sessionNeed && crew.background) || null
+// The failed part is a word in er, so colour is never the only signal.
+const bgRuns = (b: Bg): Run[] => b.active ? [[`${b.active} background`, 'muted'], ...(b.failed ? [[` · ${b.failed} failed`, 'er'] as Run] : [])] : [[`${b.failed} failed background`, 'er']]
+const tasks = (k: number) => `${k} background ${k === 1 ? 'task' : 'tasks'}`
+const bgAlt = (b: Bg) => (b.active ? `${tasks(b.active)}${b.failed ? `, ${b.failed} failed` : ''}` : `${b.failed} failed ${tasks(b.failed).slice(String(b.failed).length + 1)}`)
+const stillCrab = (size: 'S' | 'M') => crab({ role: 'explore', prop: 'none', walk: false, size })
+// The folded agents column: a still crab with no badge, the count in the value slot, its words under it. Where both clauses
+// will not fit, the failed one goes whole (a number is never cut); the alt keeps it.
+const bgColumn = (b: Bg, w: number): El => {
+  const x0 = 12, max = w - x0 - 4, vx = x0 + SIZE.crab.M[0] + 7 + 6, rs = bgRuns(b), first: Run[] = [[rs[0][0].replace(/^\d+ /, ''), rs[0][1]]]
+  const say: Run[] = runsWidth([...first, ...rs.slice(1)], 11) <= max ? [...first, ...rs.slice(1)] : [[fitWhole(first[0][0], max, 11), first[0][1]]]
+  const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'agents', 11, 'muted', { max }) + at(x0, 15, stillCrab('M'))
+    + text(vx, 35, String(b.active || b.failed), 16, b.active ? 'fg' : 'er', { w: 600 }) + runs(x0, 54, 11, say, max + 1)
+  return image('mascot', { source: doc(w, COL_H, body), alt: `Agents: show them all. ${bgAlt(b)}`, width: w, height: COL_H, press: 'open' }, false)
+}
+
 // Who the value slot names, up to one agent: the lone agent, or with no agents the main session's need, so a count of 0
 // is never drawn.
 const soloOf = (crew: Crew, f: Face): CrewAgent | null => crew.agents.length > 1 ? null : crew.agents[0] ?? (f.a.id === 'session' ? f.a : null)
 const agentsColumn = (v: PanelView, w: number): El => {
+  const bg = bgOnly(v.crew)
+  if (bg) return bgColumn(bg, w)
   const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
   // One agent: its name in the value slot and only its state under it; a count of 1 says nothing (maintainer, 2026-11-21).
   const solo = soloOf(v.crew, m.f), own = solo && m.f.a === solo
@@ -361,6 +381,13 @@ const fitsIn = (ws: number[], avail: number, rows: number) => {
 const CHIP_ROWS = 2
 const chipRows = (v: PanelView, W: number): El | null => {
   const { crew, loops } = v, session = sessionAgent(crew), lead = session ? 1 : 0
+  const bg = bgOnly(crew)
+  if (bg) {
+    // One muted chip, plain art: no crab, no pulse, no red; it opens the pane as "+N more" does.
+    const rs = bgRuns(bg), w = +(runsWidth(rs, 12) + 20).toFixed(2)
+    const chip = chipImage('chip-background', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + runs(10, 17, 12, rs, w - 20 + 1), alt: bgAlt(bg), press: 'open' }], false)
+    return { type: 'Box', props: { key: 'chips', flexDirection: 'column' }, children: [{ type: 'Box', props: { key: 'chips-row-1', flexDirection: 'row' }, children: [chip] }] }
+  }
   if (!crew.agents.length && !session) return null
   // The alert chips share one row: as many as keep ALERT_MIN px each; the rest go into a red overflow chip at the row's end.
   const fitAlerts = (w: number) => Math.max(1, Math.floor((w - 2 * CHIP_PAD + CHIP_GAP) / (ALERT_MIN + CHIP_GAP)))
@@ -419,9 +446,13 @@ const oneLineRow = (v: PanelView): El => {
       items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], `session: ${value}`, false, { press: 'costs' }))
     }
   }
-  const children: El[] = [...items, spacer]
-  if (crew.agents.length || crew.sessionNeed) {
-    const m = mascotArt(crew, v.loops, 'S'), used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX
+  const children: El[] = [...items, spacer], used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX, bg = bgOnly(crew)
+  if (bg) {
+    const rs = bgRuns(bg), cw = SIZE.crab.S[0] + 7, sayW = runsWidth(rs, 13), say = W - used - cw - 6 >= sayW, w = +(cw + (say ? 6 + sayW : 0)).toFixed(2)
+    const body = at(0, 1, stillCrab('S')) + (say ? runs(cw + 6, 18, 13, rs, sayW + 1) : '')
+    children.push(image('mascot', { source: doc(w, LINE_H, body), alt: `Agents: show them all. ${bgAlt(bg)}`, width: w, height: LINE_H, press: 'open' }, false))
+  } else if (crew.agents.length || crew.sessionNeed) {
+    const m = mascotArt(crew, v.loops, 'S')
     const room = W - used - m.w - 6, say = room >= 40 ? sayFit(m.f, room, 13) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
     const body = at(0, 1, m.body) + (say ? text(m.w + 6, 18, say, 13, m.f.tone, { w: m.f.w }) : '')
     children.push(image('mascot', { source: doc(w, LINE_H, body, m.animated), alt: `Agents: show them all. ${crew.agents.length ? `${crew.agents.length} ${crew.agents.length === 1 ? 'agent' : 'agents'}, ` : ''}${m.f.say}`, width: w, height: LINE_H, press: 'open' }, true))
@@ -447,6 +478,9 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
 // A lone agent's column claims the cells for its whole name and, short of them, keeps its even share; more agents
 // take an even share and claim nothing.
 const agentsNeed = (v: PanelView, priority: number): Need => {
+  // Background work alone claims the cells for its whole words, as a lone agent does for its name.
+  const bg = bgOnly(v.crew)
+  if (bg) return { cells: Math.ceil((12 + 4 + runsWidth(bgRuns(bg), 11)) / CELL_PX), floor: Infinity, head: 0, claims: true, warn: false, priority }
   const f = faceOf(v.crew), solo = soloOf(v.crew, f)
   // The state line under the name counts too, so a short title never leaves its note to be cut.
   const cells = solo ? Math.ceil(Math.max(12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600), 12 + widthOf(f.say, 11, f.w)) / CELL_PX + 4 / CELL_PX) : Infinity
