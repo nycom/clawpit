@@ -7,7 +7,7 @@ const PATHS = { chev: 'M4.5 2.5 8 6l-3.5 3.5', check: 'M2.5 6.3 5 8.8l4.5-5.3', 
   squeeze: 'M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5M2 6h8',
   // Background kinds: a prompt chevron over an underscore, a pulse line, a clock, a circular arrow; and the Stop square.
   shell: 'M2 3.5 4.8 6 2 8.5M6.5 9h3.5', monitor: 'M1 6h2.4l1.4-3 2.4 6 1.4-3H11',
-  cron: 'M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M6 3.8V6l1.6 1.1', wakeup: 'M10 6a4 4 0 1 1-1.2-2.85M9.2 1.4v1.9H7.3', stop: 'M3.5 3.5h5v5h-5z' } as const
+  cron: 'M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M6 3.8V6l1.6 1.1', wakeup: 'M10 6a4 4 0 1 1-1.2-2.85M9.2 1.4v1.9H7.3', stop: 'M3 3h6v6H3z' } as const
 const n = (v: number) => +v.toFixed(2)
 
 // `cls` is a stroke class, for example "s-muted".

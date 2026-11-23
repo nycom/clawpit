@@ -147,7 +147,7 @@ test('pane: a failed row says failed in words beside its cross, has no Stop, and
   const t = paneTree(bgView()), row = find(t, `bg-${h('b2')}`)!
   expect(words(row)).toBe('npm run build:docs failed shell'); expect(src(row)).toContain(icon('cross', 12, 's-er').slice(0, 30))
   expect(find(t, `stop-${h('b2')}`)).toBeUndefined()
-  expect(row.type).toBe('Svg')
+  expect(row.type).toBe('Svg'); expect(inner(row).width).toBe(52 * 8.5 - 20)
 })
 
 test('pane: an active row is a row Box: a plain image beside its own Stop image', () => {

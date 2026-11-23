@@ -448,8 +448,10 @@ const oneLineRow = (v: PanelView): El => {
   }
   const children: El[] = [...items, spacer], used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX, bg = bgOnly(crew)
   if (bg) {
-    const rs = bgRuns(bg), cw = SIZE.crab.S[0] + 7, sayW = runsWidth(rs, 13), say = W - used - cw - 6 >= sayW, w = +(cw + (say ? 6 + sayW : 0)).toFixed(2)
-    const body = at(0, 1, stillCrab('S')) + (say ? runs(cw + 6, 18, 13, rs, sayW + 1) : '')
+    // Whole clauses only: the failed one goes first, then the words, never a cut number.
+    const cw = SIZE.crab.S[0] + 7, room = W - used - cw - 6, rs = [bgRuns(bg), bgRuns(bg).slice(0, 1)].find(x => runsWidth(x, 13) <= room) ?? []
+    const sayW = runsWidth(rs, 13), w = +(cw + (rs.length ? 6 + sayW : 0)).toFixed(2)
+    const body = at(0, 1, stillCrab('S')) + (rs.length ? runs(cw + 6, 18, 13, rs, sayW + 1) : '')
     children.push(image('mascot', { source: doc(w, LINE_H, body), alt: `Agents: show them all. ${bgAlt(bg)}`, width: w, height: LINE_H, press: 'open' }, false))
   } else if (crew.agents.length || crew.sessionNeed) {
     const m = mascotArt(crew, v.loops, 'S')

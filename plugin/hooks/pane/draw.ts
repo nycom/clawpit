@@ -400,9 +400,10 @@ const bgRow = (r: BgRow, W: number, now: number): El => {
   const body = lead + withTip(r.tip, cut, text(CRAB, 19, failed ? 'muted' : 'fg', 12, title))
     + (fits ? text(rx, 13, failed ? 'er' : 'fg', 12, read, { anchor: 'end', ...(failed ? { weight: 600 as const } : {}) }) : '')
     + (fits && !brief ? text(rx, 26, 'muted', MODEL_PX, r.kind, { anchor: 'end' }) : '')
-  const BW = failed ? W : W - BG_STOP
+  const BW = W - BG_STOP
   const row = image(`bg-${r.h}`, { source: doc(BW, h, body), alt: `${r.title}, ${r.kind}, ${said}${cut ? `: ${r.tip}` : ''}`, width: n(BW), height: h }, false)
-  if (failed) return row
+  // A failed row keeps the Stop's slot empty, so its reading sits on the same edge.
+  if (failed) return { type: 'Box', props: { flexDirection: 'row' }, children: [row, spacer] }
   const stop = image(`stop-${r.h}`, { source: doc(BG_STOP, h, `<g transform="translate(4 9)">${icon('stop', 12, 's-muted')}</g>`), alt: `Stop ${r.title}`,
     width: BG_STOP, height: h, press: `stop:${r.h}`, hover: true }, false)
   return { type: 'Box', props: { flexDirection: 'row' }, children: [row, stop] }
