@@ -5,7 +5,7 @@ import { alertsOf, helpersOf, sessionFirst } from '../model'
 type SectionName = 'need' | 'failed' | 'running' | 'background' | 'ended'
 export type PaneItem =
   | { kind: 'head'; crew: Crew }
-  | { kind: 'section'; name: SectionName; count: number; shut?: boolean }
+  | { kind: 'section'; name: SectionName; count: number; shut?: boolean; failed?: number }   // failed: background rows that failed, of count
   | { kind: 'row'; agent: CrewAgent; walk: boolean; ring: boolean; open: boolean }
   | { kind: 'session'; question: string; since: number; ring: boolean }
   | { kind: 'drawer'; agent: CrewAgent }
@@ -51,7 +51,8 @@ export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: Pan
     if (name === 'need' && sn) { const at = list.findIndex(a => sessionFirst(crew, a.waitingSince)); parts.splice(at < 0 ? list.length : at, 0, session) }
     return parts.length ? [{ head: { kind: 'section', name, count: list.length } as PaneItem, name, count: list.length, body: parts.flat() }] : []
   })
-  if (background.length) groups.push({ head: { kind: 'section', name: 'background', count: background.length }, name: 'background', count: background.length,
+  const bgFailed = background.filter(r => r.state === 'failed').length
+  if (background.length) groups.push({ head: { kind: 'section', name: 'background', count: background.length, ...(bgFailed ? { failed: bgFailed } : {}) }, name: 'background', count: background.length,
     body: background.map(row => ({ item: { kind: 'bg', row }, fixed: false, agents: 1 })) })
   if (crew.ended.length) {
     const shut = ui.shut.includes('ended')

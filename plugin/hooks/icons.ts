@@ -5,14 +5,17 @@ import { MOTION } from './tokens'
 const PATHS = { chev: 'M4.5 2.5 8 6l-3.5 3.5', check: 'M2.5 6.3 5 8.8l4.5-5.3', cross: 'M3 3l6 6M9 3 3 9',
   ask: 'M4.2 4.4a1.8 1.8 0 1 1 2.6 1.6c-.5.3-.8.7-.8 1.2v.5M6 9.6v.01',
   squeeze: 'M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5M2 6h8',
-  // Background kinds: a prompt chevron over an underscore, a pulse line, a clock, a circular arrow; and the Stop square.
+  // Background kinds: a prompt chevron over an underscore, a pulse line, a clock, a circular arrow.
   shell: 'M2 3.5 4.8 6 2 8.5M6.5 9h3.5', monitor: 'M1 6h2.4l1.4-3 2.4 6 1.4-3H11',
-  cron: 'M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M6 3.8V6l1.6 1.1', wakeup: 'M10 6a4 4 0 1 1-1.2-2.85M9.2 1.4v1.9H7.3', stop: 'M3 3h6v6H3z' } as const
+  cron: 'M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M6 3.8V6l1.6 1.1', wakeup: 'M10 6a4 4 0 1 1-1.2-2.85M9.2 1.4v1.9H7.3' } as const
 const n = (v: number) => +v.toFixed(2)
 
 // `cls` is a stroke class, for example "s-muted".
 export const icon = (name: keyof typeof PATHS, sizePx: 10 | 12, cls: string): string =>
   `<path class="${cls}" transform="scale(${n(sizePx / 12)})" d="${PATHS[name]}" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`
+
+// Stop: the standard filled rounded square, 8 in a 12 box; `cls` is a fill class, for example "muted".
+export const stopSquare = (cls: string): string => `<rect x="2" y="2" width="8" height="8" rx="1.5" class="${cls}"/>`
 
 // A 14x14 picture of the panel in its size; the dot marks an agent that needs you while folded.
 export const toggleIcon = (size: Size, hasDot: boolean): string => {

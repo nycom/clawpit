@@ -2,9 +2,9 @@ import { test, expect } from 'claude-code/testing'
 import type { BgRow, LoopPlan, SavvyRun } from '../types'
 import { backgroundOf, bgHash, bgVisible, crewOf, alertsOf } from '../hooks/model'
 import { paneLayout, ENGINE_MAX, HOST_MAX, type PaneItem } from '../hooks/pane/layout'
-import { paneTree, type El } from '../hooks/pane/draw'
+import { paneTree, shortSchedule, type El } from '../hooks/pane/draw'
 import { minutes, textWidth } from '../hooks/text'
-import { icon } from '../hooks/icons'
+import { icon, stopSquare } from '../hooks/icons'
 import { pickLoops } from '../hooks/loops'
 import { BG_TASKS, ETA, NOW, STATES, USUALLY } from './fixtures/states'
 import { paneViewOf } from './build-pane'
@@ -87,7 +87,7 @@ test('paneLayout: Background sits after Running and before Ended, with its count
   const l = items.map(line)
   expect(l.slice(l.indexOf('section:background'))).toEqual(['section:background', 'bg:wake:resume the release check', 'bg:b1', 'bg:m1', 'bg:c1', 'bg:b2', 'section:ended'])
   expect(l.indexOf('section:running')).toBeLessThan(l.indexOf('section:background'))
-  expect(items.find(i => i.kind === 'section' && i.name === 'background')).toEqual({ kind: 'section', name: 'background', count: 5 })
+  expect(items.find(i => i.kind === 'section' && i.name === 'background')).toEqual({ kind: 'section', name: 'background', count: 5, failed: 1 })
 })
 
 test('paneLayout: background alone draws the head and its section, not the empty state', () => {
@@ -133,10 +133,12 @@ test('pane: row alts read the title, the kind and the reading', () => {
 test('pane: readings: minutes since start, a countdown that ceils and reads due, the schedule', () => {
   const t = paneTree(bgView())
   expect(words(find(t, `bg-${h('b1')}`))).toBe('npm run dev -- --port 5173 3m shell')
-  // savvy's "every 10 minutes" is wider than the 88 px reading column: the reading is the kind word, the alt keeps the schedule.
-  expect(words(find(t, `bg-${h('c1')}`))).toBe('check the CI queue cron')
+  // savvy's "every 10 minutes" is wider than the 88 px reading column: the reading is its short form, the tooltip and the alt keep it whole.
+  expect(words(find(t, `bg-${h('c1')}`))).toBe('check the CI queue every 10m cron')
+  expect(src(find(t, `bg-${h('c1')}`))).toContain('<title>every 10 minutes</title>'); expect(alt(find(t, `bg-${h('c1')}`))).toBe('check the CI queue, cron, every 10 minutes')
   const short = backgroundOf([{ id: 'c', kind: 'cron', text: 'poll', status: 'scheduled', startedAt: NOW, schedule: 'hourly' }])
   expect(words(find(paneTree({ ...bgView(), background: short }), `bg-${h('c')}`))).toBe('poll hourly cron')
+  expect(src(find(paneTree({ ...bgView(), background: short }), `bg-${h('c')}`))).not.toContain('<title>')
   expect(words(find(t, `bg-${h('wake:resume the release check')}`))).toBe('resume the release check in 5m wakeup')
   const due = paneTree({ ...bgView(), now: NOW + 5 * 60_000 }), soon = paneTree({ ...bgView(), now: NOW + 4 * 60_000 + 30_000 })
   expect(words(find(due, `bg-${h('wake:resume the release check')}`))).toContain(' due ')
@@ -147,23 +149,29 @@ test('pane: a failed row says failed in words beside its cross, has no Stop, and
   const t = paneTree(bgView()), row = find(t, `bg-${h('b2')}`)!
   expect(words(row)).toBe('npm run build:docs failed shell'); expect(src(row)).toContain(icon('cross', 12, 's-er').slice(0, 30))
   expect(find(t, `stop-${h('b2')}`)).toBeUndefined()
-  expect(row.type).toBe('Svg'); expect(inner(row).width).toBe(52 * 8.5 - 20)
+  expect(row.type).toBe('Svg'); expect(inner(row).width).toBe(52 * 8.5 - 24)
+  // The alert row's title reads in fg, as the active rows' do.
+  expect(src(row)).toContain('<text x="48" y="19" class="fg" font-size="12">npm run build:docs</text>')
 })
 
 test('pane: an active row is a row Box: a plain image beside its own Stop image', () => {
   const t = paneTree(bgView()), box = all(t).find(e => e.type === 'Box' && (e.children ?? []).some(c => typeof c !== 'string' && c.props?.key === `bg-${h('b1')}`))!
   const [row, stop] = box.children as El[]
   expect(box.props?.flexDirection).toBe('row')
-  expect(row.type).toBe('Svg'); expect(inner(row).press).toBeUndefined(); expect(inner(row).width).toBe(52 * 8.5 - 20)
+  expect(row.type).toBe('Svg'); expect(inner(row).press).toBeUndefined(); expect(inner(row).width).toBe(52 * 8.5 - 24)
   expect(stop.type).toBe('Client'); expect(stop.props?.key).toBe(`stop-${h('b1')}`)
-  expect(inner(stop)).toMatchObject({ press: `stop:${h('b1')}`, hover: true, alt: 'Stop npm run dev -- --port 5173', width: 20, height: 30 })
+  // 24 px, the PAD and chevron slot: the square's centre is the chevron's, W - 16.
+  expect(inner(stop)).toMatchObject({ press: `stop:${h('b1')}`, hover: true, alt: 'Stop npm run dev -- --port 5173', width: 24, height: 30 })
+  expect(src(stop)).toContain(`<g transform="translate(2 9)">${stopSquare('muted')}</g>`)
+  // The title sits on the agents' title x, CRAB + GAP.
+  expect(src(row)).toContain('<text x="48" y="19" class="fg" font-size="12">npm run dev -- --port 5173</text>')
 })
 
 test('pane: kind icons are SVG paths, muted on active rows', () => {
   const t = paneTree(bgView())
   for (const [id, kind] of [['b1', 'shell'], ['m1', 'monitor'], ['c1', 'cron'], ['wake:resume the release check', 'wakeup']] as const)
     expect(src(find(t, `bg-${h(id)}`))).toContain(icon(kind, 12, 's-muted'))
-  expect(src(find(t, `stop-${h('b1')}`))).toContain(icon('stop', 12, 's-muted'))
+  expect(src(find(t, `stop-${h('b1')}`))).toContain(stopSquare('muted'))
 })
 
 test('pane: a cut title carries its full text in a <title> and in the alt; an uncut one has none', () => {
@@ -192,13 +200,14 @@ test('pane: at 28 to 64 cells a row\'s title and reading fit, the title never dr
       if (!title || title === '…' || (title.endsWith('…') && [...title.slice(0, -1).trim()].length < 8)) bad.push(`${columns} ${r.id}: title ${JSON.stringify(title)}`)
       for (const x of texts) if (x.endsWith('…') && [...x.slice(0, -1).trim()].length < 8) bad.push(`${columns} ${r.id}: ${JSON.stringify(x)}`)
       const reading = texts[1] ?? ''
-      if (38 + textWidth(title, 12) + 10 + textWidth(reading, 12) > W - 34 + 0.5) bad.push(`${columns} ${r.id}: overflow ${JSON.stringify([title, reading])}`)
+      if (48 + textWidth(title, 12) + 10 + textWidth(reading, 12) > W - 34 + 0.5) bad.push(`${columns} ${r.id}: overflow ${JSON.stringify([title, reading])}`)
     }
   }
   expect(bad).toEqual([])
   // A schedule too long for the reading edge goes to the alt only; the reading shows the kind word.
   const t = paneTree({ ...paneViewOf('background', { columns: 28 }), background: bgVisible(long, new Map(), 0) }), row = find(t, `bg-${h('L')}`)!
   expect(words(row)).not.toContain('public holidays'); expect(alt(row)).toContain('at 09:00 on weekdays except public holidays')
+  expect(src(row)).toContain('<title>at 09:00 on weekdays except public holidays</title>')
 })
 
 test('pane: the more line for background names background tasks', () => {
@@ -212,4 +221,22 @@ test('pane: the head is drawn as today with no agents and the crew bar is unchan
   expect(find(paneTree(paneViewOf('backgroundCrew', { background: [] })), 'head')).toEqual(find(paneTree(paneViewOf('backgroundCrew')), 'head'))
   expect(words(find(paneTree(bgView()), 'head'))).toBe('Subagents 0 running · 0 done · ≈$0.00')
   expect(keys(paneTree(bgView()))).not.toContain('empty')
+})
+
+test('pane: a cron schedule reads its short form; an unknown one is kept as it is', () => {
+  const table: [string, string][] = [['every 5 minutes', 'every 5m'], ['every 10 minutes', 'every 10m'], ['Every 1 minute', 'every 1m'], ['every hour', 'hourly'],
+    ['hourly', 'hourly'], ['every 2 hours', 'every 2h'], ['every 1 hour', 'every 1h'], ['every day', 'daily'], ['daily', 'daily'], ['at 09:00 on weekdays', 'at 09:00 on weekdays']]
+  for (const [long, short] of table) expect(`${long} -> ${shortSchedule(long)}`).toBe(`${long} -> ${short}`)
+})
+
+test('pane: a row with no text reads its kind word with no tooltip and no trailing colon', () => {
+  const rows = backgroundOf([{ id: 'e', kind: 'monitor', text: '', status: 'running', startedAt: NOW - 60_000 }])
+  const row = find(paneTree({ ...bgView(), background: rows }), `bg-${h('e')}`)!
+  expect(src(row)).not.toContain('<title>'); expect(alt(row)).toBe('monitor, monitor, running 1m')
+})
+
+test('pane: the Background header counts every shown row, and its alt names the active and the failed', () => {
+  const sec = find(paneTree(bgView()), 'sec-background')!
+  expect(words(sec)).toBe('Background 5'); expect(alt(sec)).toBe('Background 5: 4 running or waiting, 1 failed')
+  expect(alt(find(paneTree({ ...bgView(), background: shown().slice(0, 1) }), 'sec-background'))).toBe('Background 1')
 })

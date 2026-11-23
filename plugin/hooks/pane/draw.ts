@@ -3,7 +3,7 @@ import type { BgRow, Crew, CrewAgent, LoopPlan, Offer, Role, SessionStat, Ui } f
 import { image, type El } from '../draw'
 import { CELL_PX, FONT, MONO, MOTION, SIZE, cssOf, svg } from '../tokens'
 import { clip, fit as fitText, fmtClock, fmtCost, fmtLeft, minutes, modelLabel, oneLine, textWidth, TIP_MAX, wrap as wrapText, xml } from '../text'
-import { icon, segBar, stepBlocks, type Seg } from '../icons'
+import { icon, segBar, stepBlocks, stopSquare, type Seg } from '../icons'
 import { crab } from '../crab'
 import { alertsOf, helpersOf } from '../model'
 import { paneLayout, type PaneItem } from './layout'
@@ -14,7 +14,7 @@ export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; n
   background?: BgRow[] }   // background: the rows to show, savvy's shells, monitors, crons and wakeups
 
 // The row's four columns: crab 38, title and activity, the reading column (88px at most, see readEdge), the chevron.
-const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6
+const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6, TITLE_X = CRAB + GAP
 const n = (v: number) => +v.toFixed(2)
 const clean = (v: unknown, max: number) => clip(oneLine(v), max)
 type Weight = 400 | 600 | 700
@@ -173,7 +173,8 @@ const section = (item: Extract<PaneItem, { kind: 'section' }>, W: number): El =>
   const [label, cls] = SECTION[item.name], ended = item.name === 'ended'
   const rs: Run[] = [[label, cls, 600], ...(item.name === 'need' ? [] : [[` ${item.count}`, cls] as Run])]
   const body = (ended ? chevron(0, 13, 10, !item.shut) : '') + runs(ended ? 16 : 0, 22, 12, rs, W)
-  const alt = rs.map(r => r[0]).join('') + (ended ? (item.shut ? ', folded' : ', open') : '')
+  // The Background header counts every shown row; its alt names the active and the failed, as the panel's chip does.
+  const alt = rs.map(r => r[0]).join('') + (ended ? (item.shut ? ', folded' : ', open') : '') + (item.failed ? `: ${item.count - item.failed} running or waiting, ${item.failed} failed` : '')
   return image(ended ? 'ended' : `sec-${item.name}`, { source: doc(W, 28, body), alt, width: n(W), height: 28, ...(ended ? { press: 'ended' } : {}) }, false)
 }
 
@@ -376,35 +377,44 @@ const endedRow = (a: CrewAgent, W: number, now: number, still: boolean): El => {
 }
 
 // A background row: the Ended row's grid (its kind's icon in the crab slot, the title at CRAB), its reading on the running
-// rows' edge over the kind word. An active row is a row Box: the row, a plain image, and its own Stop image in the 20 px
-// right of it; a failed row has a cross, the word failed and no Stop. Still: nothing here moves.
-const BG_STOP = 20
+// rows' edge over the kind word. An active row is a row Box: the row, a plain image, and its own Stop image in the PAD and
+// chevron slot right of it, centred where the chevron is; a failed row has a cross, the word failed and no Stop. Still.
+const BG_STOP = PAD + CHEV
+// A cron's schedule in the words that fit the reading column; savvy's longer wording stays in the alt and the tooltip.
+export const shortSchedule = (s: string): string => {
+  const t = s.trim().toLowerCase(), every = /^every (\d+) (minute|hour)s?$/.exec(t)
+  return every ? `every ${every[1]}${every[2][0]}` : t === 'every hour' || t === 'hourly' ? 'hourly' : t === 'every day' || t === 'daily' ? 'daily' : s
+}
 const bgReading = (r: BgRow, now: number): { read: string; said: string } => {
   if (r.state === 'running') { const m = minutes(now - r.startedAt); return { read: m, said: `running ${m}` } }
   if (r.state === 'failed') return { read: 'failed', said: `failed after ${minutes((r.endedAt ?? now) - r.startedAt)}` }
   // A countdown ceils, as savvy's does, so it never reads "in 0m".
   if (r.nextAt !== undefined) { const ms = r.nextAt - now; return ms <= 0 ? { read: 'due', said: 'due' } : { read: `in ${Math.ceil(ms / 60_000)}m`, said: `next in ${Math.ceil(ms / 60_000)}m` } }
-  return { read: r.schedule ?? '', said: r.schedule ?? 'scheduled' }
+  return { read: shortSchedule(r.schedule ?? ''), said: r.schedule ?? 'scheduled' }
 }
 const bgRow = (r: BgRow, W: number, now: number): El => {
   const failed = r.state === 'failed', h = SIZE.endedRow, rx = W - PAD - CHEV - GAP, keep = keepWidth(r.title, 12, 400), kindW = textWidth(r.kind, MODEL_PX)
   const { read: said0, said } = bgReading(r, now), wt: Weight = failed ? 600 : 400
-  const room = (read: string, under: boolean) => rx - Math.max(textWidth(read, 12, wt), under ? kindW : 0) - GAP - CRAB
-  // A schedule wider than the reading column, or that leaves the title under MIN_CUT, goes to the alt only: the reading shows the kind word.
+  const room = (read: string, under: boolean) => rx - Math.max(textWidth(read, 12, wt), under ? kindW : 0) - GAP - TITLE_X
+  // A schedule wider than the reading column, short form and all, or that leaves the title under MIN_CUT, goes to the alt and
+  // the tooltip only: the reading shows the kind word.
   const brief = r.state === 'scheduled' && r.nextAt === undefined && (!said0 || textWidth(said0, 12) > READ || room(said0, true) < keep)
   const read = brief ? r.kind : said0
   // A title that still will not fit beside its reading runs over it, never under MIN_CUT of it.
-  const fits = room(read, !brief) >= keep, titleW = fits ? room(read, !brief) : Math.min(rx - CRAB, keep), title = fit(r.title, titleW, 12)
-  const cut = title !== r.tip
+  const fits = room(read, !brief) >= keep, titleW = fits ? room(read, !brief) : Math.min(rx - TITLE_X, keep), title = fit(r.title, titleW, 12)
+  // An empty text has no tip: its title is the kind word, whole.
+  const cut = !!r.tip && title !== r.tip, schedule = r.state === 'scheduled' && r.nextAt === undefined && r.schedule && read !== r.schedule ? r.schedule : ''
+  // The kind icon at the crab's centre (19), the title on the agents' title x.
   const lead = `<g transform="translate(13 9)">${icon(failed ? 'cross' : r.kind, 12, failed ? 's-er' : 's-muted')}</g>`
-  const body = lead + withTip(r.tip, cut, text(CRAB, 19, failed ? 'muted' : 'fg', 12, title))
-    + (fits ? text(rx, 13, failed ? 'er' : 'fg', 12, read, { anchor: 'end', ...(failed ? { weight: 600 as const } : {}) }) : '')
+  const body = lead + withTip(r.tip, cut, text(TITLE_X, 19, 'fg', 12, title))
+    + (fits ? withTip(schedule, !!schedule, text(rx, 13, failed ? 'er' : 'fg', 12, read, { anchor: 'end', ...(failed ? { weight: 600 as const } : {}) })) : '')
     + (fits && !brief ? text(rx, 26, 'muted', MODEL_PX, r.kind, { anchor: 'end' }) : '')
   const BW = W - BG_STOP
   const row = image(`bg-${r.h}`, { source: doc(BW, h, body), alt: `${r.title}, ${r.kind}, ${said}${cut ? `: ${r.tip}` : ''}`, width: n(BW), height: h }, false)
   // A failed row keeps the Stop's slot empty, so its reading sits on the same edge.
   if (failed) return { type: 'Box', props: { flexDirection: 'row' }, children: [row, spacer] }
-  const stop = image(`stop-${r.h}`, { source: doc(BG_STOP, h, `<g transform="translate(4 9)">${icon('stop', 12, 's-muted')}</g>`), alt: `Stop ${r.title}`,
+  // The square's centre sits at the Stop image's x 8, global W - 16: the chevron's centre.
+  const stop = image(`stop-${r.h}`, { source: doc(BG_STOP, h, `<g transform="translate(2 9)">${stopSquare('muted')}</g>`), alt: `Stop ${r.title}`,
     width: BG_STOP, height: h, press: `stop:${r.h}`, hover: true }, false)
   return { type: 'Box', props: { flexDirection: 'row' }, children: [row, stop] }
 }
