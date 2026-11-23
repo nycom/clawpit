@@ -3,6 +3,7 @@ import { show, loops, alts } from './harness'
 import { paneTree } from '../../plugin/hooks/pane/draw'
 import { pickLoops, BUDGET } from '../../plugin/hooks/loops'
 import { paneLoopCount, paneViewOf } from '../../plugin/tests/build-pane'
+import { bgHash } from '../../plugin/hooks/model'
 
 const SHOTS = ['hydra', 'needsYou', 'failed', 'both', 'drawerOpen', 'helpers', 'emptyPane', 'manyAgents', 'helperNeedsYou', 'nestedHelper', 'costs', 'endedOpen'] as const
 for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (const w of [28, 30, 36, 52] as const)   // around the ~29 cells the app gives, narrow, wide
@@ -86,4 +87,15 @@ for (const s of BACKGROUND)
     const v = paneViewOf(s); await show(page, paneTree(v), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
     expect((await loops(page)).drawings).toBe(paneLoopCount(v)); expect(paneLoopCount(v)).toBe(paneLoopCount({ ...v, background: [] }))
     expect(alts(paneTree(v)).every(x => x.trim().length > 0)).toBe(true)
+  })
+
+// Measured on the drawn page: a background title starts where an agent's does, and the Stop square sits on the chevron's centre.
+for (const w of [28, 41, 52] as const)
+  test(`pane: background titles share the agents' title x and Stop centres on the chevron column, ${w} cells`, async ({ page }) => {
+    await show(page, paneTree(paneViewOf('backgroundCrew', { columns: w })), { surface: 'pane', widthCells: w, theme: 'dark' })
+    const at = (key: string, sel: string) => page.evaluate(([k, q]) => {
+      const r = document.querySelector(`[data-key="${k}"]`)!.shadowRoot!.querySelector(q)!.getBoundingClientRect(); return { left: r.left, mid: r.left + r.width / 2 }
+    }, [key, sel] as const)
+    expect(Math.abs((await at(`bg-${bgHash('b1')}`, 'text')).left - (await at('row-imp', 'text')).left)).toBeLessThan(0.5)
+    expect(Math.abs((await at(`stop-${bgHash('b1')}`, 'rect')).mid - (await at('row-imp', 'path')).mid)).toBeLessThan(1)
   })
