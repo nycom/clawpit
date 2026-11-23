@@ -1,6 +1,6 @@
 # The panel above the prompt on its own: `clawpit-gauges`
 
-Status: design, Fable review PASS (2026-11-23). No code yet.
+Status: built. Fable design review PASS, then an impeccable critique (2026-11-23) whose fixes the maintainer took (section 12).
 
 ## Why
 
@@ -14,7 +14,7 @@ The skins upgrade plans to remove skins' usage band ("The usage band leaves skin
 
 - **Why not its own repo:** the plugin is mostly copies of clawpit files (section 3). In one repository a test can hold every copy to its original on every push. Across two repositories nothing would see drift.
 - **Merge clash with the Background section work:** that work edits `plugin/hooks/register.tsx`, the pane, previews and the README. This change adds new files (`gauges/`, a sync script and its test, new Playwright baselines) and touches only these existing ones: `plugin/hooks/panel/draw.ts`, `plugin/hooks/model.ts` and `plugin/hooks/loops.ts` (section 2), `plugin/tests/build.ts`, `plugin/tests/model.test.ts`, `plugin/tests/panel-draw.test.ts`, `tests/visual/panel.spec.ts`, `.claude-plugin/marketplace.json`, `README.md`, `AGENTS.md`, `docs/decisions/LOCKED.md` and `design/mockups-all.html`. It leaves `register.tsx` and the pane alone.
-- **No image conflicts, by rule:** without the flag clawpit draws exactly as today, and `scripts/preview.sh` shoots only `?theme=`, so a new `?state=gauges` leaves both preview PNGs as they are. `git diff --diff-filter=M --name-only main -- '*.png'` must print nothing; a changed existing image means the flag leaked into clawpit's drawing, and is a bug. A preview rewritten with different bytes but no visible change is restored from main, not committed.
+- **Image conflicts:** the critique's fixes (section 12) change clawpit's own panel drawing, so existing baselines and both preview PNGs change in this PR. The second PR to merge takes main's PNGs and baselines, then regenerates them (`npm run refresh:visual`) and looks at every changed one.
 - **Second to merge:** `git merge main` into the branch (merge commits only, AGENTS.md), resolve the text files by hand, then run `bash scripts/sync-gauges.sh`, `claude plugin test gauges`, `claude plugin validate gauges`, `claude plugin test plugin` and `npm run test:visual`. The gauges test and validate are local gates (CI does not run `claude plugin test`), and they are what catches a `PanelView`, `Stats`, `Ui` or `Crew` change that the byte check cannot.
 
 ### 2. What the panel draws when it runs alone
@@ -160,3 +160,15 @@ Those changes are in the skins repository and are not part of this work.
 - The gauges on the terminal, VS Code and mobile.
 - Stopping the gauges plugin's own work while clawpit draws (section 4).
 - Windows: install only, nothing measured there.
+
+## 12. Changes from the impeccable critique (2026-11-23)
+
+The critique scored the gauges-only panel 26/40 and found three P1s. The maintainer took these, all in clawpit's shared drawing, so clawpit's panel changes too. They are recorded in `LOCKED.md`, "Gauges alone and the panel review":
+- Limit so-whats name the reset time (the skins band showed it). A calm limit leads with it; one ahead of pace leads with its pace.
+- Core order context, 5h, 7d, session, tokens: the cost outlives the token count when narrow.
+- One line: the alarm keeps the icon-only compact chip; a limit ahead of pace gets an up-arrow icon; both alts carry the so-what.
+- Pressable columns name their action in the alt.
+- Alone, the toggle's alts never name agents (three sizes kept).
+- Found on the way: an agent's state words in the one-line row are never cut ("needs y…"); too narrow, they drop whole.
+
+Still not covered from the critique: the context token count (96k/200k) and the composition bar the skins band also showed, and the terminal.
