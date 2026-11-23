@@ -1,19 +1,22 @@
 // The Agents pane as a plain RenderElement tree (design §8.2). Pure: no host imports.
-import type { Crew, CrewAgent, LoopPlan, Offer, Role, SessionStat, Ui } from '../../types'
+import type { BgRow, Crew, CrewAgent, LoopPlan, Offer, Role, SessionStat, Ui } from '../../types'
 import { image, type El } from '../draw'
 import { CELL_PX, FONT, MONO, MOTION, SIZE, cssOf, svg } from '../tokens'
-import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtLeft, modelLabel, oneLine, textWidth, wrap as wrapText, xml } from '../text'
-import { icon, segBar, stepBlocks, type Seg } from '../icons'
+import { clip, clockOf, fit as fitText, fmtClock, fmtCost, fmtLeft, minutes, modelLabel, oneLine, textWidth, TIP_MAX, wrap as wrapText, xml } from '../text'
+import { icon, segBar, stepBlocks, stopSquare, type Seg } from '../icons'
 import { crab } from '../crab'
 import { alertsOf, helpersOf } from '../model'
 import { paneLayout, type PaneItem } from './layout'
 import { OFFER_NOTE } from '../setup'
 
 export type { El }
-export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean; offer?: Offer | null; showCost?: boolean }
+// background: the rows to show, savvy's shells, monitors, crons and wakeups; hour12 and offsetMin: how their clock times read
+// (absent: 24 h, UTC).
+export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean; offer?: Offer | null; showCost?: boolean
+  background?: BgRow[]; hour12?: boolean; offsetMin?: number }
 
 // The row's four columns: crab 38, title and activity, the reading column (88px at most, see readEdge), the chevron.
-const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6
+const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6, TITLE_X = CRAB + GAP
 const n = (v: number) => +v.toFixed(2)
 const clean = (v: unknown, max: number) => clip(oneLine(v), max)
 type Weight = 400 | 600 | 700
@@ -52,7 +55,6 @@ const runs = (x: number, y: number, size: number, rs: Run[], maxW: number, ancho
   return `<text x="${n(x)}" y="${n(y)}" font-size="${size}"${anchor ? ` text-anchor="${anchor}"` : ''}>${spans}</text>`
 }
 // A cut text's full words, as a tooltip: a <title>, which screen readers read too; the image stays unframed so it keeps its press.
-const TIP_MAX = 300
 const withTip = (tip: string, cut: boolean, g: string) => (cut ? `<g><title>${xml(clean(tip, TIP_MAX))}</title>${g}</g>` : g)
 const textOf = (rs: Run[]) => rs.map(r => r[0]).join('')
 const doc = (w: number, h: number, body: string, animated = false) =>
@@ -68,8 +70,6 @@ const blocks = (x: number, y: number, done: number, total: number, tone: Role | 
   return k ? `<g transform="translate(${n(x - blocksWidth(total))} ${y})">${stepBlocks(d, k, tone)}</g>` : ''
 }
 const elapsed = (a: CrewAgent, now: number) => fmtClock((a.endedAt ?? now) - a.startedAt)
-// Waiting and log ages read in whole minutes, so the image changes only when one crosses a minute.
-const minutes = (ms: number) => (ms < 60_000 ? '<1m' : fmtAge(ms))
 const waiting = (a: CrewAgent, now: number) => minutes(now - (a.waitingSince ?? a.startedAt))
 const reading = (a: CrewAgent, now: number): Run[] =>
   a.eta.kind === 'left' ? [[fmtLeft(a.eta.minutes).replace(/ left$/, ''), a.eta.slow ? 'warn' : 'fg', 600], [' left', 'muted']]
@@ -98,9 +98,9 @@ const rowRoom = (W: number, read: number) => W - CRAB - 3 * GAP - read - CHEV - 
 const helperRoom = (W: number, depth: 1 | 2, read: number) => W - HELPER_CRAB - (depth - 1) * INDENT - PAD - CHEV - 3 * GAP - read
 const shortReading = (a: CrewAgent, now: number): Run[] => reading(a, now).slice(0, 1)
 // The width at which `s` shows whole or as a cut of at least MIN_CUT characters.
-const keepWidth = (s: string, size: number) => {
-  for (let k = MIN_CUT; k < [...s].length; k++) { const w = textWidth(`${s.slice(0, k)}…`, size, 600); if (fit(s, w, size, 600)) return w }
-  return textWidth(s, size, 600)
+const keepWidth = (s: string, size: number, wt: Weight = 600) => {
+  for (let k = MIN_CUT; k < [...s].length; k++) { const w = textWidth(`${s.slice(0, k)}…`, size, wt); if (fit(s, w, size, wt)) return w }
+  return textWidth(s, size, wt)
 }
 type Plain = { a: CrewAgent; size: 12 | 13; room: (read: number) => number; dots: number }
 const plainOf = (i: PaneItem, W: number): Plain | null =>
@@ -169,12 +169,18 @@ const head = (crew: Crew, W: number, cost: boolean): El => {
   return image('head', { source: doc(W, h, body), alt: `${title}: ${[...counts, ...tail].map(r => r[0]).join('')}`, width: n(W), height: h }, false)
 }
 
-const SECTION: Record<'need' | 'failed' | 'running' | 'ended', [label: string, cls: string]> =
-  { need: ['Needs you', 'er'], failed: ['Failed', 'er'], running: ['Running', 'muted'], ended: ['Ended', 'muted'] }
+const SECTION: Record<'need' | 'failed' | 'running' | 'background' | 'ended', [label: string, cls: string]> =
+  { need: ['Needs you', 'er'], failed: ['Failed', 'er'], running: ['Running', 'muted'], background: ['Background', 'muted'], ended: ['Ended', 'muted'] }
 const section = (item: Extract<PaneItem, { kind: 'section' }>, W: number): El => {
   const [label, cls] = SECTION[item.name], ended = item.name === 'ended'
   const rs: Run[] = [[label, cls, 600], ...(item.name === 'need' ? [] : [[` ${item.count}`, cls] as Run])]
   const body = (ended ? chevron(0, 13, 10, !item.shut) : '') + runs(ended ? 16 : 0, 22, 12, rs, W)
+  // The Background header counts the active rows and names the failed apart, in er, as the panel does: "Background 4 · 1 failed".
+  if (item.name === 'background') {
+    const f = item.failed ?? 0, bg: Run[] = [[label, cls, 600], ...(item.count ? [[` ${item.count}`, cls] as Run] : []), ...(f ? [[` · ${f} failed`, 'er'] as Run] : [])]
+    const said = [item.count ? `${item.count} running or waiting` : '', f ? `${f} failed` : ''].filter(Boolean).join(', ')
+    return image('sec-background', { source: doc(W, 28, runs(0, 22, 12, bg, W)), alt: `${label}: ${said}`, width: n(W), height: 28 }, false)
+  }
   const alt = rs.map(r => r[0]).join('') + (ended ? (item.shut ? ', folded' : ', open') : '')
   return image(ended ? 'ended' : `sec-${item.name}`, { source: doc(W, 28, body), alt, width: n(W), height: 28, ...(ended ? { press: 'ended' } : {}) }, false)
 }
@@ -377,7 +383,71 @@ const endedRow = (a: CrewAgent, W: number, now: number, still: boolean): El => {
   return image(`ended-${a.id}`, { source, alt: `${title} ${status}${modelAlt(a)}`, width: n(W), height: h }, false)
 }
 
-const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ, cost = true): El => {
+// A background row: its kind's icon in the crab slot, the title on the agents' title x, a two-line reading on the agents'
+// reading edge, W - 34. Running work reads back ("12m", "since 14:20"), waiting work forward ("in 7m", "at 14:39"), a
+// cron with no time its short schedule. Every row is a row Box: the row, a plain image, and a slot image right of it; an active
+// row's slot is its Stop, a failed row's (on the needs-you tint, with a cross and "failed") ends the tint. Still.
+// The slot is the PAD and chevron column plus 4 px, so the 20 px Stop box centres on the chevron's centre, W - 16.
+const BG_STOP = PAD + CHEV + 4
+type Clock = { hour12: boolean; offsetMin: number }
+const UTC24: Clock = { hour12: false, offsetMin: 0 }
+// A cron's schedule in the words that fit the reading column; savvy's longer wording stays in the alt and the tooltip.
+export const shortSchedule = (s: string): string => {
+  const t = s.trim().toLowerCase(), every = /^every (\d+) (minute|hour)s?$/.exec(t)
+  return every ? `every ${every[1]}${every[2][0]}` : t === 'every hour' || t === 'hourly' ? 'hourly' : t === 'every day' || t === 'daily' ? 'daily' : s
+}
+// The share of a wakeup's wait used, 0 to 1; a share that is not a number counts as full.
+export const trackShare = (now: number, from: number, to: number): number => {
+  const v = (now - from) / (to - from)
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1
+}
+// The two lines, what the alt says after the kind, and the schedule's whole wording when a line shortens it.
+const bgReading = (r: BgRow, now: number, c: Clock): { l1: string; l2: string; said: string; tip: string } => {
+  const at = (ms: number) => clockOf(ms, c.hour12, c.offsetMin), sched = r.schedule ? shortSchedule(r.schedule) : ''
+  const tip = r.schedule && sched !== r.schedule ? r.schedule : ''
+  if (r.state === 'running') { const m = minutes(now - r.startedAt), t = at(r.startedAt); return { l1: m, l2: t && `since ${t}`, said: `running ${m}${t && `, since ${t}`}`, tip: '' } }
+  if (r.state === 'failed') { const m = minutes((r.endedAt ?? now) - r.startedAt); return { l1: 'failed', l2: `after ${m}`, said: `failed after ${m}`, tip: '' } }
+  if (r.nextAt === undefined) return { l1: sched, l2: '', said: r.schedule ?? 'scheduled', tip }
+  // A countdown ceils, as savvy's does, so it never reads "in 0m".
+  const ms = r.nextAt - now, l1 = ms <= 0 ? 'due' : `in ${Math.ceil(ms / 60_000)}m`, t = at(r.nextAt)
+  const l2 = r.kind === 'cron' && sched ? sched : t && `at ${t}`
+  return { l1, l2, said: `${l1}${r.kind === 'cron' && r.schedule ? `, ${r.schedule}` : t && `, at ${t}`}`, tip: r.kind === 'cron' ? tip : '' }
+}
+const bgRow = (r: BgRow, W: number, now: number, rule: boolean, c: Clock): El => {
+  const failed = r.state === 'failed', h = SIZE.endedRow, rx = W - PAD - CHEV - GAP, keep = keepWidth(r.title, 12, 400), wt: Weight = failed ? 600 : 400
+  const said = bgReading(r, now, c)
+  const room = (w: number) => rx - w - GAP - TITLE_X
+  // A schedule wider than the reading column, short form and all, or that leaves the title under MIN_CUT, goes to the alt and
+  // the tooltip only: the reading shows the kind word.
+  const brief = r.state === 'scheduled' && r.nextAt === undefined && (!said.l1 || textWidth(said.l1, 12) > READ || room(textWidth(said.l1, 12)) < keep)
+  const l1 = brief ? r.kind : said.l1, tip = brief ? r.schedule ?? '' : said.tip
+  // Sized against the wider line; narrow, line 2 drops first, then line 1, and the title runs over the reading (never under MIN_CUT).
+  const w1 = textWidth(l1, 12, wt), w2 = said.l2 ? textWidth(said.l2, MODEL_PX) : 0
+  const both = !!said.l2 && room(Math.max(w1, w2)) >= keep, one = room(w1) >= keep
+  const readW = both ? Math.max(w1, w2) : w1, titleW = one ? room(readW) : Math.min(rx - TITLE_X, keep), title = fit(r.title, titleW, 12)
+  // An empty text has no tip: its title is the kind word, whole.
+  const cut = !!r.tip && title !== r.tip
+  const lead = `<g transform="translate(13 9)">${icon(failed ? 'cross' : r.kind, 12, failed ? 's-er' : 's-muted')}</g>`
+  // A lone line sits on the title's baseline, centred in the row.
+  const reading = !one ? '' : withTip(tip, !!tip, text(rx, both ? 13 : 19, failed ? 'er' : 'fg', 12, l1, { anchor: 'end', ...(failed ? { weight: 600 as const } : {}) })
+    + (both ? text(rx, 26, 'muted', MODEL_PX, said.l2, { anchor: 'end' }) : ''))
+  // A wakeup's countdown: a still 2 px track under the title to the reading's left edge, filled in muted by the wait used.
+  const track = one && r.kind === 'wakeup' && r.nextAt !== undefined && r.nextAt > r.startedAt
+    ? `<rect x="${TITLE_X}" y="24" width="${n(titleW)}" height="2" rx="1" class="track"/><rect x="${TITLE_X}" y="24" width="${n(titleW * trackShare(now, r.startedAt, r.nextAt))}" height="2" rx="1" class="muted"/>` : ''
+  const BW = W - BG_STOP, hair = (w: number) => (rule ? `<rect x="0" y="0" width="${n(w)}" height="1" class="track"/>` : '')
+  // A failed row's tint spans both images: each runs 8 px past the seam, clipped there, so the row reads as one.
+  const tint = `<rect x="0" y="0" width="${n(BW + 8)}" height="${h}" rx="8" class="needTint"/>`
+  const body = (failed ? tint : hair(BW)) + lead + withTip(r.tip, cut, text(TITLE_X, 19, 'fg', 12, title)) + track + reading
+  const row = image(`bg-${r.h}`, { source: doc(BW, h, body), alt: `${r.title}, ${r.kind}, ${said.said}${cut ? `: ${r.tip}` : ''}`, width: n(BW), height: h }, false)
+  if (failed) return { type: 'Box', props: { flexDirection: 'row' }, children: [row,
+    image(`slot-${r.h}`, { source: doc(BG_STOP, h, `<rect x="-8" y="0" width="${BG_STOP + 8}" height="${h}" rx="8" class="needTint"/>`), alt: 'Failed, no Stop', width: BG_STOP, height: h }, false)] }
+  // A button: a 20 px wash box, radius 6, the filled square at its centre, at the chevron's centre; the press is the whole slot.
+  const stop = image(`stop-${r.h}`, { source: doc(BG_STOP, h, `${hair(BG_STOP)}<rect x="2" y="5" width="20" height="20" rx="6" class="wash"/><g transform="translate(6 9)">${stopSquare('muted')}</g>`),
+    alt: `Stop ${r.title}`, width: BG_STOP, height: h, press: `stop:${r.h}`, hover: true }, false)
+  return { type: 'Box', props: { flexDirection: 'row' }, children: [row, stop] }
+}
+
+const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ, cost = true, clock = UTC24): El => {
   switch (item.kind) {
     case 'head': return head(item.crew, W, cost)
     case 'section': return section(item, W)
@@ -388,7 +458,9 @@ const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge =
     case 'helper': return helper(item.agent, item.walk, item.depth, W, now, edge, still)
     case 'kids': return kids(item, W)
     case 'ended': return endedRow(item.agent, W, now, still)
-    case 'more': return image(`more-${item.section}`, { source: doc(W, 22, text(CRAB + GAP, 15, 'muted', 12, `+${item.count} more`)), alt: `${item.count} more agents`, width: n(W), height: 22 }, false)
+    case 'bg': return bgRow(item.row, W, now, !!item.rule, clock)
+    case 'more': return image(`more-${item.section}`, { source: doc(W, 22, text(CRAB + GAP, 15, 'muted', 12, `+${item.count} more`)),
+      alt: `${item.count} more ${item.section === 'background' ? 'background tasks' : 'agents'}`, width: n(W), height: 22 }, false)
     case 'empty': {
       const [cw, ch] = SIZE.crab.L, x = (W - cw) / 2
       const say = text(W / 2, 76, 'fg', 13, 'No agents yet', { anchor: 'middle' }) + text(W / 2, 94, 'muted', 12, 'Agents you start show up here', { anchor: 'middle' })
@@ -430,8 +502,9 @@ const costsView = (s: SessionStat, W: number): El[] => {
 export const paneTree = (v: PaneView): El => {
   const W = v.columns * CELL_PX
   if (v.ui.view === 'costs') return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: costsView(v.session, W) }
-  const items = paneLayout(v.crew, v.ui, v.loops, itemCost, v.offer), edge = readEdge(items, W, v.now)
-  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge, v.showCost !== false)) }
+  const items = paneLayout(v.crew, v.ui, v.loops, itemCost, v.offer, v.background), edge = readEdge(items, W, v.now)
+  const clock: Clock = { hour12: !!v.hour12, offsetMin: Number.isFinite(v.offsetMin) ? v.offsetMin! : 0 }
+  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge, v.showCost !== false, clock)) }
 }
 
 // The measuring bench: `count` walking M crabs, past the loop budget. Eased keeps the walk's size and keyframes on an

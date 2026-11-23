@@ -98,3 +98,9 @@ test('columns: at four columns session stays and tokens steps aside', () => {
   expect(fit(candidates(s, crew(), 'full', false), 4)).toEqual(['context', '5h', '7d', 'session'])
   expect(fit(candidates(s, crew(), 'full', false), 5)).toEqual(['context', '5h', '7d', 'session', 'tokens'])
 })
+test('columns: background work alone brings the folded agents column and the one-line agents part', () => {
+  const bg = crew({ background: { running: 0, waiting: 2, failed: 0, lead: 'cron' } })
+  expect(prio(candidates(stats(), bg, 'gauges', false)).agents).toBe(99)
+  expect(prio(candidates(stats(), bg, 'full', false)).agents).toBeUndefined()
+  expect(lineParts(stats(), bg)).toEqual(['context', 'session', 'agents'])
+})

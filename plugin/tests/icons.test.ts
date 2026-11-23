@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { segBar, dial, stepBlocks, toggleIcon } from '../hooks/icons'
+import { segBar, dial, stepBlocks, toggleIcon, icon, stopSquare } from '../hooks/icons'
 
 test('icons: a live segment is never under 8 percent', () => expect(segBar([{ state: 'live', role: 'test', fill: 0.01 }], 100, 'full')).toContain('width="8"'))
 test('icons: a failed segment is solid er', () => expect(segBar([{ state: 'failed', fill: 0 }], 100, 'full')).toContain('class="er"'))
@@ -24,4 +24,12 @@ test('icons: a crowded bar stays inside its width', () => {
   const svg = segBar(Array.from({ length: 40 }, () => ({ state: 'done' as const, fill: 1 })), 60, 'compact')
   const ends = [...svg.matchAll(/x="([\d.]+)" y="0" width="([\d.]+)"/g)].map(m => +m[1] + +m[2])
   expect(Math.max(...ends)).toBeLessThanOrEqual(60)
+})
+test('icons: the background kinds are distinct stroked paths, scaled to the size asked', () => {
+  const names = ['shell', 'monitor', 'cron', 'wakeup'] as const, ds = names.map(k => /d="([^"]+)"/.exec(icon(k, 12, 's-muted'))![1])
+  expect(new Set(ds).size).toBe(names.length)
+  for (const k of names) { expect(icon(k, 12, 's-muted')).toContain('fill="none"'); expect(icon(k, 10, 's-er')).toContain('scale(0.83)') }
+})
+test('icons: Stop is a filled rounded square of 8 in a 12 box, in the fill class asked', () => {
+  expect(stopSquare('muted')).toBe('<rect x="2" y="2" width="8" height="8" rx="1.5" class="muted"/>')
 })
