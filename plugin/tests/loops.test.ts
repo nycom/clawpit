@@ -118,3 +118,21 @@ test('loops: a nested helper walks like a helper; a waiting nested helper beats 
   const w = agent('need'), p = pickLoops(crewOf(agent('running', { helpers: [agent('running', { helpers: [w] })] })), ui('full', true), true, false)
   expect(p.chipPulse).toBe(true); expect(p.ring).toBeNull(); expect(p.walkers.length).toBe(BUDGET.walkersOnBeat)
 })
+
+test('loops: a session need that waited longest takes the one ring; the count stays that of one waiting agent', () => {
+  const waiter = agent('need', { waitingSince: 500 }), rs = running(2)
+  const one = pickLoops(crewOf(waiter, ...rs), ui('full', true), true, false)
+  const both = pickLoops({ ...crewOf(waiter, ...rs), sessionNeed: { question: 'q', since: 100 } }, ui('full', true), true, false)
+  expect(both.ring).toBe('session'); expect(both.count).toBe(one.count); expect(both.walkers).toEqual(one.walkers)
+  expect(pickLoops({ ...crewOf(waiter, ...rs), sessionNeed: { question: 'q', since: 900 } }, ui('full', true), true, false).ring).toBe(waiter.id)
+  // Alone, idle: the ring and the chip pulse, nothing else; with the pane closed, the pulse alone.
+  const alone = { ...crewOf(), sessionNeed: { question: 'q', since: 100 } }
+  expect(pickLoops(alone, ui('full', true), false, false)).toEqual({ walkers: [], chipPulse: true, ring: 'session', mascot: 'still', count: 2 })
+  expect(pickLoops(alone, ui('full', false), false, false)).toEqual({ walkers: [], chipPulse: true, ring: null, mascot: 'still', count: 1 })
+  expect(pickLoops(alone, ui('gauges', false), false, false).mascot).toBe('hop')
+})
+
+test('loops: a session need and an agent that waited just as long: the tie goes to the session', () => {
+  const waiter = agent('need', { waitingSince: 500 })
+  expect(pickLoops({ ...crewOf(waiter), sessionNeed: { question: 'q', since: 500 } }, ui('full', true), true, false).ring).toBe('session')
+})

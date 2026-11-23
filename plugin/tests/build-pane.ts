@@ -4,6 +4,7 @@ import { crewOf } from '../hooks/model'
 import { pickLoops } from '../hooks/loops'
 import { paneLayout } from '../hooks/pane/layout'
 import { itemCost, type PaneView } from '../hooks/pane/draw'
+import { offersOf } from '../hooks/setup'
 import { ETA, NOW, STATES, USUALLY, type Fixture, type StateName } from './fixtures/states'
 
 // Crews no named fixture shows, built from hydra's: k1 waits on you; k3 helps k1, one level deeper.
@@ -23,11 +24,11 @@ export const paneViewOf = (state: StateName | keyof typeof EXTRA, over: Partial<
   const f: Fixture = state in EXTRA ? EXTRA[state as keyof typeof EXTRA] : STATES[state as StateName]
   const crew = crewOf({ ...f, etaOf: (r: SavvyRun) => ETA[r.id] ?? { kind: 'none' }, usuallyOf: (r: SavvyRun) => USUALLY[r.id] ?? null, now: NOW })
   const ui = over.ui ?? f.ui
-  return { crew, ui, loops: pickLoops(crew, ui, f.busy, f.armed), columns: 52, now: NOW, session: f.stats.session, ...over }
+  return { crew, ui, loops: pickLoops(crew, ui, f.busy, f.armed), columns: 52, now: NOW, session: f.stats.session, offer: offersOf(f.config ?? [])[0] ?? null, ...over }
 }
 
-// The pane's own looping drawings: walkers with a row on screen, plus the ring.
+// The pane's own looping drawings: walkers with a row on screen, plus the ring (on an agent or the session).
 export const paneLoopCount = (v: PaneView): number => {
   const items = paneLayout(v.crew, v.ui, v.loops, itemCost)
-  return items.filter(i => (i.kind === 'row' || i.kind === 'helper') && i.walk).length + (items.some(i => i.kind === 'row' && i.ring) ? 1 : 0)
+  return items.filter(i => (i.kind === 'row' || i.kind === 'helper') && i.walk).length + (items.some(i => (i.kind === 'row' || i.kind === 'session') && i.ring) ? 1 : 0)
 }

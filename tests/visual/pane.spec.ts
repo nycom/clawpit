@@ -10,6 +10,21 @@ for (const s of SHOTS) for (const theme of ['dark', 'light'] as const) for (cons
     await show(page, paneTree(paneViewOf(s, { columns: w })), { surface: 'pane', widthCells: w, theme })
     await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })  // exact: a 1% ratio hid a stale baseline
   })
+// The main session waiting on you, alone and above a waiting agent, at 41 cells as well.
+const SESSION = ['sessionNeed', 'sessionNeedCrew'] as const
+for (const s of SESSION) for (const theme of ['dark', 'light'] as const) for (const w of [28, 30, 36, 41, 52] as const)
+  test(`pane: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
+    await show(page, paneTree(paneViewOf(s, { columns: w })), { surface: 'pane', widthCells: w, theme })
+    await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })
+  })
+
+// The one-time setup row, in an empty pane and over two running agents, at 41 cells as well.
+const OFFER = ['offer', 'offerCrew'] as const
+for (const s of OFFER) for (const theme of ['dark', 'light'] as const) for (const w of [28, 30, 36, 41, 52] as const)
+  test(`pane: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
+    await show(page, paneTree(paneViewOf(s, { columns: w })), { surface: 'pane', widthCells: w, theme })
+    await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })
+  })
 
 test('pane: nothing animates while idle', async ({ page }) => {
   await show(page, paneTree(paneViewOf('emptyPane')), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
@@ -39,3 +54,20 @@ for (const s of ['hydra', 'needsYou', 'both', 'helperNeedsYou', 'nestedHelper'] 
 test('pane: every Svg and Client has a non-empty alt', () => {
   for (const s of SHOTS) { const a = alts(paneTree(paneViewOf(s))); expect(a.length).toBeGreaterThan(0); expect(a.every(x => x.trim().length > 0)).toBe(true) }
 })
+
+// The session's ring is the pane's one ring: stepped, counted, in the budget.
+for (const s of SESSION)
+  test(`pane: ${s} loops match the plan and the budget, and every image has an alt`, async ({ page }) => {
+    const v = paneViewOf(s); await show(page, paneTree(v), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
+    const l = await loops(page); expect(l.eased).toBe(0); expect(l.drawings).toBe(paneLoopCount(v)); expect(l.drawings).toBeGreaterThan(0)
+    expect(l.drawings).toBeLessThanOrEqual(BUDGET.max)
+    expect(alts(paneTree(v)).every(x => x.trim().length > 0)).toBe(true)
+  })
+
+// The setup row adds no loop, and each of its three images has an alt.
+for (const s of OFFER)
+  test(`pane: ${s} adds no loop, and every image has an alt`, async ({ page }) => {
+    const v = paneViewOf(s); await show(page, paneTree(v), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
+    expect((await loops(page)).drawings).toBe(paneLoopCount(v)); expect(paneLoopCount(v)).toBe(paneLoopCount({ ...v, offer: null }))
+    expect(alts(paneTree(v)).every(x => x.trim().length > 0)).toBe(true)
+  })

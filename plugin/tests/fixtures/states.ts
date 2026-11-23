@@ -1,14 +1,19 @@
 // Named fixture states, shared by the unit tests and the visual suite. `hydra` is the mockup's dataset
 // (seed() and ST in design/mockups-all.html); the flow's task titles equal the run descriptions they match,
 // as savvy-progress's contract asks of real data.
-import type { Activity, Eta, LogLine, SavvyFlow, SavvyRun, Stats, Ui } from '../../types'
+import type { ConfigRow } from 'claude-code'
+import type { Activity, Eta, LogLine, SavvyFlow, SavvyNeed, SavvyRun, Stats, Ui } from '../../types'
 
 export const NOW = 1_800_000_000_000
 
 export type StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead'
   | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns' | 'oneRunning' | 'oneNeedsYou'
+  | 'sessionNeed' | 'sessionNeedCrew'
+  | 'filePlan' | 'planOutOfOrder'
+  | 'offer' | 'offerCrew'
 export type Fixture = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>
-  logs: Record<string, LogLine[]>; stats: Stats; ui: Ui; busy: boolean; armed: boolean }
+  logs: Record<string, LogLine[]>; stats: Stats; ui: Ui; busy: boolean; armed: boolean; need?: SavvyNeed | null
+  config?: ConfigRow[] }   // config: the `/config` rows, as $.config.list() returns them
 
 const MAX = 200_000
 const run = (id: string, type: string, description: string, model: string, ago: number, o: Partial<SavvyRun>): SavvyRun =>
@@ -63,6 +68,17 @@ const FLOW: SavvyFlow = {
   title: 'Hydra · retro fixes', total: 7, done: 2, phase: 'delegate', isFinished: false,
   tasks: ['schema', 'api', 'savvy-progress implement', 'e2e tests', 'cache-tax review c1', 'plan the release', 'merge'].map(title => ({ title })),
 }
+// A plan read from a checklist: 12 tasks, 5 checked out of order, no agents.
+const FILE_TASKS = ['schema', 'api', 'docs page', 'auth flow', 'login page', 'settings page', 'search index', 'export csv', 'import csv', 'error pages', 'release notes', 'changelog']
+const FILE_FLOW: SavvyFlow = {
+  title: 'Site rebuild', total: 12, done: 5, phase: 'delegate', isFinished: false, tasks: FILE_TASKS.map(title => ({ title })),
+  doneTitles: ['schema', 'api', 'docs page', 'login page', 'settings page'],
+}
+// api finished first while schema still runs.
+const OUT_OF_ORDER_FLOW: SavvyFlow = {
+  title: 'Site rebuild', total: 4, done: 1, phase: 'delegate', isFinished: false, tasks: ['schema', 'api', 'docs page', 'release notes'].map(title => ({ title })),
+  doneTitles: ['api'],
+}
 const STATS: Stats = {
   context: { pct: 58, msgsPct: 34, turnsLeft: 7, autoPct: 97, alarm: false },
   limits: [
@@ -88,6 +104,11 @@ const FAILED = patch(patch(patch(HYDRA_RUNS,
   'k2', { status: 'failed', heldDone: true, endedAt: NOW - 12_000, failNote: 'no "cacheKey" in src/' })
 const FAILED_ACT = { ...ACTIVITY, rev: act('run', 'Retrying', 'the diff against main', 20_000) }
 const IDLE_STATS: Stats = { ...STATS, turn: null, tests: null }
+// The main session has waited 12 minutes on a question, longer than e2e's 42 seconds in the crew state.
+const SESSION_NEED: SavvyNeed = { text: 'Ship the schema change behind a flag, or migrate every row now?', since: NOW - 12 * 60_000 }
+// savvy-progress's session-need setting, not yet asked: the one row the pane offers.
+const UNASKED: ConfigRow[] = [{ key: 'savvy-progress.sessionNeed', label: 'Session needs you', description: 'Light Needs you when this session asks you a question?',
+  kind: 'choice', value: 'unasked', options: ['unasked', 'off', 'both', 'ask', 'tool'], provider: { plugin: 'savvy-progress', tier: 'user' }, isLocked: false }]
 
 export const STATES: Record<StateName, Fixture> = {
   idle: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, stats: IDLE_STATS, busy: false, armed: false }),
@@ -109,6 +130,14 @@ export const STATES: Record<StateName, Fixture> = {
   // One agent and no plan: the folded agents column names it instead of counting it.
   oneRunning: base({ flow: null, runs: HYDRA_RUNS.filter(r => r.id === 'imp'), parents: {}, ui: { ...UI, size: 'gauges' } }),
   oneNeedsYou: base({ flow: null, runs: NEEDS.filter(r => r.id === 'e2e'), parents: {}, logs: NEEDS_LOGS, ui: { ...UI, size: 'gauges' } }),
+  // No flow in either, so no plan line changes these pictures.
+  sessionNeed: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, stats: IDLE_STATS, busy: false, armed: false, need: SESSION_NEED }),
+  sessionNeedCrew: base({ flow: null, runs: NEEDS, logs: NEEDS_LOGS, need: SESSION_NEED }),
+  filePlan: base({ flow: FILE_FLOW, runs: [], parents: {}, activity: {}, logs: {}, busy: false, armed: false }),
+  // The one-time setup row, in an empty pane and over two running agents.
+  offer: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, stats: IDLE_STATS, busy: false, armed: false, config: UNASKED }),
+  offerCrew: base({ flow: null, runs: HYDRA_RUNS.filter(r => r.id === 'imp' || r.id === 'pln'), parents: {}, config: UNASKED }),
+  planOutOfOrder: base({ flow: OUT_OF_ORDER_FLOW, runs: HYDRA_RUNS.filter(r => r.id === 'imp').map(r => ({ ...r, description: 'schema' })), parents: {} }),
   manyAgents: base({
     flow: null, parents: {}, activity: {}, logs: {},
     runs: Array.from({ length: 80 }, (_, i) => run(`m${i}`, 'general-purpose', `worker ${i + 1}`, 'claude-sonnet-5-5', 10_000 + i * 1_000,

@@ -34,6 +34,7 @@ export type Crew = {
   counts: { need: number; failed: number; running: number; done: number }
   costUsd: number; leftMin: number | null
   plan: Plan | null
+  sessionNeed?: { question: string; since: number }   // the main session waits on you; not an agent, so in no count but alertsOf's
 }
 
 export type ContextStat = { pct: number; msgsPct: number | null; turnsLeft: number | null; autoPct: number | null; alarm: boolean }
@@ -48,8 +49,10 @@ export type ColumnKey = 'context' | 'turn' | '5h' | '7d' | 'plan' | 'session' | 
 export type Column = { key: ColumnKey; priority: number }
 export type Ui = { size: Size; open: string | null; shut: string[]; paneOpen: boolean; view?: 'crew' | 'costs' }   // view: the pane's; absent is crew
 export type Mascot = 'hop' | 'sway' | 'walk' | 'still'
-export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }
+export type LoopPlan = { walkers: string[]; chipPulse: boolean; ring: string | null; mascot: Mascot; count: number }   // ring: an agent id, or 'session'
 export type Settle = { from: number; to: number; at: number }   // at: when the value moved, so the sweep runs once
+/** A `/config` row offered once in the pane: Yes writes `yes`, No writes `no`; `more`: how many offers wait after it. */
+export type Offer = { key: string; label: string; question: string; yes: string; no: string; more: number }
 export type ImageProps = { source: string; alt: string; width: number; height: number; press?: string; hover?: boolean; zones?: { to: number; press: string }[] }   // zones: presses by x, each up to `to` px
 
 export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
@@ -61,12 +64,15 @@ export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
   failNote?: string; failLine?: string }
 /** The fields of ponytail's `band` atom that clawpit reads (ponytail 5.3.3 `hooks/band/types.d.ts`). */
 export type PonytailBand = { reused: string[]; created: string[]; openCallers: string[] }
-export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[] }
+/** savvy's `need` atom: the main session waits on the person. */
+export type SavvyNeed = { text: string; since: number }
+export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[]
+  doneTitles?: string[] }  // savvy's norm()-normalised titles of the tasks known done; older savvy leaves it out
 
 declare module 'claude-code' {
   interface PluginState {
     clawpit: { takeover: boolean; stats: Stats; ui: Ui; tick: number; idleSince: number | null }
-    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[] }
+    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[]; need?: SavvyNeed | null; stages?: string[] }
     ponytail: { band: PonytailBand }
   }
 }

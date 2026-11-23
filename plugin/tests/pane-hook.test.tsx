@@ -386,3 +386,167 @@ test('pane hook: the costs press opens the pane on the costs view; the back row 
   expect((await client(ui, 'row-w1'))?.alt).toMatch(/^fix the cache, /)
   await ui.unmount()
 })
+
+// The /config menu beneath clawpit, as a plugin of its own, since a plugin's own config.set hooks skip its own writes.
+// It announces each write, with who made it, on its `wrote` atom; the test's rows take the value from there.
+const NEED_KEY = 'savvy-progress.sessionNeed'
+type Write = { key: string; value: unknown; by: string }
+const menu = {
+  name: 'menu',
+  register(on: OnT) {
+    on('config.set', async ($, e, next) => {
+      await $.state.set({ plugin: 'menu', key: 'wrote' } as never, { key: e.key, value: e.value, by: next.origin.plugin } as never)
+      return { value: e.value }
+    })
+  },
+}
+const refusingMenu = { name: 'menu', register(on: OnT) { on('config.set', () => ({ deny: 'a managed setting owns it' })) } }
+// The person changing a row in /config, as another plugin would.
+const picker = {
+  name: 'picker',
+  register(on: OnT) {
+    on('tool.call', { tool: 'config-pick' }, async ($, e) => { await $.config.set((e as unknown as { pick: never }).pick); return { result: {} } as never })
+  },
+}
+// savvy-progress's unasked session-need row at its last written value, every write and every toast.
+const configRows = (on: OnT, options = ['unasked', 'off', 'both', 'ask', 'tool']) => {
+  const row = { key: NEED_KEY, label: 'Session needs you', description: 'Light Needs you when this session asks you a question?', kind: 'choice', value: 'unasked' as unknown,
+    options, provider: { plugin: 'savvy-progress', tier: 'user' }, isLocked: false }
+  const writes: Write[] = [], toasts: string[] = []
+  on('state.set', { plugin: 'menu', key: 'wrote' } as never, (_$, e, next) => { const x = e.value as unknown as Write; writes.push(x); if (x.key === NEED_KEY) row.value = x.value; return next(e) })
+  const listed = { afterWrite: 0 }
+  on('config.list', () => { if (writes.length) listed.afterWrite += 1; return { value: [{ ...row }] } as never })
+  on('ui.toast', (_$, e) => { toasts.push(e.text); return { value: undefined } as never })
+  return { toasts, writes, listed }
+}
+const offerShown = async (ui: Pane) => (await svgAlt(ui, /^One-time setup: /))?.alt
+
+test('pane hook: a Yes press writes the yes value through $.config.set, the row goes and a toast says it is saved and what it costs', { plugins: [savvy, menu] }, async ($, on) => {
+  setup(on)
+  const c = configRows(on)
+  await start($)
+  const ui = await pane($)
+  expect(await offerShown(ui)).toBe('One-time setup: Light Needs you when this session asks you a question?')
+  await press(ui, 'offer-yes')
+  expect(c.writes).toEqual([{ key: NEED_KEY, value: 'both', by: 'clawpit' }])
+  expect(c.toasts).toEqual(['Saved. Change it any time in /config. This opts into about 40 schema tokens; the progress field takes effect from the next session.'])
+  expect(await offerShown(ui)).toBeUndefined(); expect(await client(ui, 'offer-yes')).toBeUndefined()
+  await ui.unmount()
+})
+
+test('pane hook: a No press writes the no value and the toast says only that it is saved', { plugins: [savvy, menu] }, async ($, on) => {
+  setup(on)
+  const c = configRows(on)
+  await start($)
+  const ui = await pane($)
+  await press(ui, 'offer-no')
+  expect(c.writes.map(x => x.value)).toEqual(['off']); expect(c.toasts).toEqual(['Saved. Change it any time in /config.'])
+  expect(await offerShown(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('pane hook: a refused write toasts the reason once, hides the row and remembers the key, so the next session does not ask', { plugins: [savvy, refusingMenu] }, async ($, on) => {
+  const w = setup(on)
+  const c = configRows(on)
+  await start($)
+  const ui = await pane($)
+  await press(ui, 'offer-yes')
+  expect(c.toasts).toEqual(['Not saved: a managed setting owns it']); expect(await offerShown(ui)).toBeUndefined()
+  expect(w.store.get(`offerRefused:${NEED_KEY}`)).toBe(true)
+  await start($)
+  expect(await offerShown(ui)).toBeUndefined(); expect(c.toasts.length).toBe(1)
+  await ui.unmount()
+})
+
+// No menu plugin: the engine's own writer rejects the call.
+test('pane hook: a rejected write is remembered like a refusal', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on)
+  const c = configRows(on)
+  await start($)
+  const ui = await pane($)
+  await press(ui, 'offer-no')
+  expect(c.toasts.length).toBe(1); expect(c.toasts[0]).toMatch(/^Not saved: \S/)
+  expect(await offerShown(ui)).toBeUndefined(); expect(w.store.get(`offerRefused:${NEED_KEY}`)).toBe(true)
+  await ui.unmount()
+})
+
+test('pane hook: the setup row hides while an agent needs you, comes back when it clears, and is absent on the costs view', { plugins: [savvy, menu] }, async ($, on) => {
+  setup(on)
+  configRows(on)
+  await start($)
+  await setRuns($, [run('w1', 'fix the cache', { blocked: 'Keep the old key?' })])
+  const ui = await pane($)
+  expect(await offerShown(ui)).toBeUndefined()
+  await setRuns($, [run('w1', 'fix the cache')])
+  expect(await offerShown(ui)).toMatch(/^One-time setup: /)
+  await ui.post({ press: 'costs' }, { in: 'row-w1' })
+  expect(await offerShown(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('pane hook: a change made in /config removes the row', { plugins: [savvy, menu, picker] }, async ($, on) => {
+  setup(on)
+  const c = configRows(on)
+  await start($)
+  const ui = await pane($)
+  expect(await offerShown(ui)).toMatch(/^One-time setup: /)
+  await $.tool.call({ tool: 'config-pick', pick: { key: NEED_KEY, value: 'ask' } } as never)
+  expect(c.writes).toEqual([{ key: NEED_KEY, value: 'ask', by: 'picker' }])
+  expect(await offerShown(ui)).toBeUndefined(); expect(c.toasts).toEqual([])
+  await ui.unmount()
+})
+
+test('pane hook: with no $.config (an older CLI) the setup row never shows and nothing else changes', { plugins: [savvy] }, async ($, on) => {
+  setup(on)
+  on('config.list', () => { throw new Error('no such call') })
+  await start($)
+  const ui = await pane($)
+  expect(await offerShown(ui)).toBeUndefined()
+  expect((await svgAlt(ui, /^No agents yet/))?.alt).toBe('No agents yet. Agents you start show up here')
+  await ui.unmount()
+})
+
+test('pane hook: /clawpit-setup answering the session-need row takes the one-time row down', { plugins: [savvy, menu] }, async ($, on) => {
+  setup(on)
+  const c = configRows(on)
+  on('store.delete', () => ({ value: undefined }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('tool.call', { tool: 'AskUserQuestion' } as never, ((_$: unknown, e: { questions: { question: string }[] }) => ({ result: { answers: { [e.questions[0].question]: 'ask' } } })) as never)
+  await start($)
+  const ui = await pane($)
+  expect(await offerShown(ui)).toMatch(/^One-time setup: /)
+  await $.command.run({ command: 'clawpit-setup', args: '' })
+  // The engine does not show clawpit its own writes, so the command reads the offers again itself: one list after the write besides the one the harness's observer makes.
+  expect(c.listed.afterWrite).toBe(2)
+  expect(c.writes).toEqual([{ key: NEED_KEY, value: 'ask', by: 'clawpit' }])
+  expect(await offerShown(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+const typedOther = (typed: string, options?: string[]) => async ($: Parameters<Parameters<typeof test>[1]>[0], on: OnT) => {
+  setup(on)
+  const c = configRows(on, options)
+  on('store.delete', () => ({ value: undefined }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('tool.call', { tool: 'AskUserQuestion' } as never, ((_$: unknown, e: { questions: { question: string }[] }) => ({ result: { answers: { [e.questions[0].question]: typed } } })) as never)
+  await start($)
+  await $.command.run({ command: 'clawpit-setup', args: '' })
+  expect(c.writes).toEqual([{ key: NEED_KEY, value: typed, by: 'clawpit' }])
+}
+test('pane hook: /clawpit-setup takes typed Other text that is an option value', { plugins: [savvy, menu] }, typedOther('off') as never)
+test('pane hook: /clawpit-setup takes typed Other text for a value that has no button', { plugins: [savvy, menu] }, typedOther('extra', ['unasked', 'off', 'both', 'ask', 'tool', 'extra']) as never)
+
+test('pane hook: the head hides agent cost when the showCost row reads false, and shows it when the row is true or missing', { plugins: [savvy, person] }, async ($, on) => {
+  setup(on)
+  let rows: unknown[] = []
+  on('config.list', () => ({ value: rows }) as never)
+  const cost = { key: 'savvy-progress.showCost', label: 'Show cost', description: 'Show the cost?', kind: 'boolean', isLocked: false, provider: { plugin: 'savvy-progress', tier: 'user' } }
+  for (const [list, shown] of [[[], true], [[{ ...cost, value: true }], true], [[{ ...cost, value: false }], false]] as const) {
+    rows = [...list]
+    await start($)
+    await spawn($, 'fix the cache')
+    const ui = await pane($)
+    expect(String((await svgAlt(ui, /: .*running/))?.alt).includes('≈$')).toBe(shown)
+    await ui.unmount()
+  }
+})

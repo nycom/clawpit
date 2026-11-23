@@ -2,11 +2,13 @@ import type { Eta } from '../../types'
 
 export type History = Record<string, number[]>
 
-const STAGES = ['implement', 'review', 'fix', 'validate', 'recheck', 'merge', 'docs']
-export const stageOf = (description: string): string => { const d = description.toLowerCase(); return STAGES.find(s => new RegExp(`\\b${s}\\b`).test(d)) ?? '' }
+export const STAGES = ['implement', 'review', 'fix', 'validate', 'recheck', 'merge', 'docs']
+// Main's \b rule byte for byte (ASCII letters, digits and _ make a word); the word is text, not a pattern.
+const wordIn = (d: string, w: string) => new RegExp(`(?<![A-Za-z0-9_])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`).test(d)
+export const stageOf = (description: string, words: readonly string[] = STAGES): string => { const d = description.toLowerCase(); return words.find(s => s && wordIn(d, s)) ?? '' }
 
-export const keysOf = (type: string, model: string, description: string): [string, string, string] =>
-  [`${type} · ${model} · ${stageOf(description)}`, `${type} · ${model}`, type]
+export const keysOf = (type: string, model: string, description: string, words: readonly string[] = STAGES): [string, string, string] =>
+  [`${type} · ${model} · ${stageOf(description, words)}`, `${type} · ${model}`, type]
 
 export const record = (h: History, keys: readonly string[], ms: number): History => {
   const next = { ...h }

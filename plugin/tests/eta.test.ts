@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { estimate, keysOf, record, stageOf, usually, type History } from '../hooks/track/eta'
+import { STAGES, estimate, keysOf, record, stageOf, usually, type History } from '../hooks/track/eta'
 
 test('eta: under three runs at every level gives none', () => expect(estimate({ k: [60_000, 60_000] }, ['k'], 0)).toEqual({ kind: 'none' }))
 test('eta: before the median it counts down to the median', () =>
@@ -18,7 +18,27 @@ test('eta: record keeps the last twenty at all three levels', () => {
 })
 test('eta: stageOf finds the first stage word', () => { expect(stageOf('cache-tax review c1')).toBe('review'); expect(stageOf('plan the release')).toBe('') })
 test('eta: stageOf ignores case, as the role does', () => { expect(stageOf('Implement auth')).toBe('implement'); expect(stageOf('REVIEW the fold')).toBe('review') })
+test('eta: keys use the configured words', () => {
+  expect(keysOf('a', 'm', 'build the api', ['build', 'ship'])).toEqual(['a · m · build', 'a · m', 'a'])
+  expect(keysOf('a', 'm', 'implement the api', ['build'])).toEqual(['a · m · ', 'a · m', 'a'])
+})
+test('eta: stageOf matches a configured non-ASCII word, and a word with regex characters only as text', () => {
+  expect(stageOf('api évaluer c1', ['évaluer'])).toBe('évaluer'); expect(stageOf('api réévaluer c1', ['évaluer'])).toBe('évaluer')
+  expect(stageOf('ccc fix', ['c++', '(x', 'fix'])).toBe('fix'); expect(stageOf('fix c++ thing', ['(x', 'c++', 'fix'])).toBe('c++')
+})
+test('eta: stageOf keeps the whole-word rule where _ is part of a word', () => {
+  expect(stageOf('fix_tests')).toBe(''); expect(stageOf('schema review c1')).toBe('review')
+})
+test('eta: falls back to STAGES when savvy publishes nothing', () => {
+  expect(keysOf('a', 'm', 'fix the cache')).toEqual(['a · m · fix', 'a · m', 'a'])
+  expect(stageOf('review it', STAGES)).toBe('review')
+})
 test('eta: usually is the median in whole minutes, or null', () => {
   expect(usually({ k: [60_000, 180_000, 240_000, 300_000] }, ['k'])).toBe(4)
   expect(usually({ k: [60_000] }, ['k'])).toBeNull()
+})
+
+test('eta: stageOf matches as main does, so a non-ASCII letter beside a word does not block it', () => {
+  expect(stageOf('préfix the cache')).toBe('fix'); expect(stageOf('api fixé')).toBe('fix'); expect(stageOf('fix_tests')).toBe('')
+  expect(stageOf('api évaluer c1', ['évaluer'])).toBe('évaluer'); expect(stageOf('api x', [''])).toBe('')
 })

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
-import type { SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
-import { crewOf } from './model'
+import type { ConfigValue, EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
+import type { Offer, SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
+import { crewOf, needOf } from './model'
 import { pickLoops } from './loops'
 import { moving, nextSize, parseSize, settle } from './panel/fold'
 import { panelTree, type PanelView } from './panel/draw'
@@ -10,13 +10,14 @@ import { benchTree, paneTree, type PaneView } from './pane/draw'
 import { emptyFacts, isEdit, linesOf, onThink, onTool } from './track/activity'
 import { diff, type Logs } from './track/steplog'
 import { parseTests } from './track/tests'
-import { estimate, keysOf, record, usually, type History } from './track/eta'
+import { STAGES, estimate, keysOf, record, usually, type History } from './track/eta'
 import { emptyTurn, IDLE_ARM_MS, isArmed, onComplete, onCost, onLines, onStart } from './track/turn'
 import { paceOf } from './track/pace'
 import { contextOf, pushTurn, type CtxInput } from './track/context'
 import { codeOf } from './track/code'
 import { clip, oneLine } from './text'
 import { MOTION } from './tokens'
+import { OFFER_FROM, OFFER_NOTE, offersOf, questionsOf, writesOf, type Answer } from './setup'
 
 // Wiring only: the atoms, the observers that feed the trackers, the render hooks, the Client presses, and `view`.
 
@@ -31,6 +32,16 @@ const tick = atom({ plugin: 'clawpit', key: 'tick' } as const, 0)
 const idleSince = atom({ plugin: 'clawpit', key: 'idleSince' } as const, null)
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
+const need = atom({ plugin: 'savvy-progress', key: 'need' } as const, null)
+const stages = atom({ plugin: 'savvy-progress', key: 'stages' } as const, [])
+
+// The stage words savvy publishes (the part before "="); anything but a non-empty list of strings falls back to STAGES (a non-string throws in split).
+const stageWords = async ($: EngineInterface): Promise<readonly string[]> => {
+  try {
+    const v = await read($, stages)
+    return Array.isArray(v) && v.length > 0 ? v.map(x => x.split('=')[0]) : STAGES
+  } catch { errors += 1; return STAGES }
+}
 
 // Module memory: facts that change per tool call never touch an atom; the tick repaints them.
 let facts = emptyFacts()
@@ -47,6 +58,7 @@ let ctxHistory: number[] = []
 let limits: SessionRateLimit[] = []
 let settles: Record<string, Settle> = {}
 let planSince: number | null = null            // when the plan bar first showed
+let needShown = false                           // savvy's need atom holds a need: its age reads in minutes
 let errors = 0
 let ticker: Timer | null = null
 let period = 0
@@ -55,16 +67,21 @@ let booted: Promise<void> | null = null
 let paneAsked = false                           // the pane opened by itself this session
 let benchOn = false                             // the `bench` setting, read at each load: /clawpit-bench is registered
 let benchReg: Promise<unknown> | null = null
+let setupReg: Promise<unknown> | null = null
 let animations = true                           // the `animations` setting, read at each load: off draws nothing that moves
 let bench: { count: number; eased: boolean } | null = null
+let offers: Offer[] = []                       // the /config rows still to ask about once; the pane shows the first
+let showCost = true                             // false when the savvy-progress showCost row reads false; a missing row shows
+let refused = new Set<string>()                 // keys a write was refused for, kept in the store as offerRefused:<key>
 
 // The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
 const BENCH_MAX = 48
 
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
-  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null
-  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; bench = null
+  turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
+  ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; setupReg = null; bench = null
+  offers = []; refused = new Set(); showCost = true
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -82,11 +99,11 @@ const takeUsage = (u: { context: { percent?: number; breakdown?: CtxInput['break
 
 const writeStats = async ($: EngineInterface) => { const v = statsOf(await $.clock.now(), null); await update($, stats, () => v) }
 
-// The tick (design §4): 1 Hz while a main turn or an agent runs; once a minute while tests, a limit or an armed failed run is shown.
+// The tick (design §4): 1 Hz while a main turn or an agent runs; once a minute while tests, a limit, an armed failed run or a session need is shown.
 // shortcut: "on screen" is read as "present"; the render hooks know the fitted columns, so pass them in if idle minute ticks show up.
 const periodOf = (now: number) =>
   turn.turn || seen.some(r => r.status === 'running') ? 1000
-    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) ? 60_000 : 0
+    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) || needShown ? 60_000 : 0
 
 const writeTick = async ($: EngineInterface) => {
   try { const at = await $.clock.now(); await update($, tick, () => at); await retick($) } catch { errors += 1 }
@@ -103,7 +120,7 @@ const retick = async ($: EngineInterface) => {
 const recordEta = async ($: EngineInterface, id: string, ms: number) => {
   const run = (await read($, agents)).find(r => r.agentId === id || r.id === id) ?? spawns[id]
   if (!run) return
-  const keys = keysOf(run.type, run.model, run.description)
+  const keys = keysOf(run.type, run.model, run.description, await stageWords($))
   history = record(history, keys, ms)
   for (const k of keys) await $.store.set(`eta:${k}`, history[k])
 }
@@ -112,10 +129,38 @@ const loadStore = async ($: EngineInterface) => {
   const size = parseSize(await $.store.get('size'))
   await update($, ui, () => ({ ...UI0, size }))
   for (const k of await $.store.keys()) {
+    if (k.startsWith('offerRefused:')) refused.add(k.slice(13))
     if (!k.startsWith('eta:')) continue
     const v = await $.store.get(k)
     if (Array.isArray(v)) history[k.slice(4)] = v.filter((n): n is number => typeof n === 'number' && Number.isFinite(n)).slice(-20)
   }
+}
+
+// The setup offers from the /config list; an older CLI has no $.config, so nothing is offered.
+const readOffers = async ($: EngineInterface) => {
+  try {
+    const rows = await $.config.list()
+    showCost = rows.find(r => r.key === 'savvy-progress.showCost')?.value !== false
+    offers = offersOf(rows.filter(r => !refused.has(r.key)))
+  } catch { errors += 1; offers = []; showCost = true }
+}
+
+// A Yes or No press on the offer shown: written as if in /config. A refused or rejected write is said once and not asked again.
+let answering = false
+const answer = async ($: EngineInterface, yes: boolean) => {
+  const o = offers[0]
+  if (!o || answering) return
+  answering = true
+  try { await saveOffer($, o, yes) } finally { answering = false }
+}
+const saveOffer = async ($: EngineInterface, o: Offer, yes: boolean) => {
+  offers = offers.slice(1)
+  let deny: string | undefined
+  try { ({ deny } = await $.config.set({ key: o.key, value: yes ? o.yes : o.no })) } catch (err) { deny = err instanceof Error ? err.message : String(err) }
+  if (deny !== undefined) { refused.add(o.key); await $.store.set(`offerRefused:${o.key}`, true) }
+  await readOffers($)
+  await writeTick($)
+  $.ui.toast(deny === undefined ? `Saved. Change it any time in /config.${yes && OFFER_NOTE[o.key] ? ` ${OFFER_NOTE[o.key]}` : ''}` : `Not saved: ${clip(oneLine(deny), 200)}`)
 }
 
 // savvy-progress stands its band down on the desktop surface while this is true and keeps drawing on every other surface.
@@ -132,12 +177,17 @@ const takeOver = async ($: EngineInterface) => {
 const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { const s = await $.session.surfaces(); if (s.includes('desktop') || !s.includes('terminal')) await takeOver($) } catch { errors += 1 }
   try { await loadStore($) } catch { errors += 1 }
+  await readOffers($)
   // The engine's record of panes outlives a reload; module memory and the ui atom's paneOpen do not.
   try { if ((await $.ui.panes()).some(p => p.id === PANE_ID)) await update($, ui, u => ({ ...u, paneOpen: true })) } catch { errors += 1 }
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
+  try { needShown = !!needOf(await read($, need)) } catch { errors += 1 }
   try { await retick($) } catch { errors += 1 }
   try { await benchUp($) } catch { errors += 1 }
+  try { await setupUp($) } catch { errors += 1 }
+  // Not awaited: the write runs the config.set observer, which waits for this boot.
+  void applyPending($).catch(() => { errors += 1 })
 })())
 
 // Once per load and session, only with the `bench` setting on. The panel's render calls it too: after /reload-plugins
@@ -145,6 +195,32 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
 const benchUp = ($: EngineInterface) => benchOn ? (benchReg ??= $.command.register({
   name: 'clawpit-bench', description: 'Draws n walking crabs in the Agents pane, past the loop budget; 0 restores it.', argumentHint: '<n> [eased]',
 }).catch(() => { errors += 1 })) : undefined
+
+// Always registered at boot, like benchUp: a registered command is not in the model's context.
+const setupUp = ($: EngineInterface) => (setupReg ??= $.command.register({
+  name: 'clawpit-setup', description: 'Set up clawpit and savvy-progress',
+}).catch(() => { errors += 1 }))
+
+// Writes clawpit's own keys one by one. Writing one reloads clawpit and may end the running handler, so what is left
+// is stored first and applied at the next boot.
+const writeOwn = async ($: EngineInterface, list: { key: string; value: ConfigValue }[]) => {
+  let saved = 0
+  for (const [i, w] of list.entries()) { 
+    await $.store.set('setupPending', list.slice(i + 1))
+    try { if (!(await $.config.set(w)).deny) saved += 1 } catch { errors += 1 }
+  }
+  await $.store.delete('setupPending')
+  return saved
+}
+
+// Answers a reload cut short: only the ones whose row still differs are written, so the reload loop cannot start.
+const applyPending = async ($: EngineInterface) => {
+  const left = await $.store.get('setupPending')
+  if (!Array.isArray(left) || !left.length) return
+  const rows = await $.config.list()
+  const pending: Answer[] = left.flatMap(w => { const r = rows.find(x => x.key === w?.key); return r ? [{ key: r.key, value: w.value, was: r.value }] : [] })
+  await writeOwn($, writesOf(pending))
+}
 
 // The pure tree is rebuilt with the surface's own elements: the engine refuses a plain Svg's `key` prop, and
 // loads a surface module only from a <Client> written here with a literal path.
@@ -308,6 +384,20 @@ export const register: Register = (on, options) => {
     return out
   })
 
+  // savvy's session need: the minute tick runs while it is set, started from this observer's `$`, never a render's.
+  on('state.set', { plugin: 'savvy-progress', key: 'need' }, async ($, e, next) => {
+    const out = await next(e)
+    try { await boot($); if (out.value?.isSet) { needShown = !!needOf(e.value); await retick($) } } catch { errors += 1 }
+    return out
+  })
+
+  // A row changed in /config: a setup offer for it goes (a plugin's key is `<plugin>.<field>`). clawpit's own writes skip this hook, so `answer` reads the list itself.
+  on('config.set', async ($, e, next) => {
+    const out = await next(e)
+    try { await boot($); if (out.deny === undefined && OFFER_FROM.includes(e.key.split('.')[0])) { await readOffers($); await writeTick($) } } catch { errors += 1 }
+    return out
+  })
+
   // clawpit draws its own row only, never what `next(e)` returns; on desktop savvy's band stands down (takeover).
   // shortcut: vscode and mobile pass through like the terminal, and savvy draws its band there; draw clawpit there too if asked.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -333,6 +423,28 @@ export const register: Register = (on, options) => {
     if (bench) await openPane($)
     $.ui.invalidate('ui.render')
     return { text: bench ? `Bench: ${count} ${bench.eased ? 'eased' : 'stepped'} crabs in the Agents pane.` : 'Bench off: the Agents pane is back.' }
+  })
+
+  // `/clawpit-setup`: one engine dialog per boolean or choice row, no model call. Answers are written at the end.
+  on('command.run', { command: 'clawpit-setup' }, async ($, e, next) => {
+    const newer = { text: 'Setup needs a newer Claude Code; use /config.' }
+    let rows
+    try { rows = await $.config.list() } catch { return newer }
+    const { asks, skipped, more } = questionsOf(rows)
+    const answers: Answer[] = []
+    for (const q of asks) {
+      let said: string
+      try { said = await $.ui.ask(q.question, { options: q.labels, header: q.header }) } catch (err) { if (err instanceof TypeError) return newer; break }   // a missing $.ui.ask throws a TypeError; a dismissed dialog rejects
+      const i = q.labels.indexOf(said), v = i >= 0 ? q.values[i] : q.all.find(o => typeof o === 'string' && o === said)   // typed Other text counts when it is an option value
+      if (v !== undefined) answers.push({ key: q.key, value: v, was: q.was })
+    }
+    const writes = writesOf(answers), own = writes.filter(w => w.key.startsWith('clawpit.'))
+    let saved = 0
+    for (const w of writes.filter(x => !own.includes(x))) { try { if (!(await $.config.set(w)).deny) saved += 1 } catch { errors += 1 } }
+    // clawpit's own hooks do not see its own writes, so the offers are read again here.
+    try { await readOffers($); await writeTick($) } catch { errors += 1 }
+    saved += await writeOwn($, own)
+    return { text: `Saved ${saved} ${saved === 1 ? 'setting' : 'settings'}.${skipped ? ` ${skipped} other settings are edited in /config.` : ''}${more.length ? ` More values for ${more.join(', ')} are in /config.` : ''}` }
   })
 
   // paneOpen follows the pane itself. clawpit never closes it: the desktop leaves an emptied tile as a tab no one can close.
@@ -362,6 +474,7 @@ export const register: Register = (on, options) => {
       else if (press.startsWith('ask:') && press.length > 4) await jumpIn($, press.slice(4))
       else if (press === 'costs') { await update($, ui, u => ({ ...u, view: 'costs' })); await openPane($) }
       else if (press === 'crew') await update($, ui, u => ({ ...u, view: 'crew' }))
+      else if (press === 'offer:yes' || press === 'offer:no') await answer($, press === 'offer:yes')
       else if (press.startsWith('kids:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, shut: toggle(u.shut, id) })) }
     } catch { errors += 1 }
     return {}
@@ -374,10 +487,14 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   await read($, tick); await read($, stats)   // read only to subscribe the drawing to the repaints
   let code: Stats['code'] = null
   try { code = codeOf(await read($, { plugin: 'ponytail', key: 'band' } as const)) } catch { errors += 1 }
+  // An older savvy-progress writes no need: missing reads as none.
+  let n: SavvyNeed | null = null
+  try { n = (await read($, need)) ?? null } catch { errors += 1 }
   const now = await $.clock.now()
-  const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description)
+  const words = await stageWords($)
+  const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description, words)
   const crew = crewOf({ flow: f, runs: Array.isArray(runs) ? runs : [], parents, activity: facts.activity, logs, now,
-    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)) })
+    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)), need: n })
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
   if (s.context) settles.context = settle(settles.context, s.context.pct, now)
   for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct, now) }
@@ -386,6 +503,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   return {
     panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations,
       planGrow: animations && planSince !== null && now - planSince < MOTION.fillMs },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost },
   }
 }

@@ -63,3 +63,10 @@ test('paneLayout: a helper of a helper follows it one level deeper; the toggle c
   const shut = paneLayout(crew, { ...STATES.hydra.ui, shut: ['ended', 'rev'] }, noLoops, unit)
   expect(shut.find(i => i.kind === 'kids')).toEqual({ kind: 'kids', parentId: 'rev', count: 3, failed: 1, need: 1, shut: true })
 })
+
+test('paneLayout: a session need asked after the waiting agents is never cut, even when they are', () => {
+  const runs = STATES.manyAgents.runs.map(r => ({ ...r, blocked: 'Which one?' }))
+  const crew = { ...crewOf(input('manyAgents', { runs })), sessionNeed: { question: 'q', since: NOW - 1 } }
+  const items = paneLayout(crew, STATES.manyAgents.ui, noLoops, () => ({ host: 4000, engine: 1800 }))
+  expect(items.some(i => i.kind === 'more' && i.section === 'need')).toBe(true); expect(items.filter(i => i.kind === 'session').length).toBe(1)
+})

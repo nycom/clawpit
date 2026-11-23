@@ -104,6 +104,32 @@ test('planOf: the session accepted count ticks the first tasks; a finished run n
   expect(crewOf(input('hydra', { runs: [failedOnApi] })).plan!.tasks[1].state).toBe('done')
 })
 
+test('planOf: tasks savvy names done tick first, even after a live one', () => {
+  const p = crewOf(input('planOutOfOrder')).plan!
+  expect(p.tasks.map(t => t.state)).toEqual(['live', 'done', 'todo', 'todo']); expect(p.done).toBe(1)
+})
+
+test('planOf: the rest of the count ticks in plan order, skipping tasks with a live, waiting or failed run', () => {
+  const flow = STATES.planOutOfOrder.flow!, runs = STATES.planOutOfOrder.runs
+  const states = (o: Partial<typeof flow>, rs = runs) => crewOf(input('planOutOfOrder', { flow: { ...flow, ...o }, runs: rs })).plan!.tasks.map(t => t.state)
+  expect(states({}, [])).toEqual(['todo', 'done', 'todo', 'todo'])
+  expect(states({ done: 2 })).toEqual(['live', 'done', 'done', 'todo'])
+  expect(states({ done: 2 }, patch(runs, 'imp', { blocked: 'Which table?' }))).toEqual(['need', 'done', 'done', 'todo'])
+  expect(states({ done: 2 }, patch(runs, 'imp', { status: 'failed', heldDone: true, endedAt: NOW }))).toEqual(['failed', 'done', 'done', 'todo'])
+  // with no titles from savvy the count alone ticks, still past the live task; only when short does it tick that one
+  expect(states({ done: 1, doneTitles: undefined })).toEqual(['live', 'done', 'todo', 'todo'])
+  expect(states({ done: 4, doneTitles: undefined })).toEqual(['done', 'done', 'done', 'done'])
+  // titles no longer in the plan are ignored and their count flows on
+  expect(states({ done: 1, doneTitles: ['gone'] })).toEqual(['live', 'done', 'todo', 'todo'])
+})
+
+test('planOf: a done title shared by two tasks ticks both, but never more than the count', () => {
+  const flow = { ...STATES.planOutOfOrder.flow!, tasks: ['api', 'schema', 'api', 'api'].map(title => ({ title })) }
+  const plan = (done: number) => crewOf(input('planOutOfOrder', { flow: { ...flow, done } })).plan!
+  expect(plan(2).tasks.map(t => t.state)).toEqual(['done', 'live', 'done', 'todo'])
+  expect(plan(3).tasks.filter(t => t.state === 'done').length).toBe(3)
+})
+
 test('planOf: design phase reads as plan; a finished flow is null', () => {
   const flow = STATES.hydra.flow!
   expect(crewOf(input('hydra', { flow: { ...flow, phase: 'design' } })).plan!.phase).toBe('plan')
@@ -145,4 +171,15 @@ test('crewOf: an agent carries its run effort, and none when the run has none', 
   const run = (id: string, o: Partial<SavvyRun> = {}) => ({ id, type: 'x', description: id, model: 'claude-opus-5-5', status: 'running', startedAt: 0, contextTokens: 0, contextMax: 1, costUsd: 0, ...o }) as SavvyRun
   const [a, b] = crewOf(input('idle', { runs: [run('a', { effort: 'high' }), run('b')] })).agents
   expect(a.effort).toBe('high'); expect(b.effort).toBeUndefined()
+})
+
+test('crewOf: a session need is its own field, counted once by alertsOf and never as an agent', () => {
+  const need = STATES.sessionNeedCrew.need!, c = crewOf(input('sessionNeedCrew')), plain = crewOf(input('sessionNeedCrew', { need: null }))
+  expect(c.sessionNeed).toEqual({ question: need.text, since: need.since }); expect(plain.sessionNeed).toBeUndefined()
+  expect(c.agents.length).toBe(plain.agents.length); expect(c.counts).toEqual(plain.counts)
+  expect(alertsOf(c)).toEqual({ ...alertsOf(plain), need: alertsOf(plain).need + 1 })
+  const alone = crewOf(input('sessionNeed'))
+  expect(alone.agents).toEqual([]); expect(alertsOf(alone)).toEqual({ need: 1, failed: 0 })
+  // Another plugin's atom: a malformed one is no need.
+  expect(crewOf(input('sessionNeed', { need: { text: 7, since: 'x' } as never })).sessionNeed).toBeUndefined()
 })

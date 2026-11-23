@@ -1,5 +1,5 @@
 import type { Crew, CrewAgent, LoopPlan, Mascot, Ui } from '../types'
-import { alertsOf, helpersOf } from './model'
+import { alertsOf, helpersOf, sessionFirst } from './model'
 
 export const BUDGET = { walkers: 3, walkersOnBeat: 2, max: 12 }
 
@@ -19,8 +19,9 @@ export const pickLoops = (crew: Crew, ui: Ui, busy: boolean, armed: boolean, ani
   let walkers = [...tops, ...helpers].slice(0, beat ? BUDGET.walkersOnBeat : BUDGET.walkers).map(a => a.id)
 
   const chipPulse = beat && ui.size === 'full'
-  const waiters = crew.agents.filter(a => a.state === 'need').sort((a, b) => waited(a) - waited(b))
-  const ring = ui.paneOpen && waiters.length ? waiters[0].id : null
+  // One ring, on the longest waiter: an agent or the main session.
+  const waiter = crew.agents.filter(a => a.state === 'need').sort((a, b) => waited(a) - waited(b))[0]
+  const ring = !ui.paneOpen ? null : sessionFirst(crew, waiter && waited(waiter)) ? 'session' : waiter?.id ?? null
   const mascot: Mascot = ui.size === 'full' ? 'still' : need > 0 ? 'hop' : failed > 0 ? (armed ? 'sway' : 'still') : walkers.length ? 'walk' : 'still'
 
   const count = (w: string[]) =>

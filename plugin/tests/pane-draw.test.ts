@@ -626,3 +626,142 @@ test('pane: a long ended title never runs under its model', () => {
     expect([model, columns, 38 + tw <= +mline[1] - textWidth(mline[2], 10) - 4]).toEqual([model, columns, true])
   }
 })
+
+// The main session waiting on you: a "Claude" row in Needs you, not an agent and not pressable.
+const QUESTION = 'Ship the schema change behind a flag, or migrate every row now?'
+test('pane: a session need alone draws the head, the Needs you header and its row, never the empty state', () => {
+  const t = paneTree(paneViewOf('sessionNeed'))
+  expect(keys(t).filter(k => k !== 'clawpit-pane')).toEqual(['head', 'sec-need', 'session'])
+  expect(words(find(t, 'head'))).toContain('1 needs you · 0 running · 0 done')
+  // No agent, so no crew bar: the bar is one segment per agent.
+  expect(src(find(t, 'head'))).not.toContain('translate(0 26)')
+})
+
+test('pane: the session row is a 62px needs-you row with no press, no hover and no chevron; its alt says where to answer', () => {
+  const row = find(paneTree(paneViewOf('sessionNeed')), 'session')!
+  expect(inner(row).height).toBe(62); expect(inner(row).press).toBeUndefined(); expect(inner(row).hover).toBeUndefined()
+  expect(src(row)).toContain('class="needTint"'); expect(src(row)).not.toContain('M4.5 2.5 8 6l-3.5 3.5')
+  expect(words(row).startsWith('Claude ')).toBe(true); expect(words(row)).not.toMatch(/EXPLORE/)
+  expect(String(inner(row).alt)).toBe(`Claude needs you, waiting 12m: ${QUESTION}. Answer in the prompt.`)
+})
+
+test('pane: the session row reads its age alone up to 30 cells and "waiting 12m" from 36; the question stays left of the reading', () => {
+  const reads: Record<number, string> = { 28: '12m', 30: '12m', 36: 'waiting 12m', 41: 'waiting 12m', 52: 'waiting 12m' }
+  for (const [w, want] of Object.entries(reads)) {
+    const row = find(paneTree(paneViewOf('sessionNeed', { columns: +w })), 'session')!, W = inner(row).width as number
+    const read = [...src(row).matchAll(/<text x="[\d.]+" y="24" class="er" font-size="13" font-weight="600" text-anchor="end">([^<]*)<\/text>/g)].map(m => m[1])
+    expect(read).toEqual([want])
+    const lines = [...src(row).matchAll(/<text x="([\d.]+)" y="(37|53)" class="er" font-size="12" font-weight="600">([^<]*)<\/text>/g)]
+    expect(lines.length).toBeGreaterThan(0)
+    for (const [, x, , s] of lines) { expect(+x).toBe(48); expect(+x + textWidth(unescape(s), 12, 600)).toBeLessThanOrEqual(W - 34 - textWidth(want, 13, 600)) }
+  }
+})
+
+test('pane: a cut session question keeps its full words in a title; a whole one has none', () => {
+  const tip = (cols: number) => src(find(paneTree(paneViewOf('sessionNeed', { columns: cols })), 'session')).match(/<title>([^<]*)<\/title>/)?.[1]
+  expect(unescape(tip(28)!)).toBe(QUESTION)
+  expect(tip(52)).toBeUndefined()
+})
+
+test('pane: the session row sits with the waiting agents by wait and takes the one ring when it waited longest', () => {
+  const v = paneViewOf('sessionNeedCrew'), t = paneTree(v), k = keys(t)
+  expect(k.indexOf('session')).toBeLessThan(k.indexOf('row-e2e')); expect(k.indexOf('sec-need')).toBeLessThan(k.indexOf('session'))
+  expect(src(find(t, 'session'))).toContain('class="s-ring60 ring"'); expect(src(find(t, 'row-e2e'))).not.toContain('animation')
+  expect(paneLoopCount(v)).toBe(paneLoopCount(paneViewOf('needsYou')))
+  // Asked after e2e: below it, still, and e2e rings.
+  const later = { ...v.crew, sessionNeed: { question: QUESTION, since: NOW - 1_000 } }, t2 = paneTree({ ...v, crew: later, loops: pickLoops(later, v.ui, true, true) })
+  const k2 = keys(t2)
+  expect(k2.indexOf('row-e2e')).toBeLessThan(k2.indexOf('session'))
+  expect(src(find(t2, 'session'))).not.toContain('animation'); expect(src(find(t2, 'row-e2e'))).toContain('class="s-ring60 ring"')
+  // The crew bar keeps one segment per agent; the summary counts the session.
+  const plain = paneTree(paneViewOf('sessionNeedCrew', { crew: { ...v.crew, sessionNeed: undefined } }))
+  const bar = (e: El | undefined) => src(e).split('translate(0 26)')[1].split('<text')[0]
+  expect(bar(find(t, 'head'))).toBe(bar(find(plain, 'head'))); expect(words(find(t, 'head'))).toContain('2 needs you')
+})
+
+// The one-time setup row: the question as a plain image, then Yes and No, each its own press.
+const OFFER_Q = 'Light Needs you when this session asks you a question?'
+const offerKeys = (t: El) => keys(t).filter(k => k.startsWith('offer'))
+test('pane: the setup offer sits directly under the head on the crew view, and on top of an otherwise empty pane', () => {
+  expect(keys(paneTree(paneViewOf('offer'))).filter(k => k !== 'clawpit-pane')).toEqual(['offer', 'offer-yes', 'offer-no', 'empty'])
+  const k = keys(paneTree(paneViewOf('offerCrew'))).filter(x => x !== 'clawpit-pane')
+  expect(k.slice(0, 5)).toEqual(['head', 'offer', 'offer-yes', 'offer-no', 'sec-running'])
+  expect(offerKeys(paneTree(paneViewOf('hydra')))).toEqual([])
+})
+
+test('pane: the setup offer hides while anything needs you or has failed, and on the costs view', () => {
+  const offer = paneViewOf('offer').offer
+  for (const s of ['needsYou', 'failed', 'both', 'helperNeedsYou', 'sessionNeed', 'sessionNeedCrew'] as const) expect([s, offerKeys(paneTree(paneViewOf(s, { offer })))]).toEqual([s, []])
+  expect(offerKeys(paneTree(paneViewOf('costs', { offer })))).toEqual([])
+})
+
+test('pane: the setup offer is fixed, so a crew cut into "+N more" keeps it', () => {
+  const t = paneTree(paneViewOf('manyAgents', { offer: paneViewOf('offer').offer }))
+  expect(offerKeys(t)).toEqual(['offer', 'offer-yes', 'offer-no']); expect(keys(t)).toContain('more-running')
+})
+
+test('pane: the setup offer\'s three alts name the question and what each button writes; Yes says what it costs', () => {
+  const t = paneTree(paneViewOf('offer')), text = find(t, 'offer')!, yes = find(t, 'offer-yes')!, no = find(t, 'offer-no')!
+  expect(text.type).toBe('Svg'); expect(inner(text).press).toBeUndefined(); expect(inner(text).height).toBe(56)
+  expect(String(inner(text).alt)).toBe(`One-time setup: ${OFFER_Q}`)
+  expect(String(inner(yes).alt)).toBe('Yes: Session needs you set to both. This opts into about 40 schema tokens; the progress field takes effect from the next session.')
+  expect(String(inner(no).alt)).toBe('No: Session needs you set to off')
+  // A setting with no note says only what it writes.
+  const plain = { ...paneViewOf('offer').offer!, key: 'clawpit.other' }
+  expect(String(inner(find(paneTree(paneViewOf('offer', { offer: plain })), 'offer-yes')!).alt)).toBe('Yes: Session needs you set to both')
+})
+
+test('pane: Yes and No are equal-weight pressable chips, 42 and 38 px wide', () => {
+  const t = paneTree(paneViewOf('offerCrew')), yes = find(t, 'offer-yes')!, no = find(t, 'offer-no')!
+  expect([yes.type, no.type]).toEqual(['Client', 'Client'])
+  expect([inner(yes).press, inner(no).press]).toEqual(['offer:yes', 'offer:no']); expect([inner(yes).hover, inner(no).hover]).toEqual([true, true])
+  expect([inner(yes).width, inner(no).width]).toEqual([42, 38])
+  const classes = (e: El) => [...src(e).matchAll(/class="([^"]+)"/g)].map(m => m[1])
+  expect(classes(yes)).toEqual(classes(no)); expect(classes(yes)).toEqual(['wash', 'fg'])
+  expect(src(yes)).toContain('font-weight="600"'); expect(src(no)).toContain('font-weight="600"')
+  expect([words(yes), words(no)]).toEqual(['Yes', 'No'])
+})
+
+test('pane: the setup caption counts the offers waiting', () => {
+  const v = paneViewOf('offer'), cap = (more: number) => words(find(paneTree({ ...v, offer: { ...v.offer!, more } }), 'offer')).split(' Light')[0]
+  expect(cap(0)).toBe('One-time setup'); expect(cap(1)).toBe('One-time setup · 1 of 2'); expect(cap(2)).toBe('One-time setup · 1 of 3')
+})
+
+test('pane: the setup question wraps on words to two lines that fit the pane; a long one is cut on line 2 and keeps its words in a title', () => {
+  const long = 'Show a short line under the crew bar that names the next step of the plan for every agent?'
+  for (const columns of [28, 30, 36, 41, 52]) for (const q of [OFFER_Q, long]) {
+    const v = paneViewOf('offer', { columns }), e = find(paneTree({ ...v, offer: { ...v.offer!, question: q } }), 'offer')!, W = inner(e).width as number
+    const lines = [...src(e).matchAll(/<text x="8" y="(32|48)" class="fg" font-size="12">([^<]*)<\/text>/g)].map(m => unescape(m[2]))
+    expect(lines.length).toBeGreaterThan(0); expect(lines.length).toBeLessThanOrEqual(2)
+    for (const l of lines) expect(8 + textWidth(l, 12)).toBeLessThanOrEqual(W - 8)
+    const cut = lines.join(' ') !== q
+    if (cut) { expect(lines.at(-1)!.endsWith('…')).toBe(true); expect([...lines.at(-1)!.slice(0, -1).trim()].length).toBeGreaterThanOrEqual(8) }
+    expect(/<title>/.test(src(e))).toBe(cut)
+    expect(String(inner(e).alt)).toBe(`One-time setup: ${q}`)
+  }
+  // The real question is whole from 28 cells up; the long one is cut at 28 and whole at 52.
+  expect(words(find(paneTree(paneViewOf('offer', { columns: 28 })), 'offer'))).toBe(`One-time setup ${OFFER_Q}`)
+})
+
+test('pane: with cost hidden and no time left, a narrow head keeps one row', () => {
+  const v = paneViewOf('both', { columns: 28 }), bare = { ...v, crew: { ...v.crew, leftMin: null } }
+  expect(inner(find(paneTree({ ...bare, showCost: false }), 'head')!).height).toBe(60); expect(inner(find(paneTree(bare), 'head')!).height).toBe(76)
+})
+
+test('pane: one setup offer costs the engine under 2,000 characters', () => {
+  for (const columns of [28, 52]) {
+    const t = paneTree(paneViewOf('offer', { columns })), offer = all(t).find(e => e.type === 'Box' && (e.children ?? []).some(c => typeof c !== 'string' && c.props?.key === 'offer'))!
+    expect(engine(offer)).toBeLessThan(2_000)
+  }
+})
+
+test('pane: showCost false hides the agent cost in the head and its alt and in the drawer; unset or true draws it', () => {
+  const v = paneViewOf('failed'), ui = { ...v.ui, open: 'e2e' }, open = { ...v, ui, loops: pickLoops(v.crew, ui, true, true) }
+  const head = (x: typeof v) => find(paneTree(x), 'head')!, drawer = (x: typeof v) => find(paneTree(x), 'drawer-e2e')!
+  for (const x of [open, { ...open, showCost: true }]) {
+    expect(words(head(x))).toContain('≈$'); expect(String(head(x).props!.alt)).toContain('≈$'); expect(words(drawer(x))).toContain('cost ≈$')
+  }
+  const off = { ...open, showCost: false }
+  expect(words(head(off))).not.toContain('≈$'); expect(String(head(off).props!.alt)).not.toContain('≈$')
+  expect(words(drawer(off))).not.toContain('cost'); expect(words(drawer(off))).toContain('context 62%')
+})
