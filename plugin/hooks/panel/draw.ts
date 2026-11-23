@@ -519,7 +519,8 @@ export const panelTree = (v: PanelView): El => {
   const out: El[] = [{ type: 'Box', props: { key: 'cols', flexDirection: 'row' }, children: [...columns, spacer, toggle(v)] }]
   if (v.ui.size === 'full') {
     const W = v.bodyColumns * CELL_PX
-    if (v.crew.plan) out.push(planLine(v.crew.plan, v.crew, W), planBar(v.crew.plan, W, !!v.planGrow))
+    // A flow that reported no tasks has no bar to draw: its line alone, no blank row under it.
+    if (v.crew.plan) out.push(planLine(v.crew.plan, v.crew, W), ...(v.crew.plan.tasks.length ? [planBar(v.crew.plan, W, !!v.planGrow)] : []))
     const chips = chipRows(v, W)
     if (chips) out.push(chips)
   }
