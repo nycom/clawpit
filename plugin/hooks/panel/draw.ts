@@ -210,9 +210,9 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
   return { f, body, w: cw + 7, h: ch + 3, animated: loops.mascot !== 'still' }
 }
 
-// Who the value slot names, up to one agent. The main session's need, when it is the face, so its line never sits under
-// an agent's name; with no agents it is that one, so a count of 0 is never drawn.
-const soloOf = (crew: Crew, f: Face): CrewAgent | null => crew.agents.length > 1 ? null : f.a.id === 'session' ? f.a : crew.agents[0] ?? null
+// Who the value slot names, up to one agent: the lone agent, or with no agents the main session's need, so a count of 0
+// is never drawn.
+const soloOf = (crew: Crew, f: Face): CrewAgent | null => crew.agents.length > 1 ? null : crew.agents[0] ?? (f.a.id === 'session' ? f.a : null)
 const agentsColumn = (v: PanelView, w: number): El => {
   const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
   // One agent: its name in the value slot and only its state under it; a count of 1 says nothing (maintainer, 2026-11-21).

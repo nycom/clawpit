@@ -704,17 +704,17 @@ test('panel: at the one-line size the session need shows the same face', () => {
   }
 })
 
-test('panel: folded, one agent and an older session need: the value slot names Claude, never the agent under "needs you"', () => {
+test('panel: folded, one agent and an older session need: the value slot names the agent, the line under it the session need', () => {
   const v = viewOf('oneRunning'), solo = v.crew.agents[0], crew = { ...v.crew, sessionNeed: { question: SESSION_Q, since: NOW - 60_000 } }
-  // From 34 cells, where the column has room for the tail whole.
-  for (let bodyColumns = 34; bodyColumns <= 96; bodyColumns += 2) {
+  const named = new Set<string>()
+  // From 34 cells, where the column has room for the tail whole, to a width where the name shows whole.
+  for (let bodyColumns = 34; bodyColumns <= 140; bodyColumns += 2) {
     const m = propsOf(find(panelTree(viewOf('oneRunning', { crew, bodyColumns })), 'mascot')!), texts = allTexts(m.source)
-    // The value slot holds "Claude" or a cut of it, and the agent's name nowhere.
-    expect([bodyColumns, 'Claude'.startsWith(texts[1].replace(/…$/, '')), ['Claude needs you', 'needs you'].includes(texts[2])]).toEqual([bodyColumns, true, true])
-    expect(texts.some(t => t.startsWith(solo.title.slice(0, 1)))).toBe(false)
-    // It reads as the session need does with no agents at all.
-    expect(texts).toEqual(allTexts(propsOf(find(panelTree(viewOf('sessionNeed', { ui: v.ui, bodyColumns })), 'mascot')!).source))
+    // The value slot holds the agent's name or a cut of it, never "Claude".
+    expect([bodyColumns, solo.title.startsWith(texts[1].replace(/…$/, '')), ['Claude needs you', 'needs you'].includes(texts[2])]).toEqual([bodyColumns, true, true])
+    expect(m.alt).toBe('Agents: show them all. 1 agent, Claude needs you'); named.add(texts[1])
   }
+  expect(named.has(solo.title)).toBe(true)
 })
 
 test('panel: the session chip is not an agent, so "+N more agents" counts only the agents it hides', () => {
