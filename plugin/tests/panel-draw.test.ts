@@ -674,7 +674,7 @@ test('panel: folded with only a session need, the agents column reads "Claude" a
   const t = panelTree(gauges('sessionNeed')), m = propsOf(find(t, 'mascot')!)
   expect(cols(t)).toContain('col-agents')
   expect(allTexts(m.source)).toEqual(['agents', 'Claude', 'needs you']); expect(words(m.source)).not.toContain('0 agents')
-  expect(m.alt).toBe('Agents: show them all. 0 agents, Claude needs you')
+  expect(m.alt).toBe('Agents: show them all. Claude needs you')
   expect(m.source).toContain(crab({ role: 'explore', prop: 'wait', walk: false, size: 'M', move: 'hop' }))
   expect(propsOf(find(t, 'toggle')!).alt).toBe('Panel: agents folded. Show one line. Claude needs you')
 })
@@ -699,7 +699,7 @@ test('panel: at the one-line size the session need shows the same face', () => {
   for (const bodyColumns of [60, 96]) {
     const t = lineOf('sessionNeed', bodyColumns), m = propsOf(find(t, 'mascot')!)
     expect(keys(find(t, 'line'))).toContain('mascot'); expect(['Claude needs you', 'needs you']).toContain(lastText(m.source))
-    expect(m.alt).toBe('Agents: show them all. 0 agents, Claude needs you')
+    expect(m.alt).toBe('Agents: show them all. Claude needs you')
     expect(propsOf(find(t, 'toggle')!).alt).toBe('Panel: one line. Show everything. Claude needs you')
   }
 })

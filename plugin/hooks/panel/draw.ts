@@ -223,7 +223,7 @@ const agentsColumn = (v: PanelView, w: number): El => {
   const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'agents', 11, 'muted', { max })
     + at(x0, 15, m.body) + value
     + text(x0, 54, own ? fitTo(state, max, 11, m.f.w) : sayFit(m.f, max, 11), 11, m.f.tone, { w: m.f.w })
-  return image('mascot', { source: doc(w, COL_H, body, m.animated), alt: `Agents: show them all. ${n} ${n === 1 ? 'agent' : 'agents'}, ${m.f.say}`, width: w, height: COL_H, press: 'open' }, true)
+  return image('mascot', { source: doc(w, COL_H, body, m.animated), alt: `Agents: show them all. ${n ? `${n} ${n === 1 ? 'agent' : 'agents'}, ` : ''}${m.f.say}`, width: w, height: COL_H, press: 'open' }, true)
 }
 
 // ---------- the toggle ----------
@@ -424,7 +424,7 @@ const oneLineRow = (v: PanelView): El => {
     const m = mascotArt(crew, v.loops, 'S'), used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX
     const room = W - used - m.w - 6, say = room >= 40 ? sayFit(m.f, room, 13) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
     const body = at(0, 1, m.body) + (say ? text(m.w + 6, 18, say, 13, m.f.tone, { w: m.f.w }) : '')
-    children.push(image('mascot', { source: doc(w, LINE_H, body, m.animated), alt: `Agents: show them all. ${crew.agents.length} ${crew.agents.length === 1 ? 'agent' : 'agents'}, ${m.f.say}`, width: w, height: LINE_H, press: 'open' }, true))
+    children.push(image('mascot', { source: doc(w, LINE_H, body, m.animated), alt: `Agents: show them all. ${crew.agents.length ? `${crew.agents.length} ${crew.agents.length === 1 ? 'agent' : 'agents'}, ` : ''}${m.f.say}`, width: w, height: LINE_H, press: 'open' }, true))
   }
   children.push(toggle(v))
   return { type: 'Box', props: { key: 'line', flexDirection: 'row', alignItems: 'center', gap: 1 }, children }
