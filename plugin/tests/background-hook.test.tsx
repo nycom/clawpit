@@ -129,14 +129,29 @@ test('background hook: a stopped id that comes back with a new start shows again
 
 test('background hook: a refused or failed Stop toasts the reason and the row stays', { plugins: [savvy] }, async ($, on) => {
   let n = 0
-  const w = setup(on, () => (n++ ? { isError: true, result: 'No task found with ID: b1', text: 'No task found with ID: b1' } : { deny: 'Blocked by policy' }))
+  const w = setup(on, () => (n++ ? { isError: true, result: 'Shell could not be signalled', text: 'Shell could not be signalled' } : { deny: 'Blocked by policy' }))
   await start($)
   await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
   const ui = await pane($)
   await stop(ui, 'b1')
   await stop(ui, 'b1')
-  expect(w.toasts).toEqual(["Couldn't stop npm run dev: Blocked by policy", "Couldn't stop npm run dev: No task found with ID: b1"])
+  expect(w.toasts).toEqual(["Couldn't stop npm run dev: Blocked by policy", "Couldn't stop npm run dev: Shell could not be signalled"])
   expect(since('npm run dev, shell, running <1m')(await alts(ui))).toBe(true)
+  await ui.unmount()
+})
+
+test('background hook: a Stop on a task or cron that is already gone hides its row without a toast', { plugins: [savvy] }, async ($, on) => {
+  // The engine's own words when the id no longer exists (TaskStop, CronDelete), as seen on Claude Code 2.1.330.
+  const w = setup(on, (_$, e) => (e.tool === 'TaskStop'
+    ? { isError: true, result: 'No task found with ID: b1', text: 'No task found with ID: b1' }
+    : { isError: true, result: "No scheduled job with id 'c1'", text: "No scheduled job with id 'c1'" }))
+  await start($)
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running'), task('c1', 'cron', 'check CI', 'scheduled', { schedule: 'every 10 minutes' })])
+  const ui = await pane($)
+  await stop(ui, 'b1')
+  await stop(ui, 'c1')
+  expect(w.toasts).toEqual([])
+  expect((await alts(ui)).some(a => a.startsWith('npm run dev') || a.startsWith('check CI'))).toBe(false)
   await ui.unmount()
 })
 
