@@ -226,7 +226,7 @@ test('panel: a flow with no tasks draws no empty mini bar and no dangling Tasks 
   expect(g).not.toMatch(/<g transform="translate\([^)]*\)"><\/g>/)
   expect(Number(/<text [^>]*x="([\d.]+)"[^>]*>0\/0</.exec(g)?.[1])).toBeLessThan(30)
   const l = propsOf(imgOf(panelTree(none(viewOf('sizeLine'))), 'col-plan')!).source
-  expect(Number(/<text [^>]*x="([\d.]+)"/.exec(l)?.[1] ?? /<text x="([\d.]+)"/.exec(l)?.[1])).toBe(0)
+  expect(Number(/<text [^>]*x="([\d.]+)"/.exec(l)?.[1])).toBe(0)
 })
 
 test('panel: the plan bar and the folded mini bars name each task and its state', () => {
