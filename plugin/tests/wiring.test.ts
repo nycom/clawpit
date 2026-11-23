@@ -228,6 +228,22 @@ test('wiring: a running agent keeps the tick at 1 Hz with no main turn', { plugi
   expect(w.mine('tick').length).toBe(at)
 })
 
+test('wiring: with no stages atom the drawing and the ETA record use today\'s stage words', { plugins: [savvy] }, async ($, on) => {
+  const key = 'eta:implementer · claude-opus-5-5 · implement', w = setup(on, { store: { [key]: [300_000, 300_000, 300_000] } })
+  on('ui.render', (h, e) => h.ui.resolve(e).Box({ key: 'beneath', children: [] }))
+  await start($)
+  await spawn($, 'implement the fold')
+  const ui = await $.ui.mount({ plugin: 'clawpit', surface: 'desktop', component: 'Pane', requestId: 'clawpit-agents',
+    props: { title: 'Agents', isFocused: false, bodyColumns: 52, placement: 'dock' } as never })
+  const alts = ((await ui.findAll({})) as unknown as { type: string; props: Record<string, unknown> }[])
+    .flatMap(n => (n.type === 'Svg' ? [String(n.props.alt)] : n.type === 'Client' ? [String((n.props.props as { alt?: unknown } | undefined)?.alt)] : []))
+  // "slower" is the ETA of the implement stage's history: the stage word matched with savvy silent.
+  expect(alts).toEqual(['Subagents: 1 running · 0 done · ≈$0.00', 'Running 1', 'implement crab', 'implement the fold, Opus 5.5, slower'])
+  await ui.unmount()
+  await done($, 'w1', 'answer', 120_000)
+  expect(w.store.get(key)).toEqual([300_000, 300_000, 300_000, 120_000])
+})
+
 test('wiring: ten minutes after the turn ends one tick fires', async ($, on) => {
   const w = setup(on)
   await start($)
