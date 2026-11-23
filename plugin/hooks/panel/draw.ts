@@ -207,7 +207,7 @@ const sayFit = (f: Face, max: number, size: number) => {
   if (!f.name || widthOf(f.say, size, f.w) <= max) return fitTo(f.say, max, size, f.w)
   const lead = f.lead ?? '', tail = f.tail ?? '', named = (t: string) => {
     const name = fitTo(f.name!, max - widthOf(lead + t, size, f.w), size, f.w)
-    return name.replace(/…$/, '').length >= NAME_MIN ? lead + name + t : ''
+    return name === f.name || name.replace(/…$/, '').length >= NAME_MIN ? lead + name + t : ''   // a whole name is never too short
   }
   const whole = named(tail)
   if (whole || f.spare) return whole || named('')

@@ -817,6 +817,10 @@ test('panel: at the one-line size the agent state reads whole or not at all', ()
     const cut = (t: string) => /…$/.test(t) && !(/^next: \S.{5,}…$/.test(t) && !t.includes(' · ')) || /^next:\s*$/.test(t)
     for (const t of texts) expect([st, w, t, cut(t)]).toEqual([st, w, t, false])
   }
+  // A short name is never too short: whole, it stays ("next: api"), where the row has room for it.
+  const h = viewOf('hydra'), short = { ...h.crew, agents: h.crew.agents.map(a => ({ ...a, title: 'api' })) }
+  for (const w of [60, 64]) { const v = viewOf('hydra', { bodyColumns: w, crew: short }); expect(words(sourceOf(panelTree({ ...v, ui: { ...v.ui, size: 'line' } }), 'mascot'))).toMatch(/next: api/) }
+  for (const w of [60, 76, 90]) expect(lastText(sourceOf(panelTree(viewOf('hydra', { bodyColumns: w, crew: short, ui: { ...h.ui, size: 'gauges' } })), 'mascot'))).toMatch(/api/)
   // The struggling face is the one under test there: its words are on screen when the row is wide.
   const wide = viewOf('failed', { bodyColumns: 140, crew: struggling, armed: false })
   expect(words(sourceOf(panelTree({ ...wide, ui: { ...wide.ui, size: 'line' } }), 'mascot'))).toMatch(/3 failed tries/)
