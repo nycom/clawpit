@@ -1,13 +1,14 @@
 import type { Column, ColumnKey, Crew, Size, Stats } from '../../types'
 
-export const ORDER: readonly ColumnKey[] = ['context', '5h', '7d', 'tokens', 'session', 'turn', 'tests', 'agent', 'reuse', 'callers', 'plan', 'agents']
+export const ORDER: readonly ColumnKey[] = ['context', '5h', '7d', 'session', 'tokens', 'turn', 'tests', 'agent', 'reuse', 'callers', 'plan', 'agents']
 
 export const maxColumns = (bodyColumns: number): number => Math.min(6, Math.max(2, Math.floor((bodyColumns - 4) / 14)))
 
-// The core (context, 5h, 7d, tokens, session) ranks by position, so a narrow row drops it from the right; the folded
+// The core (context, 5h, 7d, session, tokens) ranks by position, so a narrow row drops it from the right: the cost
+// outlives the token count (2026-11-23); the folded
 // agents and plan rank just under context; the extras only fill what is left, in their order.
 export const candidates = (stats: Stats, crew: Crew, size: Size, busy: boolean): Column[] => {
-  const cols: Column[] = [{ key: 'context', priority: 100 }, { key: 'session', priority: 93 }]
+  const cols: Column[] = [{ key: 'context', priority: 100 }, { key: 'session', priority: 94 }]
   const folded = size !== 'full'
   if (folded && (crew.agents.length || crew.sessionNeed)) cols.push({ key: 'agents', priority: 99 })
   if (folded && crew.plan) cols.push({ key: 'plan', priority: 97 })
@@ -16,7 +17,7 @@ export const candidates = (stats: Stats, crew: Crew, size: Size, busy: boolean):
   if (seven) cols.push({ key: '7d', priority: 95 })
   if (busy) cols.push({ key: 'turn', priority: 50 })
   if (stats.tests) cols.push({ key: 'tests', priority: 45 })
-  if (stats.session.turns >= 3) cols.push({ key: 'tokens', priority: 94 }, { key: 'agent', priority: 40 })
+  if (stats.session.turns >= 3) cols.push({ key: 'tokens', priority: 93 }, { key: 'agent', priority: 40 })
   if (stats.code?.reusePct != null) cols.push({ key: 'reuse', priority: 12 })
   if (stats.code?.callers.length) cols.push({ key: 'callers', priority: 10 })
   return cols
