@@ -23,7 +23,11 @@ test('eta: keys use the configured words', () => {
   expect(keysOf('a', 'm', 'implement the api', ['build'])).toEqual(['a · m · ', 'a · m', 'a'])
 })
 test('eta: stageOf matches whole words of any script, and a word with regex characters only as text', () => {
-  expect(stageOf('api évaluer c1', ['évaluer'])).toBe('évaluer'); expect(stageOf('fix c++ thing', ['c++', '(x', 'fix'])).toBe('fix')
+  expect(stageOf('api évaluer c1', ['évaluer'])).toBe('évaluer'); expect(stageOf('api réévaluer c1', ['évaluer'])).toBe('')
+  expect(stageOf('ccc fix', ['c++', '(x', 'fix'])).toBe('fix'); expect(stageOf('fix c++ thing', ['(x', 'c++', 'fix'])).toBe('c++')
+})
+test('eta: stageOf keeps the whole-word rule where _ is part of a word', () => {
+  expect(stageOf('fix_tests')).toBe(''); expect(stageOf('schema review c1')).toBe('review')
 })
 test('eta: falls back to STAGES when savvy publishes nothing', () => {
   expect(keysOf('a', 'm', 'fix the cache')).toEqual(['a · m · fix', 'a · m', 'a'])
