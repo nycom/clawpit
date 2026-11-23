@@ -442,7 +442,7 @@ test('setup command: one dialog per boolean or choice row, answers written at th
     ['Show cost', 'Show the cost?', ['On (current)', 'Off']],
   ])
   expect(c.sets).toEqual([{ key: 'savvy-progress.sessionNeed', value: 'both' }, { key: 'clawpit.animations', value: false }])
-  expect(out.text).toBe('Saved 2 settings. 1 list settings are edited in /config.')
+  expect(out.text).toBe('Saved 2 settings. 1 other settings are edited in /config.')
   expect(w.store.has('setupPending')).toBe(false)
 })
 
@@ -453,7 +453,8 @@ test('setup command: the answers still to write are stored before each own-key w
   const seen: unknown[] = []
   const c = config(on, ['Off', 'On'], rows, key => seen.push([key, w.store.get('setupPending')]))
   await start($)
-  await setupRun($)
+  const out = await setupRun($)
+  expect(out.text).toBe('Saved 2 settings.')
   expect(c.sets.map(s => s.key)).toEqual(['clawpit.animations', 'clawpit.other'])
   expect(seen).toEqual([['clawpit.animations', [{ key: 'clawpit.other', value: true }]], ['clawpit.other', []]])
 })
@@ -465,7 +466,7 @@ test('setup command: a dismissed dialog ends the walk and the earlier answers ar
   const out = await setupRun($)
   expect(c.asked).toHaveLength(2)
   expect(c.sets).toEqual([{ key: 'savvy-progress.sessionNeed', value: 'ask' }])
-  expect(out.text).toBe('Saved 1 settings. 1 list settings are edited in /config.')
+  expect(out.text).toBe('Saved 1 setting. 1 other settings are edited in /config.')
 })
 
 test('setup command: Other text is ignored unless it equals an option; an unchanged answer is not written', async ($, on) => {
@@ -474,7 +475,7 @@ test('setup command: Other text is ignored unless it equals an option; an unchan
   await start($)
   const out = await setupRun($)
   expect(c.sets).toEqual([{ key: 'savvy-progress.showCost', value: false }])
-  expect(out.text).toContain('Saved 1 settings.')
+  expect(out.text).toContain('Saved 1 setting.')
 })
 
 test('setup command: a CLI with no config list answers with the upgrade line and asks nothing', async ($, on) => {

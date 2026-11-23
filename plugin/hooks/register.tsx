@@ -146,9 +146,14 @@ const readOffers = async ($: EngineInterface) => {
 }
 
 // A Yes or No press on the offer shown: written as if in /config. A refused or rejected write is said once and not asked again.
+let answering = false
 const answer = async ($: EngineInterface, yes: boolean) => {
   const o = offers[0]
-  if (!o) return
+  if (!o || answering) return
+  answering = true
+  try { await saveOffer($, o, yes) } finally { answering = false }
+}
+const saveOffer = async ($: EngineInterface, o: Offer, yes: boolean) => {
   offers = offers.slice(1)
   let deny: string | undefined
   try { ({ deny } = await $.config.set({ key: o.key, value: yes ? o.yes : o.no })) } catch (err) { deny = err instanceof Error ? err.message : String(err) }
@@ -439,7 +444,7 @@ export const register: Register = (on, options) => {
     // clawpit's own hooks do not see its own writes, so the offers are read again here.
     try { await readOffers($); await writeTick($) } catch { errors += 1 }
     saved += await writeOwn($, own)
-    return { text: `Saved ${saved} settings. ${skipped} list settings are edited in /config.${more.length ? ` More values for ${more.join(', ')} are in /config.` : ''}` }
+    return { text: `Saved ${saved} ${saved === 1 ? 'setting' : 'settings'}.${skipped ? ` ${skipped} other settings are edited in /config.` : ''}${more.length ? ` More values for ${more.join(', ')} are in /config.` : ''}` }
   })
 
   // paneOpen follows the pane itself. clawpit never closes it: the desktop leaves an emptied tile as a tab no one can close.
