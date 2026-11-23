@@ -7,6 +7,11 @@
       "name": "clawpit",
       "source": "./plugin",
       "description": "An instrument panel above the prompt and a crew pane beside it, for the Claude Code desktop app."
+    },
+    {
+      "name": "clawpit-gauges",
+      "source": "./gauges",
+      "description": "clawpit's gauges above the prompt, without the Agents pane: context, the 5-hour and 7-day limits, session cost."
     }
   ]
 }

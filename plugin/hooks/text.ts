@@ -45,6 +45,18 @@ export const clockOf = (ms: number, hour12: boolean, offsetMin: number): string 
 }
 export const fmtClock = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${pad(t % 60)}` }
 export const fmtAge = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return t < 60 ? `${t}s` : `${Math.floor(t / 60)}m` }
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+// When a plan limit resets, by local calendar day, in skins' band's words: '2:40pm' today, 'tmrw 9:00am', 'Mon 9:00am',
+// and a week off 'next Fri 9:00am'. Nothing for an unreadable time or one already past: the window has reset since.
+export const fmtReset = (at: number, now: number): string => {
+  const d = new Date(at), today = new Date(now)
+  if (!Number.isFinite(at) || at <= now) return ''
+  const h = d.getHours(), time = `${h % 12 || 12}:${pad(d.getMinutes())}${h < 12 ? 'am' : 'pm'}`
+  const day = (n: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + n)
+  if (d.toDateString() === today.toDateString()) return time
+  if (d.toDateString() === day(1).toDateString()) return `tmrw ${time}`
+  return `${d >= day(7) ? 'next ' : ''}${WEEKDAYS[d.getDay()]} ${time}`
+}
 // Ages read in whole minutes, so an image changes only when one crosses a minute.
 export const minutes = (ms: number): string => (ms < 60_000 ? '<1m' : fmtAge(ms))
 export const TIP_MAX = 300   // a tooltip's characters at most

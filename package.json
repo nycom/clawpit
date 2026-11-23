@@ -5,7 +5,7 @@
   "scripts": {
     "test:visual": "playwright test",
     "test:scripts": "node --test scripts/*.test.mjs",
-    "refresh:visual": "playwright test --update-snapshots && bash scripts/preview.sh",
+    "refresh:visual": "playwright test --update-snapshots=all && bash scripts/preview.sh",
     "app-diff": "node scripts/app-diff.mjs"
   },
   "devDependencies": {

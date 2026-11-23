@@ -4,7 +4,9 @@ import { image, panelTree, type El } from '../hooks/panel/draw'
 import { contrast, FONT, SURFACE, TOKENS } from '../hooks/tokens'
 import { icon } from '../hooks/icons'
 import { crab } from '../hooks/crab'
-import { NOW, type StateName } from './fixtures/states'
+import { NOW, RESET_5H, RESET_7D, type StateName } from './fixtures/states'
+import { fmtReset } from '../hooks/text'
+import { EMPTY_CREW, STILL } from '../hooks/model'
 import { panelLoopCount, viewOf } from './build'
 
 const all = (e: El | string): El[] => (typeof e === 'string' ? [] : [e, ...(e.children ?? []).flatMap(all)])
@@ -199,6 +201,17 @@ test('panel: the session column presses costs and is a still Client; no other co
   expect(propsOf(imgOf(line, 'col-session')!).press).toBe('costs')
 })
 
+// The gauges plugin has no Agents pane: alone, the session column and the one-line session item press nothing; the rest keep theirs.
+test('panel: alone, the session column and item press nothing; every other press stays', () => {
+  const PRESS: Record<string, string | undefined> = { 'col-context': 'context', 'col-5h': 'usage', 'col-7d': 'usage', 'col-session': undefined }
+  for (const s of ['idle', 'busy', 'context90', 'limitAhead'] as const) for (const size of ['full', 'gauges', 'line'] as const) for (const w of [60, 96, 140]) {
+    const v = viewOf(s, { crew: EMPTY_CREW, loops: STILL, armed: false, bodyColumns: w, alone: true }), t = panelTree({ ...v, ui: { ...v.ui, size } })
+    for (const k of (size === 'line' ? keys(find(t, 'line')) : keys(find(t, 'cols'))).filter(k => k.startsWith('col-'))) expect([k, propsOf(imgOf(t, k)!).press]).toEqual([k, PRESS[k]])
+    if (size === 'line' || w >= 96) expect(imgOf(t, 'col-session')).toBeDefined()   // at 60 cells the four columns before it fill the row
+    expect(all(t).some(e => isImage(e) && /costs|open/.test(propsOf(e).press ?? ''))).toBe(false)
+  }
+})
+
 test('panel: a failed test run names its failing tests: the so-what the first, the alt and the title all', () => {
   const v = viewOf('hydra'), names = ['panel: wording', 'tests: keeps the names', 'a <b> & c']
   const at = (failedNames: string[]) => propsOf(imgOf(panelTree(viewOf('hydra', { busy: false, bodyColumns: 140, stats: { ...v.stats, tests: { passed: 3, failed: 3, at: NOW - 42_000, failedNames } } })), 'col-tests')!)
@@ -319,7 +332,9 @@ test('panel: a two-clause so-what drops whole clauses right to left, never cutti
   expect(soOf(ctx, 'col-context')).toBe('~123456789 turns · 34% msgs')
   expect(soOf(ctx, 'col-turn')).toBe('+38 −6 · ≈$0.42')
   // Past those cells the long clause cannot claim, so it goes whole.
-  const ctxWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789_012 } } }))
+  // (The limits' reset clauses are left out here: they would claim the spare cells first.)
+  const noResets = v.stats.limits.map(({ resetsAt: _, ...l }) => l)
+  const ctxWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, limits: noResets, context: { ...v.stats.context!, turnsLeft: 123_456_789_012 } } }))
   expect(soOf(ctxWide, 'col-context')).toBe('~123456789012 turns')
   const ses = panelTree(viewOf('hydra', { bodyColumns: 76, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
   expect(soOf(ses, 'col-session')).toBe('last turn $123456789')
@@ -329,7 +344,9 @@ test('panel: a two-clause so-what drops whole clauses right to left, never cutti
   // A long cost claims the spare cells whole, never '$12…'.
   const turn = panelTree(viewOf('hydra', { bodyColumns: 88, stats: { ...v.stats, turn: { ...v.stats.turn!, costUsd: 123_456.78 } } }))
   expect(soOf(turn, 'col-turn')).toBe('+38 −6 · $123457')
-  const whole = ['~7 turns · 34% msgs', '~7 turns', 'auto-compacts at 97%', 'last turn $2.46', 'on pace for 58%', 'on pace for 131%', '+38 −6 · ≈$0.42', '+38 −6', '']
+  const r5 = `resets ${fmtReset(RESET_5H, NOW)}`, r7 = `resets ${fmtReset(RESET_7D, NOW)}`
+  const whole = ['~7 turns · 34% msgs', '~7 turns', 'auto-compacts at 97%', 'last turn $2.46', 'on pace for 58%', 'on pace for 131%', '+38 −6 · ≈$0.42', '+38 −6', '',
+    r5, `${r5} · on pace for 58%`, `on pace for 131% · ${r5}`, `on pace for 131% · ${r7}`]
   for (const s of ['hydra', 'context90', 'limitAhead'] as const) for (const bodyColumns of [46, 60, 88, 96]) {
     const t = panelTree(viewOf(s, { bodyColumns }))
     for (const k of ['col-context', 'col-turn', 'col-session', 'col-5h', 'col-7d']) if (find(t, k)) expect([k, whole.includes(soOf(t, k))]).toEqual([k, true])
@@ -598,10 +615,11 @@ test('panel: a hostile title in a tooltip stays well-formed', () => {
 })
 
 const colWidth = (t: El, k: string) => find(t, k)!.props!.width as number
-test('panel: at 60 cells the 7d warning so-what survives beside the compact chip', () => {
+// Since session outlives tokens (2026-11-23) its 'last turn' clause takes the cells the token count left over: the chip is its icon.
+test('panel: at 60 cells the 7d warning so-what survives beside the compact chip, its icon alone', () => {
   for (const s of ['hydra', 'failed'] as const) {
     const t = panelTree(viewOf(s, { bodyColumns: 60 }))
-    expect(words(chipOf(t)!.source)).toBe('compact')
+    expect(chipOf(t)!.width).toBe(20); expect(chipOf(t)!.press).toBe('compact')
     expect(lastText(sourceOf(t, 'col-7d'))).toBe('on pace for 131%')
     expect(cols(t).reduce((a, k) => a + colWidth(t, k), 0)).toBeLessThanOrEqual(60 - 4)
   }
@@ -610,16 +628,17 @@ test('panel: at 60 cells the 7d warning so-what survives beside the compact chip
 test('panel: spare width goes to the column whose clauses would drop, warn first', () => {
   const v = viewOf('hydra'), at = (stats: typeof v.stats) => panelTree(viewOf('hydra', { bodyColumns: 60, stats }))
   const sum = (t: El) => cols(t).reduce((a, k) => a + colWidth(t, k), 0)
-  // Below 50%, no chip: the even share (14) is one cell short for the context so-what, and the tokens column has cells over.
+  // Below 50%, no chip: the even share (14) is one cell short for the context so-what, and the session column has cells over.
   const roomy = at({ ...v.stats, context: { ...v.stats.context!, pct: 40 } })
   expect(colWidth(roomy, 'col-context')).toBe(15); expect(lastText(sourceOf(roomy, 'col-context'))).toBe('~7 turns · 34% msgs')
-  expect(colWidth(roomy, 'col-tokens')).toBe(13); expect(lastText(sourceOf(roomy, 'col-tokens'))).toBe('44 turns')
+  expect(colWidth(roomy, 'col-session')).toBe(13); expect(lastText(sourceOf(roomy, 'col-session'))).toBe('last turn $2.46')
   expect(lastText(sourceOf(roomy, 'col-7d'))).toBe('on pace for 131%')
   expect(sum(roomy)).toBe(60 - 4)
-  // With the chip the tokens column gives its slack and the amber warning keeps its cells.
+  // With the chip no column has slack for its word: the session keeps its clause, the amber warning its cells, the chip its icon.
   const calm = { ...v.stats, limits: v.stats.limits.map(l => (l.kind === 'seven_day' ? { ...l, ahead: false } : l)) }
   const hot = at(v.stats)
-  expect(colWidth(hot, 'col-tokens')).toBe(9); expect(lastText(sourceOf(hot, 'col-tokens'))).toBe('44 turns'); expect(sum(hot)).toBe(60 - 4)
+  expect(colWidth(hot, 'col-session')).toBe(13); expect(lastText(sourceOf(hot, 'col-session'))).toBe('last turn $2.46'); expect(sum(hot)).toBe(60 - 4)
+  expect(chipOf(hot)!.width).toBe(20)
   expect(lastText(sourceOf(hot, 'col-7d'))).toBe('on pace for 131%')
   // Folded at 78 cells no column has slack left for the chip: the amber warning is the last to give, so the whole chip
   // would cost another column its value and the chip is its icon alone.
@@ -652,7 +671,9 @@ test('panel: at the one-line size a lone running agent reads its name and state;
   expect(lastText(sourceOf(lineOf('sizeLine', 96), 'mascot'))).toBe('e2e tests needs you')
 })
 test('panel: the one-line row has its cells at the measured 9.1 px for the agent to read in', () => {
-  expect(lastText(sourceOf(lineOf('oneNeedsYou', 60), 'mascot'))).toBe('e2e tests needs you')
+  // The 7d limit's ahead arrow (2026-11-23) takes 16 px: at 60 cells the name is cut, whole from 66.
+  expect(lastText(sourceOf(lineOf('oneNeedsYou', 60), 'mascot'))).toBe('e2e tes… needs you')
+  expect(lastText(sourceOf(lineOf('oneNeedsYou', 66), 'mascot'))).toBe('e2e tests needs you')
   expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).toMatch(/^savvy-.*… · ~2m left$/)
   // With the plan's mini bar in the row too, the name fits from 66 cells; at 60 the tail reads alone.
   expect(lastText(sourceOf(lineOf('sizeLine', 60), 'mascot'))).toBe('needs you')
@@ -660,7 +681,7 @@ test('panel: the one-line row has its cells at the measured 9.1 px for the agent
 })
 test('panel: folded, a lone agent\'s column claims the cells for its whole name; the other columns keep their slots', () => {
   const value = (t: El) => words([...sourceOf(t, 'mascot').matchAll(/<text[^>]*y="35"[^>]*>(.*?)<\/text>/g)][0][1])
-  const slots = { 60: ['col-context', 'col-5h', 'col-7d', 'col-agents'], 96: ['col-context', 'col-5h', 'col-7d', 'col-tokens', 'col-session', 'col-agents'] }
+  const slots = { 60: ['col-context', 'col-5h', 'col-7d', 'col-agents'], 96: ['col-context', 'col-5h', 'col-7d', 'col-session', 'col-tokens', 'col-agents'] }
   for (const bodyColumns of [60, 96] as const) for (const s of ['oneNeedsYou', 'oneRunning'] as const) expect(cols(panelTree(viewOf(s, { bodyColumns })))).toEqual(slots[bodyColumns])
   // At 60 every column is at its floor: no spare cells, so the name is cut there and nothing else gives.
   expect(value(panelTree(viewOf('oneNeedsYou', { bodyColumns: 60 })))).toMatch(/^e2e te.*…$/)
@@ -743,6 +764,81 @@ test('panel: the session chip is not an agent, so "+N more agents" counts only t
   // The alert chip holds the session and e2e (as "1 more need you"); the three running agents are the ones left.
   expect(propsOf(find(t, 'chips-alert')!).alt).toBe(`Claude needs you: ${SESSION_Q}; 1 more need you`)
   expect(propsOf(find(t, 'chip-more')!).alt).toBe(`${v.crew.agents.filter(a => a.state === 'running').length} more agents`)
+})
+
+// ---------- 2026-11-23: resets, the one-line alarm, alts that name the action, the gauges alone ----------
+const withReset = (s: StateName, five: number, seven: number) => {
+  const v = viewOf(s)
+  return viewOf(s, { stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, resetsAt: l.kind === 'five_hour' ? five : seven })) } })
+}
+const LOCAL_NOW = NOW, IN_2H = NOW + 2 * 3_600_000
+// A calm limit says first when it resets; one ahead of pace says its pace first. Narrow, the second clause drops whole.
+test('panel: calm, a limit leads with its reset; ahead, with its pace', () => {
+  const five = IN_2H, seven = NOW + 3 * 86_400_000, v = withReset('idle', five, seven)   // the idle fixture: 5h calm, 7d ahead
+  const wide = panelTree({ ...v, bodyColumns: 140 })
+  expect(words(sourceOf(wide, 'col-5h'))).toContain(`resets ${fmtReset(five, LOCAL_NOW)} · on pace for 58%`)
+  expect(words(sourceOf(wide, 'col-7d'))).toContain(`on pace for 131% · resets ${fmtReset(seven, LOCAL_NOW)}`)
+  expect(propsOf(imgOf(wide, 'col-5h')!).alt).toContain(`resets ${fmtReset(five, LOCAL_NOW)}`)
+  const narrow = panelTree({ ...v, bodyColumns: 96 })
+  expect(lastText(sourceOf(narrow, 'col-5h'))).toBe(`resets ${fmtReset(five, LOCAL_NOW)}`)
+  expect(lastText(sourceOf(narrow, 'col-7d'))).toBe('on pace for 131%')
+})
+test('panel: a limit with no forecast yet still says when it resets', () => {
+  const v = withReset('idle', IN_2H, IN_2H), t = panelTree({ ...v, stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, projected: null, pacePct: null })) }, bodyColumns: 140 })
+  expect(words(sourceOf(t, 'col-5h'))).toContain(`resets ${fmtReset(IN_2H, LOCAL_NOW)}`)
+  expect(words(sourceOf(t, 'col-5h'))).not.toContain('·')
+})
+test('panel: pressable columns name their action in the alt; plain ones do not', () => {
+  const t = panelTree(viewOf('busy', { bodyColumns: 140 }))
+  expect(propsOf(imgOf(t, 'col-context')!).alt).toMatch(/\. Runs \/context$/)
+  expect(propsOf(imgOf(t, 'col-5h')!).alt).toMatch(/\. Runs \/usage$/)
+  expect(propsOf(imgOf(t, 'col-session')!).alt).toMatch(/\. Opens the cost list$/)
+  expect(propsOf(imgOf(t, 'col-turn')!).alt).not.toMatch(/Runs|Opens/)
+  const alone = panelTree(viewOf('busy', { bodyColumns: 140, alone: true }))
+  expect(propsOf(imgOf(alone, 'col-session')!).alt).not.toMatch(/Opens/)
+})
+const lineView = (s: StateName, over: Partial<ReturnType<typeof viewOf>> = {}) => { const v = viewOf(s, over); return panelTree({ ...v, ui: { ...v.ui, size: 'line' } }) }
+test('panel: one line in alarm keeps the words and the compact press, not colour alone', () => {
+  const t = lineView('context90', { bodyColumns: 96 })
+  expect(propsOf(imgOf(t, 'col-context')!).alt).toContain('auto-compacts at 97%')
+  const chip = imgOf(t, 'compact')
+  expect(chip && propsOf(chip).press).toBe('compact')
+  expect(imgOf(lineView('idle', { bodyColumns: 96 }), 'compact')).toBeUndefined()
+})
+// Ahead of pace is a shape as well as amber: an up arrow after the label (2026-11-23), and the pace in the alt.
+test('panel: one line marks a limit ahead of pace with an up arrow and says the pace in the alt', () => {
+  const ARROW = icon('ahead', 12, 's-warn'), t = lineView('limitAhead', { bodyColumns: 96 })
+  expect(sourceOf(t, 'col-5h')).toContain(ARROW)
+  expect(propsOf(imgOf(t, 'col-5h')!).alt).toContain('on pace for 131%')
+  const v = viewOf('idle'), calm = lineView('idle', { stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, ahead: false, hot: true })) } })
+  for (const k of ['col-5h', 'col-7d']) { const src = sourceOf(calm, k); if (src) expect(src).not.toContain(ARROW) }
+})
+test('panel: alone, the toggle never speaks of agents', () => {
+  for (const size of ['full', 'gauges', 'line'] as const) {
+    const v = viewOf('idle', { crew: EMPTY_CREW, loops: STILL, armed: false, alone: true }), alt = propsOf(find(panelTree({ ...v, ui: { ...v.ui, size } }), 'toggle')!).alt
+    expect(alt).toMatch(/^Panel: (gauges|one line)/); expect(alt).not.toMatch(/agent/i)
+  }
+})
+
+// The state words are never cut: only the name is, and a row too narrow for the words drops them whole. One agent,
+// an alert, two or more ("next: … · ~2m left") and a struggling one ("… · 3 failed tries") alike.
+test('panel: at the one-line size the agent state reads whole or not at all', () => {
+  const f = viewOf('failed'), struggling = { ...f.crew, agents: f.crew.agents.filter(a => a.state !== 'failed' && a.state !== 'need').map(a => ({ ...a, helpers: [] })) }
+  const views = { oneNeedsYou: null, oneRunning: null, sizeLine: null, hydra: null, helpers: null, struggling } as const
+  for (const [st, crew] of Object.entries(views)) for (let w = 40; w <= 100; w++) {
+    const v = viewOf(crew ? 'failed' : st as StateName, { bodyColumns: w, ...(crew ? { crew, armed: false } : {}) })
+    const texts = [...sourceOf(panelTree({ ...v, ui: { ...v.ui, size: 'line' } }), 'mascot').matchAll(/<text[^>]*>(.*?)<\/text>/g)].map(m => words(m[1]))
+    // An ellipsis ends only a cut name: "next: savvy-…" with the time dropped whole; never "~2m…" or "needs y…".
+    const cut = (t: string) => /…$/.test(t) && !(/^next: \S.{5,}…$/.test(t) && !t.includes(' · ')) || /^next:\s*$/.test(t)
+    for (const t of texts) expect([st, w, t, cut(t)]).toEqual([st, w, t, false])
+  }
+  // A short name is never too short: whole, it stays ("next: api"), where the row has room for it.
+  const h = viewOf('hydra'), short = { ...h.crew, agents: h.crew.agents.map(a => ({ ...a, title: 'api' })) }
+  for (const w of [60, 64]) { const v = viewOf('hydra', { bodyColumns: w, crew: short }); expect(words(sourceOf(panelTree({ ...v, ui: { ...v.ui, size: 'line' } }), 'mascot'))).toMatch(/next: api/) }
+  for (const w of [60, 76, 90]) expect(lastText(sourceOf(panelTree(viewOf('hydra', { bodyColumns: w, crew: short, ui: { ...h.ui, size: 'gauges' } })), 'mascot'))).toMatch(/api/)
+  // The struggling face is the one under test there: its words are on screen when the row is wide.
+  const wide = viewOf('failed', { bodyColumns: 140, crew: struggling, armed: false })
+  expect(words(sourceOf(panelTree({ ...wide, ui: { ...wide.ui, size: 'line' } }), 'mascot'))).toMatch(/3 failed tries/)
 })
 
 // Background work: the folded agents column and, at full size, one muted chip; neither is an agent.

@@ -1,0 +1,14 @@
+{
+  "name": "clawpit-gauges",
+  "description": "clawpit's gauges above the prompt, without the Agents pane: context, the 5-hour and 7-day limits, session cost.",
+  "types": "./types/index.d.ts",
+  "license": "MIT",
+  "userConfig": {
+    "animations": {
+      "type": "boolean",
+      "title": "Animations",
+      "description": "Off stops the needle settle in the gauges.",
+      "default": true
+    }
+  }
+}

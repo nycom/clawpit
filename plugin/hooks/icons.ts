@@ -5,6 +5,7 @@ import { MOTION } from './tokens'
 const PATHS = { chev: 'M4.5 2.5 8 6l-3.5 3.5', check: 'M2.5 6.3 5 8.8l4.5-5.3', cross: 'M3 3l6 6M9 3 3 9',
   ask: 'M4.2 4.4a1.8 1.8 0 1 1 2.6 1.6c-.5.3-.8.7-.8 1.2v.5M6 9.6v.01',
   squeeze: 'M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5M2 6h8',
+  ahead: 'M6 10V2.5M2.8 5.7 6 2.5l3.2 3.2',   // ahead: an up arrow, a limit ahead of pace
   // Background kinds: a prompt chevron over an underscore, a pulse line, a repeat cycle (a cron comes back), an hourglass (a wakeup runs out once).
   shell: 'M2 3.5 4.8 6 2 8.5M6.5 9h3.5', monitor: 'M1 6h2.4l1.4-3 2.4 6 1.4-3H11',
   cron: 'M2.4 6A3.6 3.6 0 0 1 8.6 3.5M8.9 1.4v2.3H6.6M9.6 6A3.6 3.6 0 0 1 3.4 8.5M3.1 10.6V8.3h2.3',

@@ -47,7 +47,8 @@ The decisions are in [`docs/decisions/`](docs/decisions/). Ask before bending on
 - Never `dimColor` on AbovePrompt buttons: dim buttons fold into the "…" menu.
 
 ## Quality gate, before asking for review
-- Tests green: `claude plugin test plugin`, `claude plugin validate plugin`, `npm run test:visual` and `npm run test:scripts`.
+- Tests green: `claude plugin test plugin`, `claude plugin validate plugin`, `claude plugin test gauges`, `claude plugin validate gauges`, `npm run test:visual` and `npm run test:scripts`.
+- The gauges plugin (`gauges/`) carries byte copies of the panel's files: after changing any of them, run `bash scripts/sync-gauges.sh` (CI fails until the copies match).
 - Off macOS, `npm run test:visual` skips the `@shot` screenshot tests (their baselines are macOS renders) and runs the structural ones.
 - The leak check is clean.
 - The previews are refreshed if anything visual changed.

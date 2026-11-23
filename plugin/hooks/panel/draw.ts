@@ -3,7 +3,7 @@ import type { ColumnKey, Crew, CrewAgent, ImageProps, LimitStat, LoopPlan, Plan,
 import { crab } from '../crab'
 import { dial, icon, segBar, toggleIcon } from '../icons'
 import { CELL_PX, FONT, LINE_CELL_PX, MOTION, SIZE, SURFACE, svg } from '../tokens'
-import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtDuration, fmtLeft, fmtTokens, oneLine, textWidth, xml } from '../text'
+import { clip, fit as fitText, fmtAge, fmtClock, fmtCost, fmtDuration, fmtLeft, fmtReset, fmtTokens, oneLine, textWidth, xml } from '../text'
 import { alertsOf, helpersOf, sessionFirst } from '../model'
 import { contextText } from '../track/context'
 import { paceText } from '../track/pace'
@@ -14,7 +14,8 @@ import { image, type El } from '../draw'
 export { image, type El }
 
 export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle>; still?: boolean
-  planGrow?: boolean }  // the plan bar's fills grow: only while the plan is new
+  planGrow?: boolean    // the plan bar's fills grow: only while the plan is new
+  alone?: true }        // drawn by the gauges plugin, which has no Agents pane: the session column presses nothing
 
 // ---------- text ----------
 // shortcut: the kit's width table runs up to ~10% short of SF Pro, so drawn widths add 10%; drop SLACK once the table is measured.
@@ -60,6 +61,14 @@ type Cell = { label: string; value: string; valueTone: string; small?: string; s
 
 const limitOf = (stats: Stats, key: '5h' | '7d') => stats.limits.find(l => l.kind === (key === '5h' ? 'five_hour' : 'seven_day'))
 const limitTone = (l: LimitStat) => (l.ahead || l.pct >= 80 ? 'warn' : 'accent')
+// Calm, when the window resets comes first; ahead of pace, the pace does. A narrow column drops the second clause whole.
+const limitSo = (l: LimitStat, now: number) => {
+  const reset = l.resetsAt === undefined ? '' : fmtReset(l.resetsAt, now), clauses = [paceText(l), reset && `resets ${reset}`]
+  return (l.ahead ? clauses : clauses.reverse()).filter(Boolean).join(' · ')
+}
+// What a press does, said at the end of the alt: a column that presses looks like one that does not.
+const ACTION: Record<string, string> = { context: 'Runs /context', usage: 'Runs /usage', costs: 'Opens the cost list' }
+const withAction = (alt: string, press?: string) => (press && ACTION[press] ? `${alt}. ${ACTION[press]}` : alt)
 const contextTone = (stats: Stats) => { const c = stats.context; return !c ? 'accent' : c.alarm ? 'er' : c.pct >= 70 ? 'warn' : 'accent' }
 const pctOf = (n: number) => `${Math.round(n)}%`
 const contextDial = (v: PanelView, small = false) => {
@@ -89,7 +98,7 @@ const cellOf = (key: ColumnKey, v: PanelView): Cell | null => {
       const l = limitOf(stats, key)
       if (!l) return null
       const tone = limitTone(l)
-      return { label: `${key} limit`, value: pctOf(l.pct), valueTone: tone === 'warn' ? 'warn' : 'fg', so: [[paceText(l), l.ahead ? 'warn' : 'muted']], art: { body: limitDial(v, key, l), w: 34, client: true }, press: 'usage', whole: true }
+      return { label: `${key} limit`, value: pctOf(l.pct), valueTone: tone === 'warn' ? 'warn' : 'fg', so: [[limitSo(l, now), l.ahead ? 'warn' : 'muted']], art: { body: limitDial(v, key, l), w: 34, client: true }, press: 'usage', whole: true }
     }
     case 'plan': {
       const p = crew.plan
@@ -102,7 +111,7 @@ const cellOf = (key: ColumnKey, v: PanelView): Cell | null => {
     }
     case 'session':
       return { label: 'session', value: usd(s.costUsd), valueTone: 'fg',
-        so: [[s.costUsd === null ? 'no reading yet' : !s.turns ? 'no turns yet' : s.lastTurnUsd === null ? '' : `last turn ${usd(s.lastTurnUsd)}`, 'muted']], whole: true, press: 'costs' }
+        so: [[s.costUsd === null ? 'no reading yet' : !s.turns ? 'no turns yet' : s.lastTurnUsd === null ? '' : `last turn ${usd(s.lastTurnUsd)}`, 'muted']], whole: true, ...(v.alone ? {} : { press: 'costs' }) }
     case 'tests': {
       const t = stats.tests
       if (!t) return null
@@ -136,32 +145,33 @@ const columnImage = (key: ColumnKey, c: Cell, w: number, first: boolean): El => 
     + text(vx, 35, c.value, 16, c.valueTone, { w: 600 })
     + (c.small ? text(vx + widthOf(c.value, 16, 600) + 4, 35, c.small, 12, 'muted') : '')
     + runs(x0, 54, 11, c.so, max, false, c.whole ? fitWhole : fitTo)
-  return image(`col-${key}`, { source: doc(w, COL_H, c.tip ? withTip(c.tip, body, Infinity) : body), alt: c.alt ?? altOf(c), width: w, height: COL_H, ...(c.press ? { press: c.press } : {}) }, !!c.art?.client)
+  return image(`col-${key}`, { source: doc(w, COL_H, c.tip ? withTip(c.tip, body, Infinity) : body), alt: withAction(c.alt ?? altOf(c), c.press), width: w, height: COL_H, ...(c.press ? { press: c.press } : {}) }, !!c.art?.client)
 }
 // From 50% context, a drawn chip right of the value on the value's line: its own pressable Client, placed over the
 // column's free part so the image and its baseline stay as they are (a zone in the image would take the so-what's clicks).
 // The word never changes and the width is budgeted at the alarm's weight, so the chip never reflows the columns.
 // `cells` / `iconCells`: how wide the column must be to hold it whole, or its icon alone.
 const COMPACT_H = 18, COMPACT_W = 6 + 12 + 4 + widthOf('compact', 11, 600) + 6, COMPACT_ICON_W = 20
+const compactImage = (v: PanelView, iconOnly: boolean): El => {
+  const ctx = v.stats.context!, w = +(iconOnly ? COMPACT_ICON_W : COMPACT_W).toFixed(2)
+  const alt = ctx.alarm ? `Compact context now: ${contextText(ctx, v.stats.session.turns)}` : 'Compact context: runs /compact'
+  const body = `<rect x="0" y="0" width="${w}" height="${COMPACT_H}" rx="6" class="${ctx.alarm ? 'needTint' : 'wash'}"/>`
+    + at(iconOnly ? 4 : 6, 3, icon('squeeze', 12, `s-${contextTone(v.stats)}`))
+    + (iconOnly ? '' : text(22, 12.5, 'compact', 11, ctx.alarm ? 'er' : 'muted', ctx.alarm ? { w: 600 } : {}))
+  return image('compact', { source: doc(w, COMPACT_H, body), alt, width: w, height: COMPACT_H, press: 'compact', hover: true }, false)
+}
 const compactOf = (v: PanelView, c: Cell): { el: (iconOnly: boolean) => El; cells: number; iconCells: number } | null => {
   const ctx = v.stats.context
   if (!ctx || ctx.pct < 50) return null
   const left = Math.ceil((FIRST_X + (c.art ? c.art.w + 6 : 0) + widthOf(c.value, 16, 600) + 4) / CELL_PX)
-  const alt = ctx.alarm ? `Compact context now: ${contextText(ctx, v.stats.session.turns)}` : 'Compact context: runs /compact'
-  const el = (iconOnly: boolean): El => {
-    const w = +(iconOnly ? COMPACT_ICON_W : COMPACT_W).toFixed(2)
-    const body = `<rect x="0" y="0" width="${w}" height="${COMPACT_H}" rx="6" class="${ctx.alarm ? 'needTint' : 'wash'}"/>`
-      + at(iconOnly ? 4 : 6, 3, icon('squeeze', 12, `s-${contextTone(v.stats)}`))
-      + (iconOnly ? '' : text(22, 12.5, 'compact', 11, ctx.alarm ? 'er' : 'muted', ctx.alarm ? { w: 600 } : {}))
-    return { type: 'Box', props: { key: 'compact-at', position: 'absolute', left, top: 1 },
-      children: [image('compact', { source: doc(w, COMPACT_H, body), alt, width: w, height: COMPACT_H, press: 'compact', hover: true }, false)] }
-  }
+  const el = (iconOnly: boolean): El => ({ type: 'Box', props: { key: 'compact-at', position: 'absolute', left, top: 1 }, children: [compactImage(v, iconOnly)] })
   return { el, cells: left + Math.ceil(COMPACT_W / CELL_PX), iconCells: left + Math.ceil(COMPACT_ICON_W / CELL_PX) }
 }
 
 // ---------- the agents crab: who it dresses as, and what it says ----------
-// An alert's say is its name and a tail (" needs you", " failed") that is never cut.
-type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean; name?: string; tail?: string }
+// A say is a lead ("next: "), a name and a tail (" needs you", " · ~2m left", " · 3 failed tries"): only the name is ever cut.
+// spare: the tail drops first and the name never goes for it ("next:" names who before when).
+type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean; name?: string; tail?: string; lead?: string; spare?: true }
 // The top-level agents, then their helpers: a helper that waits on you or failed still dresses the crab.
 const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(helpersOf)]
 // The main session as its chip and the folded crab draw it: the slate crab with a question. It is never in crew.agents.
@@ -184,19 +194,26 @@ const faceOf = (crew: Crew): Face => {
   const failed = all.find(a => a.state === 'failed'), hard = as.find(a => a.struggling)
   if (need) return { a: need, say: `${title(need)} needs you`, tone: 'er', w: 600, alert: true, name: title(need), tail: ' needs you' }
   if (failed) return { a: failed, say: `${title(failed)} failed`, tone: 'er', w: 600, alert: true, name: title(failed), tail: ' failed' }
-  if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false }
+  if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false, name: title(hard), tail: ` · ${hard.tries} failed tries` }
   const n = nextUp(as)
   // One agent: its name and its state, the state kept whole like an alert's tail; "next:" picks among two or more.
   const state = n.eta.kind === 'left' ? fmtLeft(n.eta.minutes) : n.activity?.verb ?? ''
   if (as.length === 1) return { a: n, say: state ? `${title(n)} · ${state}` : title(n), tone: 'fg', w: 400, alert: false, name: title(n), tail: state ? ` · ${state}` : undefined }
-  return { a: n, say: `next: ${title(n)}${n.eta.kind === 'left' ? ` · ${fmtLeft(n.eta.minutes)}` : ''}`, tone: 'fg', w: 400, alert: false }
+  const left = n.eta.kind === 'left' ? ` · ${fmtLeft(n.eta.minutes)}` : ''
+  return { a: n, say: `next: ${title(n)}${left}`, tone: 'fg', w: 400, alert: false, lead: 'next: ', name: title(n), spare: true, ...(left ? { tail: left } : {}) }
 }
-// Cuts only the name of an alert; under 6 name characters left, the tail alone.
+// Cuts only the name; under 6 name characters left, the tail alone, whole, or nothing.
 const NAME_MIN = 6
 const sayFit = (f: Face, max: number, size: number) => {
-  if (!f.tail || !f.name || widthOf(f.say, size, f.w) <= max) return fitTo(f.say, max, size, f.w)
-  const name = fitTo(f.name, max - widthOf(f.tail, size, f.w), size, f.w)
-  return name.replace(/…$/, '').length >= NAME_MIN ? name + f.tail : fitTo(f.tail.replace(/^ · /, '').trim(), max, size, f.w)
+  if (!f.name || widthOf(f.say, size, f.w) <= max) return fitTo(f.say, max, size, f.w)
+  const lead = f.lead ?? '', tail = f.tail ?? '', named = (t: string) => {
+    const name = fitTo(f.name!, max - widthOf(lead + t, size, f.w), size, f.w)
+    return name === f.name || name.replace(/…$/, '').length >= NAME_MIN ? lead + name + t : ''   // a whole name is never too short
+  }
+  const whole = named(tail)
+  if (whole || f.spare) return whole || named('')
+  const bare = tail.replace(/^ · /, '').trim()
+  return bare && widthOf(bare, size, f.w) <= max ? bare : ''
 }
 // The crab with its count badge at the bottom corner (N1), from two agents up: one needs no number. Returns the drawing and its box.
 const BADGE_TEXT = `.bt{fill:${SURFACE.light}}@media (prefers-color-scheme: dark){.bt{fill:${SURFACE.dark}}}`
@@ -273,10 +290,12 @@ const agentsColumn = (v: PanelView, w: number): El => {
 
 // ---------- the toggle ----------
 const SIZE_ALT = { full: 'Panel: everything. Fold the agents', gauges: 'Panel: agents folded. Show one line', line: 'Panel: one line. Show everything' } as const
+// The gauges plugin draws no agents, so its alts never name them; the first two sizes draw the same there.
+const ALONE_ALT = { full: 'Panel: gauges. Press twice for one line', gauges: 'Panel: gauges. Show one line', line: 'Panel: one line. Show the gauges' } as const
 const toggle = (v: PanelView): El => {
   const dot = hasDot(v.ui.size, v.crew), { need } = alertsOf(v.crew)
   const why = !need ? '. An agent failed' : need === 1 && v.crew.sessionNeed ? '. Claude needs you' : '. An agent needs you'
-  return image('toggle', { source: svg(24, 24, at(5, 5, toggleIcon(v.ui.size, dot))), alt: `${SIZE_ALT[v.ui.size]}${dot ? why : ''}`, width: 24, height: 24, press: 'size' }, true)
+  return image('toggle', { source: svg(24, 24, at(5, 5, toggleIcon(v.ui.size, dot))), alt: `${(v.alone ? ALONE_ALT : SIZE_ALT)[v.ui.size]}${dot ? why : ''}`, width: 24, height: 24, press: 'size' }, true)
 }
 const spacer: El = { type: 'Box', props: { flexGrow: 1 } }
 
@@ -451,19 +470,24 @@ const chipRows = (v: PanelView, W: number): El | null => {
 }
 
 // ---------- the one-line size ----------
-const lineItem = (key: string, art: string, artW: number, parts: Run[], alt: string, client: boolean, o: { press?: string; tip?: string } = {}): El => {
-  const w = +(artW + 6 + runsWidth(parts, 13)).toFixed(2), body = at(0, 5, art) + runs(artW + 6, 18, 13, parts, w - artW - 6 + 1)
+// tail: a 12-unit icon after the text, 4 from it.
+const lineItem = (key: string, art: string, artW: number, parts: Run[], alt: string, client: boolean, o: { press?: string; tip?: string; tail?: string } = {}): El => {
+  const tw = artW + 6 + runsWidth(parts, 13), w = +(tw + (o.tail ? 4 + 12 : 0)).toFixed(2)
+  const body = at(0, 5, art) + runs(artW + 6, 18, 13, parts, tw - artW - 6 + 1) + (o.tail ? at(+(tw + 4).toFixed(2), 8, o.tail) : '')
   return image(key, { source: doc(w, LINE_H, o.tip ? withTip(o.tip, body, Infinity) : body), alt, width: w, height: LINE_H, ...(o.press ? { press: o.press } : {}) }, client)
 }
 const oneLineRow = (v: PanelView): El => {
   const { stats, crew } = v, W = v.bodyColumns * LINE_CELL_PX, items: El[] = []
   for (const part of lineParts(stats, crew)) {
     if (part === 'context') {
-      const c = stats.context, value = c ? pctOf(c.pct) : '—'
-      items.push(lineItem('col-context', contextDial(v, true), 25.5, [[value, c?.alarm ? 'er' : 'fg', 600], [' context', 'muted']], `context: ${value}`, true, { press: 'context' }))
+      const c = stats.context, value = c ? pctOf(c.pct) : '—', so = contextText(c, stats.session.turns)
+      items.push(lineItem('col-context', contextDial(v, true), 25.5, [[value, c?.alarm ? 'er' : 'fg', 600], [' context', 'muted']], withAction(`context: ${value}${so ? `, ${so}` : ''}`, 'context'), true, { press: 'context' }))
+      // In alarm the line keeps the way out, as the columns do: the compact chip, its icon alone.
+      if (c?.alarm) items.push(compactImage(v, true))
     } else if (part === '5h' || part === '7d') {
-      const l = limitOf(stats, part)!
-      items.push(lineItem(`col-${part}`, limitDial(v, part, l, true), 25.5, [[pctOf(l.pct), limitTone(l) === 'warn' ? 'warn' : 'fg', 600], [` ${part}`, 'muted']], `${part} limit: ${pctOf(l.pct)}`, true, { press: 'usage' }))
+      const l = limitOf(stats, part)!, so = limitSo(l, v.now)
+      items.push(lineItem(`col-${part}`, limitDial(v, part, l, true), 25.5, [[pctOf(l.pct), limitTone(l) === 'warn' ? 'warn' : 'fg', 600], [` ${part}`, 'muted']],
+        withAction(`${part} limit: ${pctOf(l.pct)}${so ? `, ${so}` : ''}`, 'usage'), true, { press: 'usage', ...(l.ahead ? { tail: icon('ahead', 12, 's-warn') } : {}) }))
     } else if (part === 'plan') {
       const p = crew.plan!
       const n = p.tasks.length
@@ -471,7 +495,7 @@ const oneLineRow = (v: PanelView): El => {
         `plan: ${p.done} of ${p.total} tasks, ${p.phase}${n ? `. Tasks: ${taskList(p)}` : ''}`, false, n ? { tip: taskList(p) } : {}))
     } else if (part === 'session') {
       const value = usd(stats.session.costUsd)
-      items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], `session: ${value}`, false, { press: 'costs' }))
+      items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], withAction(`session: ${value}`, v.alone ? undefined : 'costs'), false, v.alone ? {} : { press: 'costs' }))
     }
   }
   const children: El[] = [...items, spacer], used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX, bg = bgOnly(crew)

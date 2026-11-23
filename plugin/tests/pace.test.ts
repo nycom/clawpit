@@ -15,7 +15,7 @@ test('pace: ahead when the projection passes 100, and hot', () => {
 })
 test('pace: under ten percent elapsed there is no forecast', () => {
   const [calm, warm] = paceOf([{ kind: 'five_hour', percentUsed: 5, resetsAt: RESET }, { kind: 'five_hour', percentUsed: 50, resetsAt: RESET }], at(0.09, reset))
-  expect(calm).toEqual({ kind: 'five_hour', pct: 5, pacePct: null, projected: null, ahead: false, hot: false }); expect(paceText(calm)).toBe('')
+  expect(calm).toEqual({ kind: 'five_hour', pct: 5, pacePct: null, projected: null, ahead: false, hot: false, resetsAt: Date.parse(RESET) }); expect(paceText(calm)).toBe('')
   expect(warm.hot).toBe(true)
 })
 test('pace: no resetsAt gives no forecast', () => expect(paceOf([{ kind: 'seven_day', percentUsed: 63 }], 0)[0]).toMatchObject({ pacePct: null, projected: null, ahead: false, hot: true }))
@@ -23,4 +23,10 @@ test('pace: unknown kinds and an empty list give nothing', () => { expect(paceOf
 test('pace: a projection past 200 reads 200%+', () => {
   const [l] = paceOf([{ kind: 'five_hour', percentUsed: 90, resetsAt: RESET }], at(0.4, reset))
   expect(paceText(l)).toBe('on pace for 200%+')
+})
+
+test('pace: a limit keeps its reset time; none when the usage gives none', () => {
+  const reset = Date.parse(RESET)
+  expect(paceOf([{ kind: 'five_hour', percentUsed: 30, resetsAt: RESET }], at(0.5, reset))[0].resetsAt).toBe(reset)
+  expect(paceOf([{ kind: 'seven_day', percentUsed: 63 }], 0)[0].resetsAt).toBeUndefined()
 })

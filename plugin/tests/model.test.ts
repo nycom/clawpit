@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { SavvyRun } from '../types'
-import { alertsOf, crewOf, roleOf, type CrewInput } from '../hooks/model'
+import { alertsOf, crewOf, EMPTY_CREW, roleOf, STILL, type CrewInput } from '../hooks/model'
+import { pickLoops } from '../hooks/loops'
 import { ETA, NOW, STATES, USUALLY } from './fixtures/states'
 
 const input = (s: keyof typeof STATES, over: Partial<CrewInput> = {}): CrewInput =>
@@ -182,4 +183,12 @@ test('crewOf: a session need is its own field, counted once by alertsOf and neve
   expect(alone.agents).toEqual([]); expect(alertsOf(alone)).toEqual({ need: 1, failed: 0 })
   // Another plugin's atom: a malformed one is no need.
   expect(crewOf(input('sessionNeed', { need: { text: 7, since: 'x' } as never })).sessionNeed).toBeUndefined()
+})
+
+// The gauges plugin draws with EMPTY_CREW and STILL: they must stay what an empty session gives.
+test('EMPTY_CREW: crewOf with no runs, no flow and no need', () => {
+  expect(crewOf({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, now: NOW, etaOf: () => ({ kind: 'none' }), usuallyOf: () => null })).toEqual(EMPTY_CREW)
+})
+test('STILL: the loop plan of an empty crew, busy or not', () => {
+  for (const busy of [false, true]) expect(pickLoops(EMPTY_CREW, STATES.idle.ui, busy, false)).toEqual(STILL)
 })

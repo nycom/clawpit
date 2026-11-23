@@ -1,5 +1,5 @@
 // The crew: savvy-progress's runs plus clawpit's own trackers, as the rows and chips read them.
-import type { Activity, ActivityKind, BgKind, BgRow, Crew, CrewAgent, CrewState, Eta, LogLine, Plan, PlanTask, Prop, Role, SavvyFlow, SavvyNeed, SavvyRun } from '../types'
+import type { Activity, ActivityKind, BgKind, BgRow, Crew, CrewAgent, CrewState, Eta, LogLine, LoopPlan, Plan, PlanTask, Prop, Role, SavvyFlow, SavvyNeed, SavvyRun } from '../types'
 import { clip, oneLine, TIP_MAX } from './text'
 
 // background: the rows the pane shows (bgVisible's), counted for the folded column and the chip only.
@@ -95,6 +95,10 @@ export const crewOf = (i: CrewInput): Crew => {
     ...(bg.length ? { background: { running: running.length, waiting: waits.length, failed, ...(timed ? { next: { kind: timed.kind, nextAt: timed.nextAt! } } : {}), lead } } : {}),
   }
 }
+
+// A session with no agents, no plan and no need, and nothing moving: what the gauges plugin draws with.
+export const EMPTY_CREW: Crew = { title: 'Subagents', agents: [], ended: [], counts: { need: 0, failed: 0, running: 0, done: 0 }, costUsd: 0, leftMin: null, plan: null }
+export const STILL: LoopPlan = { walkers: [], chipPulse: false, ring: null, mascot: 'still', count: 0 }
 
 // ---------- background work: savvy's shells, monitors, crons and wakeups ----------
 const BG_KINDS: readonly BgKind[] = ['shell', 'monitor', 'cron', 'wakeup']
