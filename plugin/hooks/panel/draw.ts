@@ -227,10 +227,10 @@ const stillCrab = (size: 'S' | 'M') => crab({ role: 'explore', prop: 'none', wal
 // will not fit, the failed one stays and the active word goes; nothing is cut.
 const bgColumn = (b: Bg, w: number): El => {
   const x0 = 12, max = w - x0 - 4, vx = x0 + SIZE.crab.M[0] + 7 + 6
-  const under: Run[][] = b.active ? (b.failed ? [[['background', 'muted'], [` · ${b.failed} failed`, 'er']], [[`${b.failed} failed`, 'er']]] : [[['background', 'muted']]])
-    : [[['failed background', 'er']], [['failed', 'er']]]
+  // The label names the work, so the line under the count only has to name the failed part.
+  const under: Run[][] = b.failed ? [[[`${b.failed} failed`, 'er']], [['failed', 'er']]] : [[['running or waiting', 'muted']], []]
   const say = under.find(x => runsWidth(x, 11) <= max) ?? []
-  const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'agents', 11, 'muted', { max }) + at(x0, 15, stillCrab('M'))
+  const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'background', 11, 'muted', { max }) + at(x0, 15, stillCrab('M'))
     + text(vx, 35, String(b.active || b.failed), 16, b.active ? 'fg' : 'er', { w: 600 }) + runs(x0, 54, 11, say, max + 1)
   return image('mascot', { source: doc(w, COL_H, body), alt: `Agents: show them all. ${bgAlt(b)}`, width: w, height: COL_H, press: 'open' }, false)
 }
