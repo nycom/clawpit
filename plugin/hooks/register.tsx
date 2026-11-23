@@ -192,7 +192,7 @@ const takeBackground = (rows: BgRow[]) => {
 // One press stops it, no confirmation, as savvy's own Stop does: TaskStop for a shell or a monitor, CronDelete for a cron,
 // ScheduleWakeup's stop for a wakeup (which ends every wakeup). The hash is matched against the rows shown now, so a list
 // that moved since the drawing can never stop another task. An error is toasted and the row stays. On success the row hides
-// here at once: savvy hears none of these tools and keeps the row live until its own reconcile.
+// here at once: savvy marks a shell, monitor or cron ended only at its own reconcile.
 const stopBackground = async ($: EngineInterface, h: string) => {
   const rows = await bgRows($), t = bgVisible(rows, stopped, promptAt).find(r => r.h === h && isActiveBg(r))
   if (!t) return

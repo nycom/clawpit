@@ -215,8 +215,8 @@ type Bg = { active: number; failed: number }
 const bgOnly = (crew: Crew): Bg | null => (!crew.agents.length && !crew.sessionNeed && crew.background) || null
 // The failed part is a word in er, so colour is never the only signal.
 const bgRuns = (b: Bg): Run[] => b.active ? [[`${b.active} background`, 'muted'], ...(b.failed ? [[` · ${b.failed} failed`, 'er'] as Run] : [])] : [[`${b.failed} failed background`, 'er']]
-const tasks = (k: number) => `${k} background ${k === 1 ? 'task' : 'tasks'}`
-const bgAlt = (b: Bg) => (b.active ? `${tasks(b.active)}${b.failed ? `, ${b.failed} failed` : ''}` : `${b.failed} failed ${tasks(b.failed).slice(String(b.failed).length + 1)}`)
+const tasks = (k: number) => (k === 1 ? 'task' : 'tasks')
+const bgAlt = (b: Bg) => (b.active ? `${b.active} background ${tasks(b.active)}${b.failed ? `, ${b.failed} failed` : ''}` : `${b.failed} failed background ${tasks(b.failed)}`)
 const stillCrab = (size: 'S' | 'M') => crab({ role: 'explore', prop: 'none', walk: false, size })
 // The folded agents column: a still crab with no badge, the count in the value slot, its words under it. Where both clauses
 // will not fit, the failed one goes whole (a number is never cut); the alt keeps it.

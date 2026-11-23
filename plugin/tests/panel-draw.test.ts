@@ -734,7 +734,7 @@ test('panel: with background work alone, the folded agents column reads it, stil
   expect(words(m.source)).toBe('agents2background · 1 failed'); expect(m.alt).toBe('Agents: show them all. 2 background tasks, 1 failed')
   expect(m.source).not.toMatch(/animation|infinite/); expect(m.source).not.toContain('class="red"')
   const failedOnly = propsOf(find(panelTree(bgOnly('gauges', { active: 0, failed: 1 })), 'mascot')!)
-  expect(words(failedOnly.source)).toBe('agents1failed background'); expect(failedOnly.source).toContain('class="er"')
+  expect(words(failedOnly.source)).toBe('agents1failed background'); expect(failedOnly.source).toContain('class="er"'); expect(failedOnly.alt).toBe('Agents: show them all. 1 failed background task')
   expect(panelLoopCount(bgOnly('gauges'))).toBe(0)
 })
 test('panel: at one line, background work alone shows the agents crab and its words', () => {
