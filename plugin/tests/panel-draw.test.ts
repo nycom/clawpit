@@ -5,6 +5,7 @@ import { contrast, FONT, SURFACE, TOKENS } from '../hooks/tokens'
 import { icon } from '../hooks/icons'
 import { crab } from '../hooks/crab'
 import { NOW, type StateName } from './fixtures/states'
+import { fmtReset } from '../hooks/text'
 import { EMPTY_CREW, STILL } from '../hooks/model'
 import { panelLoopCount, viewOf } from './build'
 
@@ -310,7 +311,9 @@ test('panel: a two-clause so-what drops whole clauses right to left, never cutti
   expect(soOf(ctx, 'col-context')).toBe('~123456789 turns · 34% msgs')
   expect(soOf(ctx, 'col-turn')).toBe('+38 −6 · ≈$0.42')
   // Past those cells the long clause cannot claim, so it goes whole.
-  const ctxWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, context: { ...v.stats.context!, turnsLeft: 123_456_789_012 } } }))
+  // (The limits' reset clauses are left out here: they would claim the spare cells first.)
+  const noResets = v.stats.limits.map(({ resetsAt: _, ...l }) => l)
+  const ctxWide = panelTree(viewOf('hydra', { bodyColumns: 60, stats: { ...v.stats, limits: noResets, context: { ...v.stats.context!, turnsLeft: 123_456_789_012 } } }))
   expect(soOf(ctxWide, 'col-context')).toBe('~123456789012 turns')
   const ses = panelTree(viewOf('hydra', { bodyColumns: 76, stats: { ...v.stats, session: { ...v.stats.session, lastTurnUsd: 123_456_789 } } }))
   expect(soOf(ses, 'col-session')).toBe('last turn $123456789')
@@ -589,10 +592,11 @@ test('panel: a hostile title in a tooltip stays well-formed', () => {
 })
 
 const colWidth = (t: El, k: string) => find(t, k)!.props!.width as number
-test('panel: at 60 cells the 7d warning so-what survives beside the compact chip', () => {
+// Since session outlives tokens (2026-11-23) its 'last turn' clause takes the cells the token count left over: the chip is its icon.
+test('panel: at 60 cells the 7d warning so-what survives beside the compact chip, its icon alone', () => {
   for (const s of ['hydra', 'failed'] as const) {
     const t = panelTree(viewOf(s, { bodyColumns: 60 }))
-    expect(words(chipOf(t)!.source)).toBe('compact')
+    expect(chipOf(t)!.width).toBe(20); expect(chipOf(t)!.press).toBe('compact')
     expect(lastText(sourceOf(t, 'col-7d'))).toBe('on pace for 131%')
     expect(cols(t).reduce((a, k) => a + colWidth(t, k), 0)).toBeLessThanOrEqual(60 - 4)
   }
@@ -601,16 +605,17 @@ test('panel: at 60 cells the 7d warning so-what survives beside the compact chip
 test('panel: spare width goes to the column whose clauses would drop, warn first', () => {
   const v = viewOf('hydra'), at = (stats: typeof v.stats) => panelTree(viewOf('hydra', { bodyColumns: 60, stats }))
   const sum = (t: El) => cols(t).reduce((a, k) => a + colWidth(t, k), 0)
-  // Below 50%, no chip: the even share (14) is one cell short for the context so-what, and the tokens column has cells over.
+  // Below 50%, no chip: the even share (14) is one cell short for the context so-what, and the session column has cells over.
   const roomy = at({ ...v.stats, context: { ...v.stats.context!, pct: 40 } })
   expect(colWidth(roomy, 'col-context')).toBe(15); expect(lastText(sourceOf(roomy, 'col-context'))).toBe('~7 turns · 34% msgs')
-  expect(colWidth(roomy, 'col-tokens')).toBe(13); expect(lastText(sourceOf(roomy, 'col-tokens'))).toBe('44 turns')
+  expect(colWidth(roomy, 'col-session')).toBe(13); expect(lastText(sourceOf(roomy, 'col-session'))).toBe('last turn $2.46')
   expect(lastText(sourceOf(roomy, 'col-7d'))).toBe('on pace for 131%')
   expect(sum(roomy)).toBe(60 - 4)
-  // With the chip the tokens column gives its slack and the amber warning keeps its cells.
+  // With the chip no column has slack for its word: the session keeps its clause, the amber warning its cells, the chip its icon.
   const calm = { ...v.stats, limits: v.stats.limits.map(l => (l.kind === 'seven_day' ? { ...l, ahead: false } : l)) }
   const hot = at(v.stats)
-  expect(colWidth(hot, 'col-tokens')).toBe(9); expect(lastText(sourceOf(hot, 'col-tokens'))).toBe('44 turns'); expect(sum(hot)).toBe(60 - 4)
+  expect(colWidth(hot, 'col-session')).toBe(13); expect(lastText(sourceOf(hot, 'col-session'))).toBe('last turn $2.46'); expect(sum(hot)).toBe(60 - 4)
+  expect(chipOf(hot)!.width).toBe(20)
   expect(lastText(sourceOf(hot, 'col-7d'))).toBe('on pace for 131%')
   // Folded at 78 cells no column has slack left for the chip: the amber warning is the last to give, so the whole chip
   // would cost another column its value and the chip is its icon alone.
@@ -643,7 +648,9 @@ test('panel: at the one-line size a lone running agent reads its name and state;
   expect(lastText(sourceOf(lineOf('sizeLine', 96), 'mascot'))).toBe('e2e tests needs you')
 })
 test('panel: the one-line row has its cells at the measured 9.1 px for the agent to read in', () => {
-  expect(lastText(sourceOf(lineOf('oneNeedsYou', 60), 'mascot'))).toBe('e2e tests needs you')
+  // The 7d limit's ahead arrow (2026-11-23) takes 16 px: at 60 cells the name is cut, whole from 66.
+  expect(lastText(sourceOf(lineOf('oneNeedsYou', 60), 'mascot'))).toBe('e2e tes… needs you')
+  expect(lastText(sourceOf(lineOf('oneNeedsYou', 66), 'mascot'))).toBe('e2e tests needs you')
   expect(lastText(sourceOf(lineOf('oneRunning', 60), 'mascot'))).toMatch(/^savvy-.*… · ~2m left$/)
   // With the plan's mini bar in the row too, the name fits from 66 cells; at 60 the tail reads alone.
   expect(lastText(sourceOf(lineOf('sizeLine', 60), 'mascot'))).toBe('needs you')
@@ -651,7 +658,7 @@ test('panel: the one-line row has its cells at the measured 9.1 px for the agent
 })
 test('panel: folded, a lone agent\'s column claims the cells for its whole name; the other columns keep their slots', () => {
   const value = (t: El) => words([...sourceOf(t, 'mascot').matchAll(/<text[^>]*y="35"[^>]*>(.*?)<\/text>/g)][0][1])
-  const slots = { 60: ['col-context', 'col-5h', 'col-7d', 'col-agents'], 96: ['col-context', 'col-5h', 'col-7d', 'col-tokens', 'col-session', 'col-agents'] }
+  const slots = { 60: ['col-context', 'col-5h', 'col-7d', 'col-agents'], 96: ['col-context', 'col-5h', 'col-7d', 'col-session', 'col-tokens', 'col-agents'] }
   for (const bodyColumns of [60, 96] as const) for (const s of ['oneNeedsYou', 'oneRunning'] as const) expect(cols(panelTree(viewOf(s, { bodyColumns })))).toEqual(slots[bodyColumns])
   // At 60 every column is at its floor: no spare cells, so the name is cut there and nothing else gives.
   expect(value(panelTree(viewOf('oneNeedsYou', { bodyColumns: 60 })))).toMatch(/^e2e te.*…$/)
@@ -734,4 +741,62 @@ test('panel: the session chip is not an agent, so "+N more agents" counts only t
   // The alert chip holds the session and e2e (as "1 more need you"); the three running agents are the ones left.
   expect(propsOf(find(t, 'chips-alert')!).alt).toBe(`Claude needs you: ${SESSION_Q}; 1 more need you`)
   expect(propsOf(find(t, 'chip-more')!).alt).toBe(`${v.crew.agents.filter(a => a.state === 'running').length} more agents`)
+})
+
+// ---------- 2026-11-23: resets, the one-line alarm, alts that name the action, the gauges alone ----------
+const withReset = (s: StateName, five: number, seven: number) => {
+  const v = viewOf(s)
+  return viewOf(s, { stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, resetsAt: l.kind === 'five_hour' ? five : seven })) } })
+}
+const LOCAL_NOW = NOW, IN_2H = NOW + 2 * 3_600_000
+test('panel: a limit so-what ends with its reset, the first clause to drop when narrow', () => {
+  const v = withReset('idle', IN_2H, NOW + 3 * 86_400_000), t = panelTree({ ...v, bodyColumns: 140 })
+  expect(words(sourceOf(t, 'col-5h'))).toContain(`on pace for 58% · resets ${fmtReset(IN_2H, LOCAL_NOW)}`)
+  expect(propsOf(imgOf(t, 'col-5h')!).alt).toContain(`resets ${fmtReset(IN_2H, LOCAL_NOW)}`)
+  const narrow = panelTree({ ...v, bodyColumns: 60 })
+  for (const k of ['col-5h', 'col-7d']) { const w = words(sourceOf(narrow, k)); if (w.includes('resets')) expect(w).toContain('on pace for') }
+})
+test('panel: a limit with no forecast yet still says when it resets', () => {
+  const v = withReset('idle', IN_2H, IN_2H), t = panelTree({ ...v, stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, projected: null, pacePct: null })) }, bodyColumns: 140 })
+  expect(words(sourceOf(t, 'col-5h'))).toContain(`resets ${fmtReset(IN_2H, LOCAL_NOW)}`)
+  expect(words(sourceOf(t, 'col-5h'))).not.toContain('·')
+})
+test('panel: pressable columns name their action in the alt; plain ones do not', () => {
+  const t = panelTree(viewOf('busy', { bodyColumns: 140 }))
+  expect(propsOf(imgOf(t, 'col-context')!).alt).toMatch(/\. Runs \/context$/)
+  expect(propsOf(imgOf(t, 'col-5h')!).alt).toMatch(/\. Runs \/usage$/)
+  expect(propsOf(imgOf(t, 'col-session')!).alt).toMatch(/\. Opens the cost list$/)
+  expect(propsOf(imgOf(t, 'col-turn')!).alt).not.toMatch(/Runs|Opens/)
+  const alone = panelTree(viewOf('busy', { bodyColumns: 140, alone: true }))
+  expect(propsOf(imgOf(alone, 'col-session')!).alt).not.toMatch(/Opens/)
+})
+const lineView = (s: StateName, over: Partial<ReturnType<typeof viewOf>> = {}) => { const v = viewOf(s, over); return panelTree({ ...v, ui: { ...v.ui, size: 'line' } }) }
+test('panel: one line in alarm keeps the words and the compact press, not colour alone', () => {
+  const t = lineView('context90', { bodyColumns: 96 })
+  expect(propsOf(imgOf(t, 'col-context')!).alt).toContain('auto-compacts at 97%')
+  const chip = imgOf(t, 'compact')
+  expect(chip && propsOf(chip).press).toBe('compact')
+  expect(imgOf(lineView('idle', { bodyColumns: 96 }), 'compact')).toBeUndefined()
+})
+// Ahead of pace is a shape as well as amber: an up arrow after the label (2026-11-23), and the pace in the alt.
+test('panel: one line marks a limit ahead of pace with an up arrow and says the pace in the alt', () => {
+  const ARROW = icon('ahead', 12, 's-warn'), t = lineView('limitAhead', { bodyColumns: 96 })
+  expect(sourceOf(t, 'col-5h')).toContain(ARROW)
+  expect(propsOf(imgOf(t, 'col-5h')!).alt).toContain('on pace for 131%')
+  const v = viewOf('idle'), calm = lineView('idle', { stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, ahead: false, hot: true })) } })
+  for (const k of ['col-5h', 'col-7d']) { const src = sourceOf(calm, k); if (src) expect(src).not.toContain(ARROW) }
+})
+test('panel: alone, the toggle never speaks of agents', () => {
+  for (const size of ['full', 'gauges', 'line'] as const) {
+    const v = viewOf('idle', { crew: EMPTY_CREW, loops: STILL, armed: false, alone: true }), alt = propsOf(find(panelTree({ ...v, ui: { ...v.ui, size } }), 'toggle')!).alt
+    expect(alt).toMatch(/^Panel: (gauges|one line)/); expect(alt).not.toMatch(/agent/i)
+  }
+})
+
+// The state words are never cut: a row too narrow for them drops them whole, and the crab stands alone.
+test('panel: at the one-line size the agent state reads whole or not at all', () => {
+  for (const st of ['oneNeedsYou', 'oneRunning', 'sizeLine'] as const) for (let w = 40; w <= 70; w++) {
+    const texts = [...sourceOf(lineOf(st, w), 'mascot').matchAll(/<text[^>]*>(.*?)<\/text>/g)].map(m => words(m[1]))
+    for (const t of texts) expect([st, w, /…$/.test(t)]).toEqual([st, w, false])
+  }
 })
