@@ -49,6 +49,8 @@ const alts = async (ui: Pane) => ((await ui.findAll({})) as unknown as Node[])
   .flatMap(n => (n.type === 'Svg' ? [String(n.props.alt)] : n.type === 'Client' ? [String((n.props.props as { alt?: unknown } | undefined)?.alt)] : []))
 const stop = (ui: Pane, id: string) => ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: `stop-${bgHash(id)}` })
 const prompt = ($: $T, kind: string) => $.prompt.submit({ text: 'go', wait: false, origin: { kind } } as never)
+// A running row's alt ends with its start as a clock time, in the machine's zone and 12/24 h: matched by shape.
+const since = (head: string) => (list: string[]) => list.some(a => a.startsWith(`${head}, since `) && /, since \d{1,2}:\d{2}( [AP]M)?$/.test(a))
 const CONSENT = (kind: string, title: string) => `The user pressed Stop on the background ${kind} "${title}" in the Agents pane.`
 
 test('background hook: with no background atom the pane draws today\'s empty state; savvy\'s rows draw the section', { plugins: [savvy] }, async ($, on) => {
@@ -57,7 +59,8 @@ test('background hook: with no background atom the pane draws today\'s empty sta
   const ui = await pane($)
   expect(await alts(ui)).toEqual(['No agents yet. Agents you start show up here'])
   await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
-  expect(await alts(ui)).toEqual(expect.arrayContaining(['Background 1', 'npm run dev, shell, running <1m', 'Stop npm run dev']))
+  expect(await alts(ui)).toEqual(expect.arrayContaining(['Background: 1 running or waiting', 'Stop npm run dev']))
+  expect(since('npm run dev, shell, running <1m')(await alts(ui))).toBe(true)
   await ui.unmount()
 })
 
@@ -133,7 +136,7 @@ test('background hook: a refused or failed Stop toasts the reason and the row st
   await stop(ui, 'b1')
   await stop(ui, 'b1')
   expect(w.toasts).toEqual(["Couldn't stop npm run dev: Blocked by policy", "Couldn't stop npm run dev: No task found with ID: b1"])
-  expect(await alts(ui)).toContain('npm run dev, shell, running <1m')
+  expect(since('npm run dev, shell, running <1m')(await alts(ui))).toBe(true)
   await ui.unmount()
 })
 
@@ -201,9 +204,31 @@ test('background hook: after a Stop, the rows savvy wrote meanwhile decide the m
   await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
   const ui = await pane($)
   await stop(ui, 'b1')
-  expect(await alts(ui)).toContain('npm test -- --watch, shell, running <1m')
+  expect(since('npm test -- --watch, shell, running <1m')(await alts(ui))).toBe(true)
   const at = w.ticks.length
   await w.clock.advance(60_000)
   expect(w.ticks.length).toBe(at + 1)
   await ui.unmount()
 })
+
+// Claude Code's timeFormat row decides how the clock times read; it is read with the setup rows, never per render.
+const timeFormat = (on: OnT, value: string) => {
+  const seen = { lists: 0 }
+  on('config.list', () => { seen.lists += 1; return { value: [{ key: 'timeFormat', label: 'Time format', description: 'Clock times', kind: 'choice', value,
+    options: ['auto', '12-hour', '24-hour'], provider: { plugin: 'claude-code', tier: 'user' }, isLocked: false }] } as never })
+  return seen
+}
+for (const [value, shape] of [['12-hour', / [AP]M$/], ['24-hour', /, since \d{2}:\d{2}$/]] as const)
+  test(`background hook: the timeFormat row ${value} decides the clock times, read once and not per render`, { plugins: [savvy] }, async ($, on) => {
+    const w = setup(on), seen = timeFormat(on, value)
+    await start($)
+    await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
+    const ui = await pane($)
+    const row = (await alts(ui)).find(a => a.startsWith('npm run dev, shell, running'))!
+    expect(row).toMatch(shape)
+    const lists = seen.lists
+    await w.clock.advance(180_000)
+    expect((await alts(ui)).find(a => a.startsWith('npm run dev, shell, running'))).toMatch(/running 3m, since /)
+    expect(seen.lists).toBe(lists)
+    await ui.unmount()
+  })

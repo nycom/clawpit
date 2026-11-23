@@ -78,6 +78,7 @@ let animations = true                           // the `animations` setting, rea
 let bench: { count: number; eased: boolean } | null = null
 let offers: Offer[] = []                       // the /config rows still to ask about once; the pane shows the first
 let showCost = true                             // false when the savvy-progress showCost row reads false; a missing row shows
+let hour12 = false                              // clock times in 12 h: Claude Code's timeFormat row, else the OS locale's hour cycle
 let refused = new Set<string>()                 // keys a write was refused for, kept in the store as offerRefused:<key>
 
 // The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
@@ -88,7 +89,7 @@ const reset = () => {
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
   bgShown = false; stopped = new Map(); promptAt = 0; stopping = new Set(); bgLatest = []
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; setupReg = null; bench = null
-  offers = []; refused = new Set(); showCost = true
+  offers = []; refused = new Set(); showCost = true; hour12 = false
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -143,13 +144,20 @@ const loadStore = async ($: EngineInterface) => {
   }
 }
 
-// The setup offers from the /config list; an older CLI has no $.config, so nothing is offered.
+// The locale's hour cycle, for timeFormat "auto" or no row; anything unreadable is 24 h.
+const localeHour12 = () => {
+  try { const c = Intl.DateTimeFormat().resolvedOptions().hourCycle; return c === 'h11' || c === 'h12' } catch { return false }
+}
+// The setup offers from the /config list; an older CLI has no $.config, so nothing is offered. The timeFormat row is read here
+// too, once per list, never per render.
 const readOffers = async ($: EngineInterface) => {
   try {
     const rows = await $.config.list()
     showCost = rows.find(r => r.key === 'savvy-progress.showCost')?.value !== false
+    const tf = rows.find(r => r.key === 'timeFormat')?.value
+    hour12 = tf === '12-hour' ? true : tf === '24-hour' ? false : localeHour12()
     offers = offersOf(rows.filter(r => !refused.has(r.key)))
-  } catch { errors += 1; offers = []; showCost = true }
+  } catch { errors += 1; offers = []; showCost = true; hour12 = localeHour12() }
 }
 
 // A Yes or No press on the offer shown: written as if in /config. A refused or rejected write is said once and not asked again.
@@ -565,6 +573,11 @@ export const register: Register = (on, options) => {
   })
 }
 
+// The zone's offset from UTC in minutes at `now`; UTC when the platform cannot say.
+const zoneOf = (now: number) => {
+  try { const m = -new Date(now).getTimezoneOffset(); return Number.isFinite(m) ? m : 0 } catch { return 0 }
+}
+
 // Both surfaces from one read of the atoms and module memory, and one crew.
 export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ panel: PanelView; pane: PaneView }> => {
   const u = await read($, ui), f = await read($, flow), runs = await read($, agents)
@@ -588,6 +601,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   return {
     panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations,
       planGrow: animations && planSince !== null && now - planSince < MOTION.fillMs },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost, background: shownBg },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost, background: shownBg, hour12, offsetMin: zoneOf(now) },
   }
 }
