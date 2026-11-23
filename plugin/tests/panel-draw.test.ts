@@ -798,3 +798,13 @@ test('panel: narrow, background words drop whole from the right and the failed c
     expect(g).toMatch(/1 failed/)
   }
 })
+test('panel: from 40 to 120 cells the folded column draws its "background" label whole', () => {
+  const states: [string, BgCrew][] = [['a wakeup alone', { running: 0, waiting: 1, failed: 0, next: { kind: 'wakeup', nextAt: NOW + 7 * 60_000 }, lead: 'wakeup' }],
+    ['failed only', { running: 0, waiting: 0, failed: 1, lead: 'failed' }], ['2 running, 1 failed', { running: 2, waiting: 0, failed: 1, lead: 'shell' }]]
+  const cut: string[] = []
+  for (const [name, b] of states) for (let bodyColumns = 40; bodyColumns <= 120; bodyColumns++) {
+    const m = find(panelTree(bgOnly('gauges', b, bodyColumns)), 'mascot')
+    if (!m || !propsOf(m).source.includes('>background</text>')) cut.push(`${name} ${bodyColumns}`)
+  }
+  expect(cut).toEqual([])
+})

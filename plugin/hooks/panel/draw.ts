@@ -506,9 +506,14 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
 // A lone agent's column claims the cells for its whole name and, short of them, keeps its even share; more agents
 // take an even share and claim nothing.
 const agentsNeed = (v: PanelView, priority: number): Need => {
-  // Background work alone claims the cells for its whole words, as a lone agent does for its name.
+  // Background work alone claims the cells for the widest of its label, its icon and count, and its whole line under them,
+  // as a lone agent does for its name.
   const bg = bgOnly(v.crew)
-  if (bg) return { cells: Math.ceil((12 + 4 + runsWidth(underSays(bg, v.now)[0], 11)) / CELL_PX), floor: Infinity, head: 0, claims: true, warn: false, priority }
+  if (bg) {
+    const count = 12 + SIZE.crab.M[0] + 7 + 6 + widthOf(String(activeOf(bg) || bg.failed), 16, 600)
+    const px = Math.max(12 + widthOf('background', 11), count, 12 + runsWidth(underSays(bg, v.now)[0], 11)) + 4
+    return { cells: Math.ceil(px / CELL_PX), floor: Infinity, head: 0, claims: true, warn: false, priority }
+  }
   const f = faceOf(v.crew), solo = soloOf(v.crew, f)
   // The state line under the name counts too, so a short title never leaves its note to be cut.
   const cells = solo ? Math.ceil(Math.max(12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600), 12 + widthOf(f.say, 11, f.w)) / CELL_PX + 4 / CELL_PX) : Infinity
