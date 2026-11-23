@@ -168,8 +168,9 @@ const compactOf = (v: PanelView, c: Cell): { el: (iconOnly: boolean) => El; cell
 }
 
 // ---------- the agents crab: who it dresses as, and what it says ----------
-// An alert's say is its name and a tail (" needs you", " failed") that is never cut.
-type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean; name?: string; tail?: string }
+// A say is a lead ("next: "), a name and a tail (" needs you", " · ~2m left", " · 3 failed tries"): only the name is ever cut.
+// spare: the tail drops first and the name never goes for it ("next:" names who before when).
+type Face = { a: CrewAgent; say: string; tone: string; w: Weight; alert: boolean; name?: string; tail?: string; lead?: string; spare?: true }
 // The top-level agents, then their helpers: a helper that waits on you or failed still dresses the crab.
 const withHelpers = (as: CrewAgent[]) => [...as, ...as.flatMap(helpersOf)]
 // The main session as its chip and the folded crab draw it: the slate crab with a question. It is never in crew.agents.
@@ -192,20 +193,26 @@ const faceOf = (crew: Crew): Face => {
   const failed = all.find(a => a.state === 'failed'), hard = as.find(a => a.struggling)
   if (need) return { a: need, say: `${title(need)} needs you`, tone: 'er', w: 600, alert: true, name: title(need), tail: ' needs you' }
   if (failed) return { a: failed, say: `${title(failed)} failed`, tone: 'er', w: 600, alert: true, name: title(failed), tail: ' failed' }
-  if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false }
+  if (hard) return { a: hard, say: `${title(hard)} · ${hard.tries} failed tries`, tone: 'warn', w: 400, alert: false, name: title(hard), tail: ` · ${hard.tries} failed tries` }
   const n = nextUp(as)
   // One agent: its name and its state, the state kept whole like an alert's tail; "next:" picks among two or more.
   const state = n.eta.kind === 'left' ? fmtLeft(n.eta.minutes) : n.activity?.verb ?? ''
   if (as.length === 1) return { a: n, say: state ? `${title(n)} · ${state}` : title(n), tone: 'fg', w: 400, alert: false, name: title(n), tail: state ? ` · ${state}` : undefined }
-  return { a: n, say: `next: ${title(n)}${n.eta.kind === 'left' ? ` · ${fmtLeft(n.eta.minutes)}` : ''}`, tone: 'fg', w: 400, alert: false }
+  const left = n.eta.kind === 'left' ? ` · ${fmtLeft(n.eta.minutes)}` : ''
+  return { a: n, say: `next: ${title(n)}${left}`, tone: 'fg', w: 400, alert: false, lead: 'next: ', name: title(n), spare: true, ...(left ? { tail: left } : {}) }
 }
-// Cuts only the name of an alert; under 6 name characters left, the tail alone.
+// Cuts only the name; under 6 name characters left, the tail alone, whole, or nothing.
 const NAME_MIN = 6
 const sayFit = (f: Face, max: number, size: number) => {
-  if (!f.tail || !f.name || widthOf(f.say, size, f.w) <= max) return fitTo(f.say, max, size, f.w)
-  const name = fitTo(f.name, max - widthOf(f.tail, size, f.w), size, f.w)
-  const tail = f.tail.replace(/^ · /, '').trim()
-  return name.replace(/…$/, '').length >= NAME_MIN ? name + f.tail : widthOf(tail, size, f.w) <= max ? tail : ''
+  if (!f.name || widthOf(f.say, size, f.w) <= max) return fitTo(f.say, max, size, f.w)
+  const lead = f.lead ?? '', tail = f.tail ?? '', named = (t: string) => {
+    const name = fitTo(f.name!, max - widthOf(lead + t, size, f.w), size, f.w)
+    return name.replace(/…$/, '').length >= NAME_MIN ? lead + name + t : ''
+  }
+  const whole = named(tail)
+  if (whole || f.spare) return whole || named('')
+  const bare = tail.replace(/^ · /, '').trim()
+  return bare && widthOf(bare, size, f.w) <= max ? bare : ''
 }
 // The crab with its count badge at the bottom corner (N1), from two agents up: one needs no number. Returns the drawing and its box.
 const BADGE_TEXT = `.bt{fill:${SURFACE.light}}@media (prefers-color-scheme: dark){.bt{fill:${SURFACE.dark}}}`

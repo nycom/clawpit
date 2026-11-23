@@ -805,10 +805,19 @@ test('panel: alone, the toggle never speaks of agents', () => {
   }
 })
 
-// The state words are never cut: a row too narrow for them drops them whole, and the crab stands alone.
+// The state words are never cut: only the name is, and a row too narrow for the words drops them whole. One agent,
+// an alert, two or more ("next: … · ~2m left") and a struggling one ("… · 3 failed tries") alike.
 test('panel: at the one-line size the agent state reads whole or not at all', () => {
-  for (const st of ['oneNeedsYou', 'oneRunning', 'sizeLine'] as const) for (let w = 40; w <= 70; w++) {
-    const texts = [...sourceOf(lineOf(st, w), 'mascot').matchAll(/<text[^>]*>(.*?)<\/text>/g)].map(m => words(m[1]))
-    for (const t of texts) expect([st, w, /…$/.test(t)]).toEqual([st, w, false])
+  const f = viewOf('failed'), struggling = { ...f.crew, agents: f.crew.agents.filter(a => a.state !== 'failed' && a.state !== 'need').map(a => ({ ...a, helpers: [] })) }
+  const views = { oneNeedsYou: null, oneRunning: null, sizeLine: null, hydra: null, helpers: null, struggling } as const
+  for (const [st, crew] of Object.entries(views)) for (let w = 40; w <= 100; w++) {
+    const v = viewOf(crew ? 'failed' : st as StateName, { bodyColumns: w, ...(crew ? { crew, armed: false } : {}) })
+    const texts = [...sourceOf(panelTree({ ...v, ui: { ...v.ui, size: 'line' } }), 'mascot').matchAll(/<text[^>]*>(.*?)<\/text>/g)].map(m => words(m[1]))
+    // An ellipsis ends only a cut name: "next: savvy-…" with the time dropped whole; never "~2m…" or "needs y…".
+    const cut = (t: string) => /…$/.test(t) && !(/^next: \S.{5,}…$/.test(t) && !t.includes(' · ')) || /^next:\s*$/.test(t)
+    for (const t of texts) expect([st, w, t, cut(t)]).toEqual([st, w, t, false])
   }
+  // The struggling face is the one under test there: its words are on screen when the row is wide.
+  const wide = viewOf('failed', { bodyColumns: 140, crew: struggling, armed: false })
+  expect(words(sourceOf(panelTree({ ...wide, ui: { ...wide.ui, size: 'line' } }), 'mascot'))).toMatch(/3 failed tries/)
 })
