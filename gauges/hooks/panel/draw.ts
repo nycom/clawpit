@@ -61,8 +61,11 @@ type Cell = { label: string; value: string; valueTone: string; small?: string; s
 
 const limitOf = (stats: Stats, key: '5h' | '7d') => stats.limits.find(l => l.kind === (key === '5h' ? 'five_hour' : 'seven_day'))
 const limitTone = (l: LimitStat) => (l.ahead || l.pct >= 80 ? 'warn' : 'accent')
-// The pace, then when the window resets: the reset is the last clause, so it is the first a narrow column drops.
-const limitSo = (l: LimitStat, now: number) => [paceText(l), l.resetsAt === undefined ? '' : fmtReset(l.resetsAt, now)].map((t, i) => (i && t ? `resets ${t}` : t)).filter(Boolean).join(' · ')
+// Calm, when the window resets comes first; ahead of pace, the pace does. A narrow column drops the second clause whole.
+const limitSo = (l: LimitStat, now: number) => {
+  const reset = l.resetsAt === undefined ? '' : fmtReset(l.resetsAt, now), clauses = [paceText(l), reset && `resets ${reset}`]
+  return (l.ahead ? clauses : clauses.reverse()).filter(Boolean).join(' · ')
+}
 // What a press does, said at the end of the alt: a column that presses looks like one that does not.
 const ACTION: Record<string, string> = { context: 'Runs /context', usage: 'Runs /usage', costs: 'Opens the cost list' }
 const withAction = (alt: string, press?: string) => (press && ACTION[press] ? `${alt}. ${ACTION[press]}` : alt)

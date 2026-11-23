@@ -4,7 +4,7 @@ import { image, panelTree, type El } from '../hooks/panel/draw'
 import { contrast, FONT, SURFACE, TOKENS } from '../hooks/tokens'
 import { icon } from '../hooks/icons'
 import { crab } from '../hooks/crab'
-import { NOW, type StateName } from './fixtures/states'
+import { NOW, RESET_5H, RESET_7D, type StateName } from './fixtures/states'
 import { fmtReset } from '../hooks/text'
 import { EMPTY_CREW, STILL } from '../hooks/model'
 import { panelLoopCount, viewOf } from './build'
@@ -323,7 +323,9 @@ test('panel: a two-clause so-what drops whole clauses right to left, never cutti
   // A long cost claims the spare cells whole, never '$12…'.
   const turn = panelTree(viewOf('hydra', { bodyColumns: 88, stats: { ...v.stats, turn: { ...v.stats.turn!, costUsd: 123_456.78 } } }))
   expect(soOf(turn, 'col-turn')).toBe('+38 −6 · $123457')
-  const whole = ['~7 turns · 34% msgs', '~7 turns', 'auto-compacts at 97%', 'last turn $2.46', 'on pace for 58%', 'on pace for 131%', '+38 −6 · ≈$0.42', '+38 −6', '']
+  const r5 = `resets ${fmtReset(RESET_5H, NOW)}`, r7 = `resets ${fmtReset(RESET_7D, NOW)}`
+  const whole = ['~7 turns · 34% msgs', '~7 turns', 'auto-compacts at 97%', 'last turn $2.46', 'on pace for 58%', 'on pace for 131%', '+38 −6 · ≈$0.42', '+38 −6', '',
+    r5, `${r5} · on pace for 58%`, `on pace for 131% · ${r5}`, `on pace for 131% · ${r7}`]
   for (const s of ['hydra', 'context90', 'limitAhead'] as const) for (const bodyColumns of [46, 60, 88, 96]) {
     const t = panelTree(viewOf(s, { bodyColumns }))
     for (const k of ['col-context', 'col-turn', 'col-session', 'col-5h', 'col-7d']) if (find(t, k)) expect([k, whole.includes(soOf(t, k))]).toEqual([k, true])
@@ -749,12 +751,16 @@ const withReset = (s: StateName, five: number, seven: number) => {
   return viewOf(s, { stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, resetsAt: l.kind === 'five_hour' ? five : seven })) } })
 }
 const LOCAL_NOW = NOW, IN_2H = NOW + 2 * 3_600_000
-test('panel: a limit so-what ends with its reset, the first clause to drop when narrow', () => {
-  const v = withReset('idle', IN_2H, NOW + 3 * 86_400_000), t = panelTree({ ...v, bodyColumns: 140 })
-  expect(words(sourceOf(t, 'col-5h'))).toContain(`on pace for 58% · resets ${fmtReset(IN_2H, LOCAL_NOW)}`)
-  expect(propsOf(imgOf(t, 'col-5h')!).alt).toContain(`resets ${fmtReset(IN_2H, LOCAL_NOW)}`)
-  const narrow = panelTree({ ...v, bodyColumns: 60 })
-  for (const k of ['col-5h', 'col-7d']) { const w = words(sourceOf(narrow, k)); if (w.includes('resets')) expect(w).toContain('on pace for') }
+// A calm limit says first when it resets; one ahead of pace says its pace first. Narrow, the second clause drops whole.
+test('panel: calm, a limit leads with its reset; ahead, with its pace', () => {
+  const five = IN_2H, seven = NOW + 3 * 86_400_000, v = withReset('idle', five, seven)   // the idle fixture: 5h calm, 7d ahead
+  const wide = panelTree({ ...v, bodyColumns: 140 })
+  expect(words(sourceOf(wide, 'col-5h'))).toContain(`resets ${fmtReset(five, LOCAL_NOW)} · on pace for 58%`)
+  expect(words(sourceOf(wide, 'col-7d'))).toContain(`on pace for 131% · resets ${fmtReset(seven, LOCAL_NOW)}`)
+  expect(propsOf(imgOf(wide, 'col-5h')!).alt).toContain(`resets ${fmtReset(five, LOCAL_NOW)}`)
+  const narrow = panelTree({ ...v, bodyColumns: 96 })
+  expect(lastText(sourceOf(narrow, 'col-5h'))).toBe(`resets ${fmtReset(five, LOCAL_NOW)}`)
+  expect(lastText(sourceOf(narrow, 'col-7d'))).toBe('on pace for 131%')
 })
 test('panel: a limit with no forecast yet still says when it resets', () => {
   const v = withReset('idle', IN_2H, IN_2H), t = panelTree({ ...v, stats: { ...v.stats, limits: v.stats.limits.map(l => ({ ...l, projected: null, pacePct: null })) }, bodyColumns: 140 })

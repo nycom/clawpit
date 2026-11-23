@@ -6,7 +6,7 @@ import type { Activity, Eta, LogLine, SavvyFlow, SavvyNeed, SavvyRun, Stats, Ui 
 
 export const NOW = 1_800_000_000_000
 // When the fixture limits reset: in 2h40m ("10:40am" in UTC, the visual suite's zone) and in 4 days ("Tue 8:00am").
-const RESET_5H = NOW + 9_600_000, RESET_7D = NOW + 4 * 86_400_000
+export const RESET_5H = NOW + 9_600_000, RESET_7D = NOW + 4 * 86_400_000
 
 export type StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead'
   | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns' | 'oneRunning' | 'oneNeedsYou'
