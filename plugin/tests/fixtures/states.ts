@@ -5,6 +5,8 @@ import type { ConfigRow } from 'claude-code'
 import type { Activity, Eta, LogLine, SavvyFlow, SavvyNeed, SavvyRun, Stats, Ui } from '../../types'
 
 export const NOW = 1_800_000_000_000
+// When the fixture limits reset: in 2h40m ("10:40am" in UTC, the visual suite's zone) and in 4 days ("Tue 8:00am").
+const RESET_5H = NOW + 9_600_000, RESET_7D = NOW + 4 * 86_400_000
 
 export type StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'both' | 'context90' | 'limitAhead'
   | 'sizeGauges' | 'sizeLine' | 'drawerOpen' | 'helpers' | 'emptyPane' | 'manyAgents' | 'codeColumns' | 'oneRunning' | 'oneNeedsYou'
@@ -82,8 +84,8 @@ const OUT_OF_ORDER_FLOW: SavvyFlow = {
 const STATS: Stats = {
   context: { pct: 58, msgsPct: 34, turnsLeft: 7, autoPct: 97, alarm: false },
   limits: [
-    { kind: 'five_hour', pct: 21, pacePct: 36, projected: 21 / 0.36, ahead: false, hot: false },
-    { kind: 'seven_day', pct: 63, pacePct: 48, projected: 63 / 0.48, ahead: true, hot: true },
+    { kind: 'five_hour', pct: 21, pacePct: 36, projected: 21 / 0.36, ahead: false, hot: false, resetsAt: RESET_5H },
+    { kind: 'seven_day', pct: 63, pacePct: 48, projected: 63 / 0.48, ahead: true, hot: true, resetsAt: RESET_7D },
   ],
   turn: { startedAt: NOW - 102_000, added: 38, removed: 6, costUsd: 0.42 },
   tests: { passed: 179, failed: 0, at: NOW - 180_000 },
@@ -118,7 +120,7 @@ export const STATES: Record<StateName, Fixture> = {
   failed: base({ runs: FAILED, activity: FAILED_ACT, logs: FAILED_LOGS }),
   both: base({ runs: patch(FAILED, 'pln', { blocked: 'Ship the release notes in this PR, or after it?' }), activity: FAILED_ACT, logs: BOTH_LOGS }),
   context90: base({ stats: { ...STATS, context: { pct: 92, msgsPct: 34, turnsLeft: 1, autoPct: 97, alarm: true } } }),
-  limitAhead: base({ stats: { ...STATS, limits: [{ kind: 'five_hour', pct: 62, pacePct: 62 / 1.31, projected: 131, ahead: true, hot: true }, STATS.limits[1]] } }),
+  limitAhead: base({ stats: { ...STATS, limits: [{ kind: 'five_hour', pct: 62, pacePct: 62 / 1.31, projected: 131, ahead: true, hot: true, resetsAt: RESET_5H }, STATS.limits[1]] } }),
   sizeGauges: base({ runs: NEEDS, logs: NEEDS_LOGS, ui: { ...UI, size: 'gauges' } }),
   sizeLine: base({ runs: NEEDS, logs: NEEDS_LOGS, ui: { ...UI, size: 'line' } }),
   drawerOpen: base({ ui: { ...UI, open: 'imp' } }),

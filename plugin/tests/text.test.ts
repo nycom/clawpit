@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { oneLine, xml, clip, fit, wrap, textWidth, fmtClock, fmtAge, fmtLeft, fmtCost, fmtTokens, fmtDuration, modelLabel } from '../hooks/text'
+import { oneLine, xml, clip, fit, wrap, textWidth, fmtClock, fmtAge, fmtLeft, fmtCost, fmtTokens, fmtDuration, fmtReset, modelLabel } from '../hooks/text'
 
 test('text: oneLine strips control characters', () => expect(oneLine('a\u0000b\n c\u001b[31m')).toBe('ab c[31m'))
 test('text: xml escapes the five characters', () => expect(xml(`<&>"'`)).toBe('&lt;&amp;&gt;&quot;&apos;'))
@@ -68,3 +68,15 @@ test('text: modelLabel reads any id', () => {
   expect(modelLabel(undefined)).toEqual({ short: '', name: '', window: '' })
 })
 test('text: modelLabel never gives a short word past 9 characters', () => expect(modelLabel('claude-supercalifragilistic-9').short.length).toBeLessThanOrEqual(9))
+
+// When a plan limit resets, by local calendar day, as skins' band said it (the same words).
+test('text: fmtReset reads today, tomorrow, the weekday, then next weekday; nothing once past or unreadable', () => {
+  const now = new Date(2026, 10, 21, 12, 0).getTime()   // a Saturday, local time
+  expect(fmtReset(new Date(2026, 10, 21, 14, 40).getTime(), now)).toBe('2:40pm')
+  expect(fmtReset(new Date(2026, 10, 21, 0, 5).getTime(), new Date(2026, 10, 20, 23, 0).getTime())).toBe('tmrw 12:05am')
+  expect(fmtReset(new Date(2026, 10, 22, 9, 0).getTime(), now)).toBe('tmrw 9:00am')
+  expect(fmtReset(new Date(2026, 10, 24, 9, 0).getTime(), now)).toBe('Tue 9:00am')
+  expect(fmtReset(new Date(2026, 10, 28, 9, 0).getTime(), now)).toBe('next Sat 9:00am')
+  expect(fmtReset(new Date(2026, 10, 21, 11, 0).getTime(), now)).toBe('')
+  expect(fmtReset(NaN, now)).toBe('')
+})
