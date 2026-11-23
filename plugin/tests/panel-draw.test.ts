@@ -5,6 +5,7 @@ import { contrast, FONT, SURFACE, TOKENS } from '../hooks/tokens'
 import { icon } from '../hooks/icons'
 import { crab } from '../hooks/crab'
 import { NOW, type StateName } from './fixtures/states'
+import { EMPTY_CREW, STILL } from '../hooks/model'
 import { panelLoopCount, viewOf } from './build'
 
 const all = (e: El | string): El[] => (typeof e === 'string' ? [] : [e, ...(e.children ?? []).flatMap(all)])
@@ -191,6 +192,17 @@ test('panel: the session column presses costs and is a still Client; no other co
   // The one-line size's session item too.
   const v = viewOf('busy'), line = panelTree(viewOf('busy', { ui: { ...v.ui, size: 'line' } }))
   expect(propsOf(imgOf(line, 'col-session')!).press).toBe('costs')
+})
+
+// The gauges plugin has no Agents pane: alone, the session column and the one-line session item press nothing; the rest keep theirs.
+test('panel: alone, the session column and item press nothing; every other press stays', () => {
+  const PRESS: Record<string, string | undefined> = { 'col-context': 'context', 'col-5h': 'usage', 'col-7d': 'usage', 'col-session': undefined }
+  for (const s of ['idle', 'busy', 'context90', 'limitAhead'] as const) for (const size of ['full', 'gauges', 'line'] as const) for (const w of [60, 96, 140]) {
+    const v = viewOf(s, { crew: EMPTY_CREW, loops: STILL, armed: false, bodyColumns: w, alone: true }), t = panelTree({ ...v, ui: { ...v.ui, size } })
+    for (const k of (size === 'line' ? keys(find(t, 'line')) : keys(find(t, 'cols'))).filter(k => k.startsWith('col-'))) expect([k, propsOf(imgOf(t, k)!).press]).toEqual([k, PRESS[k]])
+    if (size === 'line' || w >= 96) expect(imgOf(t, 'col-session')).toBeDefined()   // at 60 cells the four columns before it fill the row
+    expect(all(t).some(e => isImage(e) && /costs|open/.test(propsOf(e).press ?? ''))).toBe(false)
+  }
 })
 
 test('panel: a failed test run names its failing tests: the so-what the first, the alt and the title all', () => {

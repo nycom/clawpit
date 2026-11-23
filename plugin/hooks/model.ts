@@ -1,5 +1,5 @@
 // The crew: savvy-progress's runs plus clawpit's own trackers, as the rows and chips read them.
-import type { Activity, ActivityKind, Crew, CrewAgent, CrewState, Eta, LogLine, Plan, PlanTask, Prop, Role, SavvyFlow, SavvyNeed, SavvyRun } from '../types'
+import type { Activity, ActivityKind, Crew, CrewAgent, CrewState, Eta, LogLine, LoopPlan, Plan, PlanTask, Prop, Role, SavvyFlow, SavvyNeed, SavvyRun } from '../types'
 
 export type CrewInput = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>; logs: Record<string, LogLine[]>
   etaOf: (run: SavvyRun, elapsedMs: number) => Eta; usuallyOf: (run: SavvyRun) => number | null; now: number; need?: SavvyNeed | null }
@@ -88,6 +88,10 @@ export const crewOf = (i: CrewInput): Crew => {
     ...(need ? { sessionNeed: need } : {}),
   }
 }
+
+// A session with no agents, no plan and no need, and nothing moving: what the gauges plugin draws with.
+export const EMPTY_CREW: Crew = { title: 'Subagents', agents: [], ended: [], counts: { need: 0, failed: 0, running: 0, done: 0 }, costUsd: 0, leftMin: null, plan: null }
+export const STILL: LoopPlan = { walkers: [], chipPulse: false, ring: null, mascot: 'still', count: 0 }
 
 // Every helper under an agent, nested ones included, in pane order.
 export const helpersOf = (a: CrewAgent): CrewAgent[] => (a.helpers ?? []).flatMap(h => [h, ...helpersOf(h)])

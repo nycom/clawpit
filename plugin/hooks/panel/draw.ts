@@ -14,7 +14,8 @@ import { image, type El } from '../draw'
 export { image, type El }
 
 export type PanelView = { stats: Stats; crew: Crew; ui: Ui; loops: LoopPlan; busy: boolean; armed: boolean; bodyColumns: number; now: number; settles: Record<string, Settle>; still?: boolean
-  planGrow?: boolean }  // the plan bar's fills grow: only while the plan is new
+  planGrow?: boolean    // the plan bar's fills grow: only while the plan is new
+  alone?: true }        // drawn by the gauges plugin, which has no Agents pane: the session column presses nothing
 
 // ---------- text ----------
 // shortcut: the kit's width table runs up to ~10% short of SF Pro, so drawn widths add 10%; drop SLACK once the table is measured.
@@ -101,7 +102,7 @@ const cellOf = (key: ColumnKey, v: PanelView): Cell | null => {
     }
     case 'session':
       return { label: 'session', value: usd(s.costUsd), valueTone: 'fg',
-        so: [[s.costUsd === null ? 'no reading yet' : !s.turns ? 'no turns yet' : s.lastTurnUsd === null ? '' : `last turn ${usd(s.lastTurnUsd)}`, 'muted']], whole: true, press: 'costs' }
+        so: [[s.costUsd === null ? 'no reading yet' : !s.turns ? 'no turns yet' : s.lastTurnUsd === null ? '' : `last turn ${usd(s.lastTurnUsd)}`, 'muted']], whole: true, ...(v.alone ? {} : { press: 'costs' }) }
     case 'tests': {
       const t = stats.tests
       if (!t) return null
@@ -416,7 +417,7 @@ const oneLineRow = (v: PanelView): El => {
       items.push(lineItem('col-plan', at(0, 3, segBar(planSegs(p), 48, 'compact')), 48, [[`${p.done}/${p.total}`, 'fg', 600], [` ${p.phase}`, 'muted']], `plan: ${p.done} of ${p.total} tasks, ${p.phase}. Tasks: ${taskList(p)}`, false, { tip: taskList(p) }))
     } else if (part === 'session') {
       const value = usd(stats.session.costUsd)
-      items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], `session: ${value}`, false, { press: 'costs' }))
+      items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], `session: ${value}`, false, v.alone ? {} : { press: 'costs' }))
     }
   }
   const children: El[] = [...items, spacer]
