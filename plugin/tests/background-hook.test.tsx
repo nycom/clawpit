@@ -142,16 +142,30 @@ test('background hook: a refused or failed Stop toasts the reason and the row st
 
 test('background hook: a Stop on a task or cron that is already gone hides its row without a toast', { plugins: [savvy] }, async ($, on) => {
   // The engine's own words when the id no longer exists (TaskStop, CronDelete), as seen on Claude Code 2.1.330.
-  const w = setup(on, (_$, e) => (e.tool === 'TaskStop'
-    ? { isError: true, result: 'No task found with ID: b1', text: 'No task found with ID: b1' }
-    : { isError: true, result: "No scheduled job with id 'c1'", text: "No scheduled job with id 'c1'" }))
+  // The engine appends hints to the TaskStop wording; a shell that ended on its own is still on record but not running.
+  const said: Record<string, string> = {
+    b1: 'No task found with ID: b1. Did you mean: b2?', b2: 'Task b2 is not running (status: completed)', c1: "No scheduled job with id 'c1'" }
+  const w = setup(on, (_$, e) => { const m = said[String(e.task_id ?? e.id)]; return { isError: true, result: m, text: m } })
   await start($)
-  await setBg($, [task('b1', 'shell', 'npm run dev', 'running'), task('c1', 'cron', 'check CI', 'scheduled', { schedule: 'every 10 minutes' })])
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running'), task('b2', 'monitor', 'watch CI', 'running'),
+    task('c1', 'cron', 'check CI', 'scheduled', { schedule: 'every 10 minutes' })])
+  const ui = await pane($)
+  for (const id of ['b1', 'b2', 'c1']) await stop(ui, id)
+  expect(w.toasts).toEqual([])
+  expect((await alts(ui)).some(a => ['npm run dev', 'watch CI', 'check CI'].some(t => a.startsWith(t)))).toBe(false)
+  await ui.unmount()
+})
+
+test('background hook: a deny always toasts, even one worded like an already-gone answer; a still-running answer toasts', { plugins: [savvy] }, async ($, on) => {
+  let n = 0
+  const w = setup(on, () => (n++ ? { isError: true, result: 'Task b1 is not running (status: running)', text: 'Task b1 is not running (status: running)' } : { deny: 'No task found with ID: b1' }))
+  await start($)
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
   const ui = await pane($)
   await stop(ui, 'b1')
-  await stop(ui, 'c1')
-  expect(w.toasts).toEqual([])
-  expect((await alts(ui)).some(a => a.startsWith('npm run dev') || a.startsWith('check CI'))).toBe(false)
+  await stop(ui, 'b1')
+  expect(w.toasts).toEqual(["Couldn't stop npm run dev: No task found with ID: b1", "Couldn't stop npm run dev: Task b1 is not running (status: running)"])
+  expect((await alts(ui)).some(a => a.startsWith('npm run dev'))).toBe(true)
   await ui.unmount()
 })
 
