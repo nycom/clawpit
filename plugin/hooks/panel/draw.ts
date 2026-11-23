@@ -96,8 +96,9 @@ const cellOf = (key: ColumnKey, v: PanelView): Cell | null => {
       if (!p) return null
       const cell: Cell = { label: `plan · ${p.phase}`, value: `${p.done}/${p.total}`, valueTone: 'fg',
         so: [[`${clean(p.title, 60)}${crew.leftMin === null ? '' : ` · ${fmtLeft(crew.leftMin)}`}`, 'muted']],
-        art: { body: at(0, 8, segBar(planSegs(p), 58, 'compact')), w: 58, client: false }, tip: taskList(p) }
-      return { ...cell, alt: `${altOf(cell)}. Tasks: ${taskList(p)}` }
+        // A flow with no tasks has no mini bar, tooltip or task list to draw.
+        ...(p.tasks.length ? { art: { body: at(0, 8, segBar(planSegs(p), 58, 'compact')), w: 58, client: false }, tip: taskList(p) } : {}) }
+      return { ...cell, alt: `${altOf(cell)}${p.tasks.length ? `. Tasks: ${taskList(p)}` : ''}` }
     }
     case 'session':
       return { label: 'session', value: usd(s.costUsd), valueTone: 'fg',
@@ -447,7 +448,9 @@ const oneLineRow = (v: PanelView): El => {
       items.push(lineItem(`col-${part}`, limitDial(v, part, l, true), 25.5, [[pctOf(l.pct), limitTone(l) === 'warn' ? 'warn' : 'fg', 600], [` ${part}`, 'muted']], `${part} limit: ${pctOf(l.pct)}`, true, { press: 'usage' }))
     } else if (part === 'plan') {
       const p = crew.plan!
-      items.push(lineItem('col-plan', at(0, 3, segBar(planSegs(p), 48, 'compact')), 48, [[`${p.done}/${p.total}`, 'fg', 600], [` ${p.phase}`, 'muted']], `plan: ${p.done} of ${p.total} tasks, ${p.phase}. Tasks: ${taskList(p)}`, false, { tip: taskList(p) }))
+      const n = p.tasks.length
+      items.push(lineItem('col-plan', n ? at(0, 3, segBar(planSegs(p), 48, 'compact')) : '', n ? 48 : -6, [[`${p.done}/${p.total}`, 'fg', 600], [` ${p.phase}`, 'muted']],
+        `plan: ${p.done} of ${p.total} tasks, ${p.phase}${n ? `. Tasks: ${taskList(p)}` : ''}`, false, n ? { tip: taskList(p) } : {}))
     } else if (part === 'session') {
       const value = usd(stats.session.costUsd)
       items.push(lineItem('col-session', '', -6, [[value, 'fg', 600], [' session', 'muted']], `session: ${value}`, false, { press: 'costs' }))

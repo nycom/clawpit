@@ -214,6 +214,21 @@ test('panel: a failed test run names its failing tests: the so-what the first, t
   expect(at([]).source).not.toContain('<title>')
 })
 
+test('panel: a flow with no tasks draws no empty mini bar and no dangling Tasks clause at the folded sizes', () => {
+  const none = (v: ReturnType<typeof viewOf>) => ({ ...v, crew: { ...v.crew, plan: { ...v.crew.plan!, tasks: [], total: 0, done: 0 } } })
+  for (const t of [panelTree(none(gauges('hydra'))), panelTree(none(viewOf('sizeLine')))]) {
+    const p = propsOf(imgOf(t, 'col-plan')!)
+    expect(p.alt).not.toContain('Tasks:')
+    expect(p.source).not.toContain('<title>')
+  }
+  // Without a mini bar the value starts where the text does, not past a 58 px (gauges) or 54 px (line) blank.
+  const g = propsOf(imgOf(panelTree(none(gauges('hydra'))), 'col-plan')!).source
+  expect(g).not.toMatch(/<g transform="translate\([^)]*\)"><\/g>/)
+  expect(Number(/<text [^>]*x="([\d.]+)"[^>]*>0\/0</.exec(g)?.[1])).toBeLessThan(30)
+  const l = propsOf(imgOf(panelTree(none(viewOf('sizeLine'))), 'col-plan')!).source
+  expect(Number(/<text [^>]*x="([\d.]+)"/.exec(l)?.[1])).toBe(0)
+})
+
 test('panel: the plan bar and the folded mini bars name each task and its state', () => {
   const list = 'schema done, api done, savvy-progress implement in progress, e2e tests in progress, cache-tax review c1 in progress, plan the release in progress, merge not started'
   const bar = propsOf(find(panelTree(viewOf('hydra')), 'plan-bar')!)
