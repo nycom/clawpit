@@ -89,14 +89,17 @@ for (const s of BACKGROUND)
     expect(alts(paneTree(v)).every(x => x.trim().length > 0)).toBe(true)
   })
 
-// Measured on the drawn page: a background title starts where an agent's does, and the Stop button sits in the chevron column,
-// its centre within 2 px of the chevron's (a 20 px box in a 24 px image cannot reach further left).
-for (const w of [28, 41, 52] as const)
-  test(`pane: background titles share the agents' title x and Stop sits on the chevron column, ${w} cells`, async ({ page }) => {
-    await show(page, paneTree(paneViewOf('backgroundCrew', { columns: w })), { surface: 'pane', widthCells: w, theme: 'dark' })
-    const at = (key: string, sel: string) => page.evaluate(([k, q]) => {
-      const r = document.querySelector(`[data-key="${k}"]`)!.shadowRoot!.querySelector(q)!.getBoundingClientRect(); return { left: r.left, mid: r.left + r.width / 2 }
-    }, [key, sel] as const)
-    expect(Math.abs((await at(`bg-${bgHash('b1')}`, 'text')).left - (await at('row-imp', 'text')).left)).toBeLessThan(0.5)
-    expect(Math.abs((await at(`stop-${bgHash('b1')}`, 'rect')).mid - (await at('row-imp', 'path')).mid)).toBeLessThan(2)
+// Measured on the drawn page: a background title starts where an agent's does, failed rows included; "failed" ends where the
+// other readings do; the Stop button centres on the chevron's centre.
+for (const w of [28, 41, 52] as const) for (const theme of ['dark', 'light'] as const)
+  test(`pane: background titles share the agents' title x, readings share their edge, Stop centres on the chevron, ${w} cells, ${theme}`, async ({ page }) => {
+    await show(page, paneTree(paneViewOf('backgroundCrew', { columns: w })), { surface: 'pane', widthCells: w, theme })
+    const box = (key: string, sel: string, text?: string) => page.evaluate(([k, q, t]) => {
+      const els = [...document.querySelector(`[data-key="${k}"]`)!.shadowRoot!.querySelectorAll(q)], el = t ? els.find(e => e.textContent === t)! : els[0]
+      const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, mid: r.left + r.width / 2 }
+    }, [key, sel, text ?? ''] as const)
+    const agent = (await box('row-imp', 'text')).left
+    for (const id of ['b1', 'b2', 'wake:resume the release check']) expect(Math.abs((await box(`bg-${bgHash(id)}`, 'text')).left - agent)).toBeLessThan(0.5)
+    expect(Math.abs((await box(`bg-${bgHash('b2')}`, 'text', 'failed')).right - (await box(`bg-${bgHash('b1')}`, 'text', '3m')).right)).toBeLessThan(0.5)
+    expect(Math.abs((await box(`stop-${bgHash('b1')}`, 'rect')).mid - (await box('row-imp', 'path')).mid)).toBeLessThan(0.5)
   })
