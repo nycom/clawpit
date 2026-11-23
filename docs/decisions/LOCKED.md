@@ -128,7 +128,7 @@ Taken by the maintainer while the build ran, after seeing each behaviour drawn.
 
 ## Gauges alone and the panel review: decided 2026-11-23
 
-Taken by the maintainer on the design review (Fable) and the impeccable critique of the gauges plugin. Design: `docs/plans/2026-11-23-gauges-plugin.md`.
+Taken by the maintainer after a design review and a design critique of the gauges plugin. Design: `docs/plans/2026-11-23-gauges-plugin.md`.
 - **Gauges alone:** a second plugin, `clawpit-gauges` (folder `gauges/`, marketplace `clawpit`), draws the panel above the prompt with clawpit's own `panelTree`, an empty crew and `alone` set; no Agents pane, no savvy-progress. Its drawing and trackers are byte copies of clawpit's, held by `scripts/sync-gauges.sh` and its test. One setting, `animations`.
 - **One panel at a time:** with clawpit installed the gauges row steps out of the band whenever a clawpit row is in it (an `AbovePromptList` hook in the gauges plugin). clawpit is unchanged by it.
 - **Toggle, alone:** three sizes as in clawpit, with its icons. Alone, the alts never name agents: "Panel: gauges. Press twice for one line", "Panel: gauges. Show one line", "Panel: one line. Show the gauges".

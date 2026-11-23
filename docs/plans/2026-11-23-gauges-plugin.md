@@ -1,6 +1,6 @@
 # The panel above the prompt on its own: `clawpit-gauges`
 
-Status: built. Fable design review PASS, then an impeccable critique (2026-11-23) whose fixes the maintainer took (section 12).
+Status: built. The design review passed; a design critique followed (2026-11-23), and the maintainer took its fixes (section 12).
 
 ## Why
 
@@ -161,7 +161,7 @@ Those changes are in the skins repository and are not part of this work.
 - Stopping the gauges plugin's own work while clawpit draws (section 4).
 - Windows: install only, nothing measured there.
 
-## 12. Changes from the impeccable critique (2026-11-23)
+## 12. Changes from the design critique (2026-11-23)
 
 The critique scored the gauges-only panel 26/40 and found three P1s. The maintainer took these, all in clawpit's shared drawing, so clawpit's panel changes too. They are recorded in `LOCKED.md`, "Gauges alone and the panel review":
 - Limit so-whats name the reset time (the skins band showed it). A calm limit leads with it; one ahead of pace leads with its pace.
