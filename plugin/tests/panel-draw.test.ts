@@ -752,3 +752,14 @@ test('panel: at full size, background work alone draws one muted chip that opens
   expect(find(panelTree({ ...s, crew: { ...s.crew, background: { active: 2, failed: 0 } } }), 'chip-background')).toBeUndefined()
   expect(find(panelTree(viewOf('idle')), 'chip-background')).toBeUndefined()
 })
+test('panel: at 60 cells the failed word survives the folded column and the one-line row', () => {
+  for (const size of ['gauges', 'line'] as const) for (const background of [{ active: 4, failed: 1 }, { active: 0, failed: 1 }]) {
+    const v = bgOnly(size, background), m = propsOf(find(panelTree({ ...v, bodyColumns: 60 }), 'mascot')!)
+    expect(`${size} ${background.active}: ${/failed/.test(words(m.source))}`).toBe(`${size} ${background.active}: true`)
+    expect(m.source).toContain('class="er"')
+  }
+  // No room for both clauses at one line: the active part shortens to its number first.
+  const tight = viewOf('idle', { bodyColumns: 60 }), crew = { ...tight.crew, background: { active: 4, failed: 1 } }
+  const line = propsOf(find(panelTree({ ...tight, crew, ui: { ...tight.ui, size: 'line' }, stats: { ...tight.stats, limits: tight.stats.limits.map(l => ({ ...l, hot: true })) } }), 'mascot')!)
+  expect(['4 background · 1 failed', '4 · 1 failed', '1 failed']).toContain(words(line.source))
+})

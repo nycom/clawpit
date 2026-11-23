@@ -213,16 +213,23 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
 // ---------- background work: not agents; with no agent and no session need, it alone reaches the pane ----------
 type Bg = { active: number; failed: number }
 const bgOnly = (crew: Crew): Bg | null => (!crew.agents.length && !crew.sessionNeed && crew.background) || null
-// The failed part is a word in er, so colour is never the only signal.
-const bgRuns = (b: Bg): Run[] => b.active ? [[`${b.active} background`, 'muted'], ...(b.failed ? [[` · ${b.failed} failed`, 'er'] as Run] : [])] : [[`${b.failed} failed background`, 'er']]
+// What background work says, longest first; the failed part is a word in er, so colour is never the only signal. Narrow,
+// the failed clause stays: the active part shortens to its number, then goes.
+const bgSays = (b: Bg): Run[][] => (b.active
+  ? b.failed ? [[[`${b.active} background`, 'muted'], [` · ${b.failed} failed`, 'er']], [[`${b.active}`, 'muted'], [` · ${b.failed} failed`, 'er']], [[`${b.failed} failed`, 'er']]]
+    : [[[`${b.active} background`, 'muted']]]
+  : [[[`${b.failed} failed background`, 'er']], [[`${b.failed} failed`, 'er']]])
+const bgRuns = (b: Bg): Run[] => bgSays(b)[0]
 const tasks = (k: number) => (k === 1 ? 'task' : 'tasks')
 const bgAlt = (b: Bg) => (b.active ? `${b.active} background ${tasks(b.active)}${b.failed ? `, ${b.failed} failed` : ''}` : `${b.failed} failed background ${tasks(b.failed)}`)
 const stillCrab = (size: 'S' | 'M') => crab({ role: 'explore', prop: 'none', walk: false, size })
 // The folded agents column: a still crab with no badge, the count in the value slot, its words under it. Where both clauses
-// will not fit, the failed one goes whole (a number is never cut); the alt keeps it.
+// will not fit, the failed one stays and the active word goes; nothing is cut.
 const bgColumn = (b: Bg, w: number): El => {
-  const x0 = 12, max = w - x0 - 4, vx = x0 + SIZE.crab.M[0] + 7 + 6, rs = bgRuns(b), first: Run[] = [[rs[0][0].replace(/^\d+ /, ''), rs[0][1]]]
-  const say: Run[] = runsWidth([...first, ...rs.slice(1)], 11) <= max ? [...first, ...rs.slice(1)] : [[fitWhole(first[0][0], max, 11), first[0][1]]]
+  const x0 = 12, max = w - x0 - 4, vx = x0 + SIZE.crab.M[0] + 7 + 6
+  const under: Run[][] = b.active ? (b.failed ? [[['background', 'muted'], [` · ${b.failed} failed`, 'er']], [[`${b.failed} failed`, 'er']]] : [[['background', 'muted']]])
+    : [[['failed background', 'er']], [['failed', 'er']]]
+  const say = under.find(x => runsWidth(x, 11) <= max) ?? []
   const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'agents', 11, 'muted', { max }) + at(x0, 15, stillCrab('M'))
     + text(vx, 35, String(b.active || b.failed), 16, b.active ? 'fg' : 'er', { w: 600 }) + runs(x0, 54, 11, say, max + 1)
   return image('mascot', { source: doc(w, COL_H, body), alt: `Agents: show them all. ${bgAlt(b)}`, width: w, height: COL_H, press: 'open' }, false)
@@ -448,8 +455,8 @@ const oneLineRow = (v: PanelView): El => {
   }
   const children: El[] = [...items, spacer], used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX, bg = bgOnly(crew)
   if (bg) {
-    // Whole clauses only: the failed one goes first, then the words, never a cut number.
-    const cw = SIZE.crab.S[0] + 7, room = W - used - cw - 6, rs = [bgRuns(bg), bgRuns(bg).slice(0, 1)].find(x => runsWidth(x, 13) <= room) ?? []
+    // The whole words, then the active part as its number, then the failed clause alone, then the bare crab.
+    const cw = SIZE.crab.S[0] + 7, room = W - used - cw - 6, rs = bgSays(bg).find(x => runsWidth(x, 13) <= room) ?? []
     const sayW = runsWidth(rs, 13), w = +(cw + (rs.length ? 6 + sayW : 0)).toFixed(2)
     const body = at(0, 1, stillCrab('S')) + (rs.length ? runs(cw + 6, 18, 13, rs, sayW + 1) : '')
     children.push(image('mascot', { source: doc(w, LINE_H, body), alt: `Agents: show them all. ${bgAlt(bg)}`, width: w, height: LINE_H, press: 'open' }, false))
