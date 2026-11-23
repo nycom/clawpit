@@ -409,9 +409,9 @@ const picker = {
   },
 }
 // savvy-progress's unasked session-need row at its last written value, every write and every toast.
-const configRows = (on: OnT) => {
+const configRows = (on: OnT, options = ['unasked', 'off', 'both', 'ask', 'tool']) => {
   const row = { key: NEED_KEY, label: 'Session needs you', description: 'Light Needs you when this session asks you a question?', kind: 'choice', value: 'unasked' as unknown,
-    options: ['unasked', 'off', 'both', 'ask', 'tool'], provider: { plugin: 'savvy-progress', tier: 'user' }, isLocked: false }
+    options, provider: { plugin: 'savvy-progress', tier: 'user' }, isLocked: false }
   const writes: Write[] = [], toasts: string[] = []
   on('state.set', { plugin: 'menu', key: 'wrote' } as never, (_$, e, next) => { const x = e.value as unknown as Write; writes.push(x); if (x.key === NEED_KEY) row.value = x.value; return next(e) })
   const listed = { afterWrite: 0 }
@@ -522,6 +522,19 @@ test('pane hook: /clawpit-setup answering the session-need row takes the one-tim
   expect(await offerShown(ui)).toBeUndefined()
   await ui.unmount()
 })
+
+const typedOther = (typed: string, options?: string[]) => async ($: Parameters<Parameters<typeof test>[1]>[0], on: OnT) => {
+  setup(on)
+  const c = configRows(on, options)
+  on('store.delete', () => ({ value: undefined }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('tool.call', { tool: 'AskUserQuestion' } as never, ((_$: unknown, e: { questions: { question: string }[] }) => ({ result: { answers: { [e.questions[0].question]: typed } } })) as never)
+  await start($)
+  await $.command.run({ command: 'clawpit-setup', args: '' })
+  expect(c.writes).toEqual([{ key: NEED_KEY, value: typed, by: 'clawpit' }])
+}
+test('pane hook: /clawpit-setup takes typed Other text that is an option value', { plugins: [savvy, menu] }, typedOther('off') as never)
+test('pane hook: /clawpit-setup takes typed Other text for a value that has no button', { plugins: [savvy, menu] }, typedOther('extra', ['unasked', 'off', 'both', 'ask', 'tool', 'extra']) as never)
 
 test('pane hook: the head hides agent cost when the showCost row reads false, and shows it when the row is true or missing', { plugins: [savvy, person] }, async ($, on) => {
   setup(on)

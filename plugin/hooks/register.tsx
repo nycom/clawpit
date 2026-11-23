@@ -430,8 +430,8 @@ export const register: Register = (on, options) => {
     for (const q of asks) {
       let said: string
       try { said = await $.ui.ask(q.question, { options: q.labels, header: q.header }) } catch (err) { if (err instanceof TypeError) return newer; break }   // a missing $.ui.ask throws a TypeError; a dismissed dialog rejects
-      const i = q.labels.indexOf(said)
-      if (i >= 0) answers.push({ key: q.key, value: q.values[i], was: q.was })
+      const i = q.labels.indexOf(said), v = i >= 0 ? q.values[i] : q.all.find(o => typeof o === 'string' && o === said)   // typed Other text counts when it is an option value
+      if (v !== undefined) answers.push({ key: q.key, value: v, was: q.was })
     }
     const writes = writesOf(answers), own = writes.filter(w => w.key.startsWith('clawpit.'))
     let saved = 0

@@ -21,7 +21,7 @@ const SKIP = ['clawpit.bench']
 // The most option buttons the engine's dialog takes.
 const MAX_BUTTONS = 4
 
-export type Question = { key: string; header: string; question: string; labels: string[]; values: ConfigValue[]; was: ConfigValue }
+export type Question = { key: string; header: string; question: string; labels: string[]; values: ConfigValue[]; all: ConfigValue[]; was: ConfigValue }
 export type Answer = { key: string; value: ConfigValue; was: ConfigValue }
 
 // The boolean and choice rows to ask, in menu order, with the current value first (unasked reads as the off value that follows it).
@@ -38,7 +38,7 @@ export const questionsOf = (rows: readonly ConfigRow[]): { asks: Question[]; ski
     const values = [...all.slice(i), ...all.slice(0, i)].slice(0, MAX_BUTTONS)
     if (all.length > MAX_BUTTONS) more.push(r.label)
     const name = (v: ConfigValue) => typeof v === 'boolean' ? (v ? 'On' : 'Off') : String(v)
-    asks.push({ key: r.key, header: r.label.slice(0, 12), question: r.description ?? r.label, was: r.value, values,
+    asks.push({ key: r.key, header: r.label.slice(0, 12), question: r.description ?? r.label, was: r.value, values, all,
       labels: values.map((v, n) => n ? name(v) : `${name(v)} (current)`) })
   }
   return { asks, skipped, more }
