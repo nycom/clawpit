@@ -514,9 +514,17 @@ export const register: Register = (on, options) => {
   // One Agents pane on the desktop: savvy-progress's /agents-info opens this pane there; `/agents-info savvy` opens
   // savvy's own (its ended background history, planned rows and /status line). No desktop attached: savvy's, as before.
   on('command.run', { command: 'agents-info' }, async ($, e, next) => {
+    // Booted before `next(e)`, as for tool calls: savvy's demo reads takeover beneath this to keep its own pane shut.
+    try { await boot($) } catch { errors += 1 }
     const args = (e.args ?? '').trim()
     let desktop = false
     try { desktop = (await $.session.surfaces()).includes('desktop') } catch { errors += 1 }
+    // savvy's demo plays through its atoms, which this pane draws: savvy keeps its own pane shut under takeover, so this one opens.
+    if (desktop && /^demo( fun)?$/i.test(args)) {
+      const out = await next(e)
+      try { await openPane($) } catch { errors += 1 }
+      return out
+    }
     if (!desktop || (args !== '' && args !== 'open' && args !== 'savvy')) return next(e)
     if (args === 'savvy') return next({ ...e, args: 'open' })
     try { await openPane($) } catch { errors += 1 }
