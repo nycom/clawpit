@@ -1,0 +1,158 @@
+import { test, expect, mock } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
+import { bgHash } from '../hooks/model'
+
+type $T = Parameters<TestBody>[0]
+type OnT = Parameters<TestBody>[1]
+type Node = { type: string; key?: string; props: Record<string, unknown> }
+
+const T0 = Date.UTC(2026, 10, 23, 12, 0, 0)
+const USAGE = { startedAt: T0, context: { window: 200_000 }, rateLimits: [], cost: { usd: 1 } }
+const PANE_PROPS = { title: 'Agents', isFocused: false, bodyColumns: 52, placement: 'dock' }
+
+// The engine beneath clawpit: a frozen clock, a store in memory, every tick written, every toast, and the stop tools,
+// answering as `answer` says (a deny, an error, or a result).
+const setup = (on: OnT, answer: (e: Record<string, unknown>) => unknown = () => ({ result: {} })) => {
+  const clock = mock.clock(on, { now: T0 })
+  const store = new Map<string, unknown>()
+  on('store.get', (_$, e) => ({ value: store.get(e.key) }))
+  on('store.set', (_$, e) => { store.set(e.key, e.value); return { value: undefined } })
+  on('store.keys', () => ({ value: [...store.keys()] }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.usage', () => ({ value: USAGE as never }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  on('ui.render', (h, e) => h.ui.resolve(e).Box({ key: 'beneath', children: [] }))
+  const ticks: unknown[] = [], toasts: string[] = [], calls: Record<string, unknown>[] = []
+  on('state.set', (_$, e, next) => { if (e.plugin === 'clawpit' && e.key === 'tick') ticks.push(e.value); return next(e) })
+  on('ui.toast', (_$, e) => { toasts.push(e.text); return { value: undefined } as never })
+  for (const tool of ['TaskStop', 'CronDelete', 'ScheduleWakeup'])
+    on('tool.call', { tool } as never, ((_$: unknown, e: Record<string, unknown>) => { calls.push(e); return answer(e) }) as never)
+  return { clock, ticks, toasts, calls }
+}
+
+// savvy-progress as clawpit sees it: its background atom, set through a test-only tool. An older savvy never writes it.
+const savvy = {
+  name: 'savvy-progress',
+  register(on: OnT) {
+    on('tool.call', { tool: 'savvy-bg' }, async ($, e) => {
+      await $.state.set({ plugin: 'savvy-progress', key: 'background' } as never, (e as unknown as { list: never }).list)
+      return { result: {} } as never
+    })
+  },
+}
+const setBg = ($: $T, list: unknown[]) => $.tool.call({ tool: 'savvy-bg', list } as never)
+const task = (id: string, kind: string, text: string, status: string, o: Record<string, unknown> = {}) => ({ id, kind, text, status, startedAt: T0, ...o })
+const start = ($: $T) => $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+const pane = ($: $T) => $.ui.mount({ plugin: 'clawpit', surface: 'desktop', component: 'Pane', requestId: 'clawpit-agents', props: PANE_PROPS as never })
+type Pane = Awaited<ReturnType<typeof pane>>
+const alts = async (ui: Pane) => ((await ui.findAll({})) as unknown as Node[])
+  .flatMap(n => (n.type === 'Svg' ? [String(n.props.alt)] : n.type === 'Client' ? [String((n.props.props as { alt?: unknown } | undefined)?.alt)] : []))
+const stop = (ui: Pane, id: string) => ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: `stop-${bgHash(id)}` })
+const prompt = ($: $T, kind: string) => $.prompt.submit({ text: 'go', wait: false, origin: { kind } } as never)
+const CONSENT = (kind: string, title: string) => `The user pressed Stop on the background ${kind} "${title}" in the Agents pane.`
+
+test('background hook: with no background atom the pane draws today\'s empty state; savvy\'s rows draw the section', { plugins: [savvy] }, async ($, on) => {
+  setup(on)
+  await start($)
+  const ui = await pane($)
+  expect(await alts(ui)).toEqual(['No agents yet. Agents you start show up here'])
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
+  expect(await alts(ui)).toEqual(expect.arrayContaining(['Background 1', 'npm run dev, shell, running <1m', 'Stop npm run dev']))
+  await ui.unmount()
+})
+
+test('background hook: the minute tick runs for a running row or a wakeup with a time, not for a cron alone, and stops with the last', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  await setBg($, [task('c1', 'cron', 'check CI', 'scheduled', { schedule: 'every 10 minutes' })])
+  let at = w.ticks.length
+  await w.clock.advance(120_000)
+  expect(w.ticks.length).toBe(at)
+  await setBg($, [task('c1', 'cron', 'check CI', 'scheduled'), task('b1', 'shell', 'npm run dev', 'running')])
+  at = w.ticks.length
+  await w.clock.advance(60_000)
+  expect(w.ticks.length).toBe(at + 1)
+  await setBg($, [task('c1', 'cron', 'check CI', 'scheduled'), task('b1', 'shell', 'npm run dev', 'done', { endedAt: T0 + 60_000 })])
+  at = w.ticks.length
+  await w.clock.advance(180_000)
+  expect(w.ticks.length).toBe(at)
+  await setBg($, [task('wake:x', 'wakeup', 'resume', 'scheduled', { nextAt: T0 + 600_000 })])
+  at = w.ticks.length
+  await w.clock.advance(60_000)
+  expect(w.ticks.length).toBe(at + 1)
+})
+
+test('background hook: Stop calls TaskStop, CronDelete or ScheduleWakeup stop with a consent line, hides the row and repaints at once', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running'), task('c1', 'cron', 'check CI', 'scheduled', { schedule: 'hourly' }),
+    task('wake:a', 'wakeup', 'resume a', 'scheduled', { nextAt: T0 + 600_000 }), task('wake:b', 'wakeup', 'resume b', 'scheduled', { nextAt: T0 + 900_000 })])
+  const ui = await pane($)
+  let at = w.ticks.length
+  await stop(ui, 'b1')
+  expect(w.calls.length).toBe(1); expect(w.calls[0]).toMatchObject({ tool: 'TaskStop', task_id: 'b1', consent: CONSENT('shell', 'npm run dev') })
+  expect(w.ticks.length).toBe(at + 1)
+  expect((await alts(ui)).some(a => a.startsWith('npm run dev'))).toBe(false)
+  await stop(ui, 'c1')
+  expect(w.calls[1]).toMatchObject({ tool: 'CronDelete', id: 'c1', consent: CONSENT('cron', 'check CI') })
+  // One wakeup stop ends them all, so every wakeup row hides.
+  await stop(ui, 'wake:a')
+  expect(w.calls[2]).toMatchObject({ tool: 'ScheduleWakeup', stop: true, consent: CONSENT('wakeup', 'resume a') }); expect(w.calls.length).toBe(3)
+  expect(await alts(ui)).toEqual(['No agents yet. Agents you start show up here'])
+  // Nothing timed is left: the minute tick is off.
+  at = w.ticks.length
+  await w.clock.advance(180_000)
+  expect(w.ticks.length).toBe(at)
+  expect(w.toasts).toEqual([])
+  await ui.unmount()
+})
+
+test('background hook: a stopped id that comes back with a new start shows again; an unknown hash does nothing', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  await setBg($, [task('wake:a', 'wakeup', 'resume a', 'scheduled', { nextAt: T0 + 600_000 })])
+  const ui = await pane($)
+  await stop(ui, 'wake:a')
+  expect((await alts(ui)).some(a => a.startsWith('resume a'))).toBe(false)
+  await setBg($, [task('wake:a', 'wakeup', 'resume a', 'scheduled', { startedAt: T0 + 5_000, nextAt: T0 + 900_000 })])
+  expect((await alts(ui)).some(a => a.startsWith('resume a'))).toBe(true)
+  for (const press of ['stop:nothere', 'stop:']) await ui.post({ press } as never, { in: `stop-${bgHash('wake:a')}` })
+  expect(w.calls.length).toBe(1)
+  expect((await alts(ui)).some(a => a.startsWith('resume a'))).toBe(true)
+  await stop(ui, 'wake:a')
+  expect(w.calls.length).toBe(2)
+  await ui.unmount()
+})
+
+test('background hook: a refused or failed Stop toasts the reason and the row stays', { plugins: [savvy] }, async ($, on) => {
+  let n = 0
+  const w = setup(on, () => (n++ ? { isError: true, result: 'No task found with ID: b1', text: 'No task found with ID: b1' } : { deny: 'Blocked by policy' }))
+  await start($)
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
+  const ui = await pane($)
+  await stop(ui, 'b1')
+  await stop(ui, 'b1')
+  expect(w.toasts).toEqual(["Couldn't stop npm run dev: Blocked by policy", "Couldn't stop npm run dev: No task found with ID: b1"])
+  expect(await alts(ui)).toContain('npm run dev, shell, running <1m')
+  await ui.unmount()
+})
+
+test('background hook: a failed row shows until the next composer or bridge prompt, not past it; a notification keeps it', { plugins: [savvy] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  const failed = (at: number) => task(`b${at}`, 'shell', `build ${at}`, 'failed', { endedAt: T0 + at })
+  await w.clock.advance(1_000)
+  await setBg($, [failed(1_000)])
+  const ui = await pane($)
+  expect(await alts(ui)).toContain('build 1000, shell, failed after <1m')
+  await prompt($, 'task-notification')
+  expect(await alts(ui)).toContain('build 1000, shell, failed after <1m')
+  await prompt($, 'composer')
+  expect(await alts(ui)).toEqual(['No agents yet. Agents you start show up here'])
+  await w.clock.advance(1_000)
+  await setBg($, [failed(1_000), failed(2_000)])
+  expect(await alts(ui)).toContain('build 2000, shell, failed after <1m')
+  await prompt($, 'bridge')
+  expect(await alts(ui)).toEqual(['No agents yet. Agents you start show up here'])
+  await ui.unmount()
+})

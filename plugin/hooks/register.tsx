@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigValue, EngineInterface, Register, RenderElement, RenderInput, RenderNode, SessionRateLimit, Timer } from 'claude-code'
-import type { Offer, SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
-import { crewOf, needOf } from './model'
+import type { BgRow, Offer, SavvyNeed, SavvyRun, Settle, Stats, TestStat, Ui } from '../types'
+import { backgroundOf, bgVisible, crewOf, isActiveBg, needOf } from './model'
 import { pickLoops } from './loops'
 import { moving, nextSize, parseSize, settle } from './panel/fold'
 import { panelTree, type PanelView } from './panel/draw'
@@ -34,6 +34,7 @@ const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
 const need = atom({ plugin: 'savvy-progress', key: 'need' } as const, null)
 const stages = atom({ plugin: 'savvy-progress', key: 'stages' } as const, [])
+const background = atom({ plugin: 'savvy-progress', key: 'background' } as const, [])
 
 // The stage words savvy publishes (the part before "="); anything but a non-empty list of strings falls back to STAGES (a non-string throws in split).
 const stageWords = async ($: EngineInterface): Promise<readonly string[]> => {
@@ -59,6 +60,9 @@ let limits: SessionRateLimit[] = []
 let settles: Record<string, Settle> = {}
 let planSince: number | null = null            // when the plan bar first showed
 let needShown = false                           // savvy's need atom holds a need: its age reads in minutes
+let bgShown = false                             // a background row reads a clock in minutes: running, or a wakeup's countdown
+let stopped = new Map<string, number>()         // background ids stopped from the pane, with the start they were stopped at
+let promptAt = 0                                // the person's last prompt: a failed background row shows until the next one
 let errors = 0
 let ticker: Timer | null = null
 let period = 0
@@ -80,6 +84,7 @@ const BENCH_MAX = 48
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
+  bgShown = false; stopped = new Map(); promptAt = 0
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; setupReg = null; bench = null
   offers = []; refused = new Set(); showCost = true
 }
@@ -103,7 +108,7 @@ const writeStats = async ($: EngineInterface) => { const v = statsOf(await $.clo
 // shortcut: "on screen" is read as "present"; the render hooks know the fitted columns, so pass them in if idle minute ticks show up.
 const periodOf = (now: number) =>
   turn.turn || seen.some(r => r.status === 'running') ? 1000
-    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) || needShown ? 60_000 : 0
+    : tests || paceOf(limits, now).length || (isArmed(turn, now) && seen.some(r => r.status === 'failed' && r.heldDone)) || needShown || bgShown ? 60_000 : 0
 
 const writeTick = async ($: EngineInterface) => {
   try { const at = await $.clock.now(); await update($, tick, () => at); await retick($) } catch { errors += 1 }
@@ -173,6 +178,38 @@ const takeOver = async ($: EngineInterface) => {
   try { if ((await read($, takeover)) !== true) await update($, takeover, () => true) } catch { errors += 1 }
 }
 
+// savvy's background rows, read the way `need` is: an older savvy writes none, so missing reads as none.
+const bgRows = async ($: EngineInterface): Promise<BgRow[]> => {
+  try { return backgroundOf(await read($, background)) } catch { errors += 1; return [] }
+}
+// From an observer or a press, never a render: a stop counts only while its row lives at the start it was stopped at, and
+// the minute tick runs while a shown row reads a clock (a cron shows its schedule, no clock).
+const takeBackground = (rows: BgRow[]) => {
+  stopped = new Map([...stopped].filter(([id, at]) => rows.some(r => r.id === id && isActiveBg(r) && r.startedAt === at)))
+  bgShown = bgVisible(rows, stopped, promptAt).some(r => r.state === 'running' || (r.state === 'scheduled' && r.nextAt !== undefined))
+}
+
+// One press stops it, no confirmation, as savvy's own Stop does: TaskStop for a shell or a monitor, CronDelete for a cron,
+// ScheduleWakeup's stop for a wakeup (which ends every wakeup). The hash is matched against the rows shown now, so a list
+// that moved since the drawing can never stop another task. An error is toasted and the row stays. On success the row hides
+// here at once: savvy hears none of these tools and keeps the row live until its own reconcile.
+const stopBackground = async ($: EngineInterface, h: string) => {
+  const rows = await bgRows($), t = bgVisible(rows, stopped, promptAt).find(r => r.h === h && isActiveBg(r))
+  if (!t) return
+  const consent = `The user pressed Stop on the background ${t.kind} "${clip(t.title, 80)}" in the Agents pane.`
+  const call = t.kind === 'cron' ? { tool: 'CronDelete', id: t.id } : t.kind === 'wakeup' ? { tool: 'ScheduleWakeup', stop: true } : { tool: 'TaskStop', task_id: t.id }
+  try {
+    const r = await $.tool.call({ ...call, consent } as never)
+    if (r.deny !== undefined || r.isError) throw new Error(r.deny ?? r.text ?? str(r.result))
+  } catch (err) {
+    $.ui.toast(`Couldn't stop ${t.title}: ${clip(oneLine(err instanceof Error ? err.message : String(err)), 200)}`)
+    return
+  }
+  for (const r of rows) if (t.kind === 'wakeup' ? r.kind === 'wakeup' && isActiveBg(r) : r.id === t.id) stopped.set(r.id, r.startedAt)
+  takeBackground(rows)
+  await writeTick($)
+}
+
 // Once per plugin load: a reload inside a running session fires no session.start, so the first observer runs it there.
 const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { const s = await $.session.surfaces(); if (s.includes('desktop') || !s.includes('terminal')) await takeOver($) } catch { errors += 1 }
@@ -183,6 +220,7 @@ const boot = ($: EngineInterface) => (booted ??= (async () => {
   try { seen = await read($, agents) } catch { errors += 1 }
   try { takeUsage(await $.session.usage({ breakdown: 'summary' })); await writeStats($) } catch { errors += 1 }
   try { needShown = !!needOf(await read($, need)) } catch { errors += 1 }
+  takeBackground(await bgRows($))
   try { await retick($) } catch { errors += 1 }
   try { await benchUp($) } catch { errors += 1 }
   try { await setupUp($) } catch { errors += 1 }
@@ -391,6 +429,27 @@ export const register: Register = (on, options) => {
     return out
   })
 
+  on('state.set', { plugin: 'savvy-progress', key: 'background' }, async ($, e, next) => {
+    const out = await next(e)
+    try { await boot($); if (out.value?.isSet) { takeBackground(backgroundOf(e.value)); await retick($) } } catch { errors += 1 }
+    return out
+  })
+
+  // The person's own prompt, typed or from the phone (savvy's set), ends the failed background rows' showing; notifications,
+  // schedules and peers do not. After a reload it is 0, so a row that failed before it shows again until the next prompt.
+  on('prompt.submit', async ($, e, next) => {
+    try {
+      if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {
+        await boot($)
+        const was = promptAt, rows = await bgRows($)
+        promptAt = await $.clock.now()
+        takeBackground(rows)
+        if (rows.some(r => r.state === 'failed' && (r.endedAt ?? r.startedAt) > was)) await writeTick($)
+      }
+    } catch { errors += 1 }
+    return next(e)
+  })
+
   // A row changed in /config: a setup offer for it goes (a plugin's key is `<plugin>.<field>`). clawpit's own writes skip this hook, so `answer` reads the list itself.
   on('config.set', async ($, e, next) => {
     const out = await next(e)
@@ -476,6 +535,7 @@ export const register: Register = (on, options) => {
       else if (press === 'crew') await update($, ui, u => ({ ...u, view: 'crew' }))
       else if (press === 'offer:yes' || press === 'offer:no') await answer($, press === 'offer:yes')
       else if (press.startsWith('kids:') && press.length > 5) { const id = press.slice(5); await update($, ui, u => ({ ...u, shut: toggle(u.shut, id) })) }
+      else if (press.startsWith('stop:') && press.length > 5) await stopBackground($, press.slice(5))
     } catch { errors += 1 }
     return {}
   })
@@ -491,10 +551,11 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   let n: SavvyNeed | null = null
   try { n = (await read($, need)) ?? null } catch { errors += 1 }
   const now = await $.clock.now()
+  const shownBg = bgVisible(await bgRows($), stopped, promptAt)
   const words = await stageWords($)
   const keys = (r: SavvyRun) => keysOf(r.type, r.model, r.description, words)
   const crew = crewOf({ flow: f, runs: Array.isArray(runs) ? runs : [], parents, activity: facts.activity, logs, now,
-    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)), need: n })
+    etaOf: (r, ms) => estimate(history, keys(r), ms), usuallyOf: r => usually(history, keys(r)), need: n, background: shownBg })
   const s = statsOf(now, code), busy = turn.turn !== null, armed = isArmed(turn, now)
   if (s.context) settles.context = settle(settles.context, s.context.pct, now)
   for (const l of s.limits) { const k = l.kind === 'five_hour' ? '5h' : '7d'; settles[k] = settle(settles[k], l.pct, now) }
@@ -503,6 +564,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   return {
     panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations,
       planGrow: animations && planSince !== null && now - planSince < MOTION.fillMs },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost, background: shownBg },
   }
 }
