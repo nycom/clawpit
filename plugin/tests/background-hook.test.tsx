@@ -232,3 +232,26 @@ for (const [value, shape] of [['12-hour', / [AP]M$/], ['24-hour', /, since \d{2}
     expect(seen.lists).toBe(lists)
     await ui.unmount()
   })
+
+// The person changing timeFormat in /config, as another plugin would; the engine beneath keeps the row's new value.
+const picker = {
+  name: 'picker',
+  register(on: OnT) {
+    on('tool.call', { tool: 'config-pick' }, async ($, e) => { await $.config.set((e as unknown as { pick: never }).pick); return { result: {} } as never })
+  },
+}
+test('background hook: a timeFormat change in /config shows at the next render', { plugins: [savvy, picker] }, async ($, on) => {
+  setup(on)
+  let value = '24-hour'
+  on('config.list', () => ({ value: [{ key: 'timeFormat', label: 'Time format', description: 'Clock times', kind: 'choice', value,
+    options: ['auto', '12-hour', '24-hour'], provider: { plugin: 'claude-code', tier: 'user' }, isLocked: false }] }) as never)
+  on('config.set', (_$, e) => { if (e.key === 'timeFormat') value = String(e.value); return { value: e.value } })
+  await start($)
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
+  const ui = await pane($)
+  const row = async () => (await alts(ui)).find(a => a.startsWith('npm run dev, shell, running'))!
+  expect(await row()).toMatch(/, since \d{2}:\d{2}$/)
+  await $.tool.call({ tool: 'config-pick', pick: { key: 'timeFormat', value: '12-hour' } } as never)
+  expect(await row()).toMatch(/ [AP]M$/)
+  await ui.unmount()
+})

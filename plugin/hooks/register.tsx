@@ -473,7 +473,8 @@ export const register: Register = (on, options) => {
   // A row changed in /config: a setup offer for it goes (a plugin's key is `<plugin>.<field>`). clawpit's own writes skip this hook, so `answer` reads the list itself.
   on('config.set', async ($, e, next) => {
     const out = await next(e)
-    try { await boot($); if (out.deny === undefined && OFFER_FROM.includes(e.key.split('.')[0])) { await readOffers($); await writeTick($) } } catch { errors += 1 }
+    // timeFormat is Claude Code's own row: read again so clock times follow it from the next render.
+    try { await boot($); if (out.deny === undefined && (OFFER_FROM.includes(e.key.split('.')[0]) || e.key === 'timeFormat')) { await readOffers($); await writeTick($) } } catch { errors += 1 }
     return out
   })
 
