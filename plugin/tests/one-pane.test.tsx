@@ -41,11 +41,12 @@ test('/agents-info savvy opens savvy\'s own pane, through savvy', async ($, on) 
   expect(w.opens).not.toContain('clawpit-agents')
 })
 
-test('other arguments, and sessions with no desktop attached, pass through unchanged', async ($, on) => {
+test('on the desktop any other argument passes through to savvy unchanged', async ($, on) => {
   const w = setup(on, ['desktop'])
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await run($, 'close')
-  expect(w.savvy).toEqual(['close'])
+  await run($, 'toggle')
+  expect(w.savvy).toEqual(['toggle'])
+  expect(w.opens).not.toContain('clawpit-agents')
 })
 
 for (const surfaces of [['terminal'], ['vscode'], ['mobile'], []])

@@ -433,7 +433,7 @@ export const register: Register = (on, options) => {
     try { desktop = (await $.session.surfaces()).includes('desktop') } catch { errors += 1 }
     if (!desktop || (args !== '' && args !== 'open' && args !== 'savvy')) return next(e)
     if (args === 'savvy') return next({ ...e, args: 'open' })
-    await openPane($)
+    try { await openPane($) } catch { errors += 1 }
     return { text: 'opened' }
   })
 
