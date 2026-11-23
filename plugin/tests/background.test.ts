@@ -170,6 +170,9 @@ test('pane: running rows read back (age, since), waiting rows read forward (in, 
   expect(alt(find(t, `bg-${wake}`))).toBe('resume the release check, wakeup, in 7m, at 08:07')
   // savvy's "every 10 minutes" reads its short form, whole in the tooltip and the alt; line 2 is empty.
   expect(texts(find(t, `bg-${h('c1')}`))).toEqual(['check the CI queue', 'every 10m'])
+  // A lone reading line sits on the title's baseline, centred in the row; two lines sit at 13 and 26.
+  expect(src(find(t, `bg-${h('c1')}`))).toMatch(/<text x="[\d.]+" y="19" class="fg" font-size="12" text-anchor="end">every 10m<\/text>/)
+  expect(src(find(t, `bg-${h('b1')}`))).toMatch(/<text x="[\d.]+" y="13" class="fg" font-size="12" text-anchor="end">3m<\/text>/)
   expect(src(find(t, `bg-${h('c1')}`))).toContain('<title>every 10 minutes</title>'); expect(alt(find(t, `bg-${h('c1')}`))).toBe('check the CI queue, cron, every 10 minutes')
   expect(texts(find(t, `bg-${h('b2')}`))).toEqual(['npm run build:docs', 'failed', 'after 2m'])
   expect(alt(find(t, `bg-${h('b2')}`))).toBe('npm run build:docs, shell, failed after 2m')
@@ -191,9 +194,10 @@ test('pane: a cron with a next time reads like a wakeup over its schedule, with 
   expect(texts(plain)).toEqual(['poll', 'hourly']); expect(src(plain)).not.toContain('<title>')
 })
 
-test('pane: a wakeup draws a still 2 px track under its title, filled in accent by the wait used', () => {
+test('pane: a wakeup draws a still 2 px track under its title, filled in muted by the wait used', () => {
   const t = paneTree(bgView()), s0 = src(find(t, `bg-${wake}`))
-  const track = /<rect x="48" y="24" width="([\d.]+)" height="2" rx="1" class="track"\/>/.exec(s0), fill = /<rect x="48" y="24" width="([\d.]+)" height="2" rx="1" class="accent"\/>/.exec(s0)
+  const track = /<rect x="48" y="24" width="([\d.]+)" height="2" rx="1" class="track"\/>/.exec(s0), fill = /<rect x="48" y="24" width="([\d.]+)" height="2" rx="1" class="muted"\/>/.exec(s0)
+  expect(s0).not.toContain('class="accent"')
   expect(track).not.toBeNull(); expect(fill).not.toBeNull()
   // Set 10 minutes ago, due in 7: 10 of 17 used.
   expect(Math.abs(+fill![1] - +track![1] * 10 / 17)).toBeLessThan(0.02)
@@ -201,30 +205,55 @@ test('pane: a wakeup draws a still 2 px track under its title, filled in accent 
   for (const id of ['b1', 'm1', 'c1', 'b2']) expect(src(find(t, `bg-${h(id)}`))).not.toContain('height="2"')
 })
 
-test('pane: a failed row is one full-width image on the needs-you tint, with a cross, the word failed, an empty Stop slot and no Stop', () => {
-  const t = paneTree(bgView()), row = find(t, `bg-${h('b2')}`)!
-  expect(row.type).toBe('Svg'); expect(inner(row).width).toBe(W52)
-  expect(src(row)).toContain(`<rect x="0" y="0" width="${W52}" height="30" rx="8" class="needTint"/>`)
+test('pane: a failed row is a row Box like the active ones: its image and a slot that ends the tint, with no Stop and no press', () => {
+  const t = paneTree(bgView()), box = all(t).find(e => e.type === 'Box' && (e.children ?? []).some(c => typeof c !== 'string' && c.props?.key === `bg-${h('b2')}`))!
+  const [row, slot] = box.children as El[]
+  expect(box.props?.flexDirection).toBe('row'); expect(row.type).toBe('Svg'); expect(inner(row).width).toBe(W52 - 28)
+  expect(slot.type).toBe('Svg'); expect(slot.props?.key).toBe(`slot-${h('b2')}`); expect(inner(slot)).toMatchObject({ width: 28, height: 30 }); expect(inner(slot).press).toBeUndefined()
+  // The tint runs 8 px past each seam, clipped there, so the two images read as one rounded row.
+  expect(src(row)).toContain(`<rect x="0" y="0" width="${W52 - 28 + 8}" height="30" rx="8" class="needTint"/>`)
+  expect(src(slot)).toContain('<rect x="-8" y="0" width="36" height="30" rx="8" class="needTint"/>')
   expect(src(row)).toContain(icon('cross', 12, 's-er')); expect(find(t, `stop-${h('b2')}`)).toBeUndefined()
   expect(src(row)).toContain('<text x="48" y="19" class="fg" font-size="12">npm run build:docs</text>')
+  // "failed" ends on the shared reading edge, W - 34, as every other reading does.
   expect(src(row)).toContain(`<text x="${W52 - 34}" y="13" class="er" font-size="12" font-weight="600" text-anchor="end">failed</text>`)
+  expect(src(find(t, `bg-${h('b1')}`))).toContain(`<text x="${W52 - 34}" y="13" class="fg" font-size="12" text-anchor="end">3m</text>`)
 })
 
-test('pane: an active row is a plain image beside its Stop: a 20 px wash box with radius 6 and the filled square, in a 24 px press', () => {
+// The x a row's title text starts at in the pane, from the drawn tree: its image's offset in its row Box plus the text's own x.
+const titleX = (tree: El, key: string): number => {
+  const box = all(tree).find(e => e.type === 'Box' && e.props?.flexDirection === 'row' && (e.children ?? []).some(c => typeof c !== 'string' && c.props?.key === key))
+  const kids = (box?.children ?? []) as El[], at = kids.findIndex(c => c.props?.key === key)
+  const before = kids.slice(0, at).reduce((x, c) => x + Number(inner(c).width), 0), img = at >= 0 ? kids[at] : find(tree, key)!
+  return before + Number(/<text x="([\d.]+)"/.exec(src(img).replace(/<style>.*?<\/style>/g, ''))![1])
+}
+test('pane: on the drawn tree, every background title starts where the top-level agents\' titles do, running and failed alike', () => {
+  for (const columns of [28, 41, 52]) {
+    const v = paneViewOf('backgroundCrew', { columns }), t = paneTree(v), agent = titleX(t, 'row-imp')
+    expect(agent).toBe(48)
+    for (const r of v.background!) expect(`${columns} ${r.id}: ${titleX(t, `bg-${r.h}`)}`).toBe(`${columns} ${r.id}: ${agent}`)
+    // A failed agent row draws its crab inside its own image (withCrab): its title starts there too.
+    const f = paneTree(paneViewOf('failed', { columns }))
+    expect(titleX(f, 'row-e2e')).toBe(agent)
+  }
+})
+
+test('pane: an active row is a plain image beside its Stop: a 20 px wash box with radius 6 and the filled square, centred on the chevron', () => {
   const t = paneTree(bgView()), box = all(t).find(e => e.type === 'Box' && (e.children ?? []).some(c => typeof c !== 'string' && c.props?.key === `bg-${h('b1')}`))!
   const [row, stop] = box.children as El[]
   expect(box.props?.flexDirection).toBe('row')
-  expect(row.type).toBe('Svg'); expect(inner(row).press).toBeUndefined(); expect(inner(row).width).toBe(W52 - 24)
+  expect(row.type).toBe('Svg'); expect(inner(row).press).toBeUndefined(); expect(inner(row).width).toBe(W52 - 28)
   expect(stop.type).toBe('Client'); expect(stop.props?.key).toBe(`stop-${h('b1')}`)
-  expect(inner(stop)).toMatchObject({ press: `stop:${h('b1')}`, hover: true, alt: 'Stop npm run dev -- --port 5173', width: 24, height: 30 })
-  expect(src(stop)).toContain('<rect x="0" y="5" width="20" height="20" rx="6" class="wash"/>'); expect(src(stop)).toContain(`<g transform="translate(4 9)">${stopSquare('muted')}</g>`)
+  // 28 px: the box spans 2 to 22, so its centre is the image's x 12, global W - 16: the chevron's centre.
+  expect(inner(stop)).toMatchObject({ press: `stop:${h('b1')}`, hover: true, alt: 'Stop npm run dev -- --port 5173', width: 28, height: 30 })
+  expect(src(stop)).toContain('<rect x="2" y="5" width="20" height="20" rx="6" class="wash"/>'); expect(src(stop)).toContain(`<g transform="translate(6 9)">${stopSquare('muted')}</g>`)
   expect(src(row)).toContain('<text x="48" y="19" class="fg" font-size="12">npm run dev -- --port 5173</text>')
 })
 
 test('pane: the hairline spans the first waiting row\'s image and its Stop, at their top edge', () => {
   const t = paneTree(bgView())
-  expect(src(find(t, `bg-${wake}`))).toContain(`<rect x="0" y="0" width="${W52 - 24}" height="1" class="track"/>`)
-  expect(src(find(t, `stop-${wake}`))).toContain('<rect x="0" y="0" width="24" height="1" class="track"/>')
+  expect(src(find(t, `bg-${wake}`))).toContain(`<rect x="0" y="0" width="${W52 - 28}" height="1" class="track"/>`)
+  expect(src(find(t, `stop-${wake}`))).toContain('<rect x="0" y="0" width="28" height="1" class="track"/>')
   for (const id of ['b1', 'm1', 'c1']) expect(src(find(t, `stop-${h(id)}`))).not.toContain('height="1"')
 })
 

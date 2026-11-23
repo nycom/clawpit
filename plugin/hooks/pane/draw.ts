@@ -385,9 +385,10 @@ const endedRow = (a: CrewAgent, W: number, now: number, still: boolean): El => {
 
 // A background row: its kind's icon in the crab slot, the title on the agents' title x, a two-line reading on the agents'
 // reading edge, W - 34. Running work reads back ("12m", "since 14:20"), waiting work forward ("in 7m", "at 14:39"), a
-// cron with no time its short schedule. An active row is a row Box: the row, a plain image, and its Stop image in the
-// PAD and chevron slot. A failed row is one image on the needs-you tint, with a cross, "failed" and no Stop. Still.
-const BG_STOP = PAD + CHEV
+// cron with no time its short schedule. Every row is a row Box: the row, a plain image, and a slot image right of it; an active
+// row's slot is its Stop, a failed row's (on the needs-you tint, with a cross and "failed") ends the tint. Still.
+// The slot is the PAD and chevron column plus 4 px, so the 20 px Stop box centres on the chevron's centre, W - 16.
+const BG_STOP = PAD + CHEV + 4
 type Clock = { hour12: boolean; offsetMin: number }
 const UTC24: Clock = { hour12: false, offsetMin: 0 }
 // A cron's schedule in the words that fit the reading column; savvy's longer wording stays in the alt and the tooltip.
@@ -427,18 +428,21 @@ const bgRow = (r: BgRow, W: number, now: number, rule: boolean, c: Clock): El =>
   // An empty text has no tip: its title is the kind word, whole.
   const cut = !!r.tip && title !== r.tip
   const lead = `<g transform="translate(13 9)">${icon(failed ? 'cross' : r.kind, 12, failed ? 's-er' : 's-muted')}</g>`
-  const reading = !one ? '' : withTip(tip, !!tip, text(rx, 13, failed ? 'er' : 'fg', 12, l1, { anchor: 'end', ...(failed ? { weight: 600 as const } : {}) })
+  // A lone line sits on the title's baseline, centred in the row.
+  const reading = !one ? '' : withTip(tip, !!tip, text(rx, both ? 13 : 19, failed ? 'er' : 'fg', 12, l1, { anchor: 'end', ...(failed ? { weight: 600 as const } : {}) })
     + (both ? text(rx, 26, 'muted', MODEL_PX, said.l2, { anchor: 'end' }) : ''))
-  // A wakeup's countdown: a still 2 px track under the title to the reading's left edge, filled by the wait used.
+  // A wakeup's countdown: a still 2 px track under the title to the reading's left edge, filled in muted by the wait used.
   const track = one && r.kind === 'wakeup' && r.nextAt !== undefined && r.nextAt > r.startedAt
-    ? `<rect x="${TITLE_X}" y="24" width="${n(titleW)}" height="2" rx="1" class="track"/><rect x="${TITLE_X}" y="24" width="${n(titleW * trackShare(now, r.startedAt, r.nextAt))}" height="2" rx="1" class="accent"/>` : ''
-  const BW = failed ? W : W - BG_STOP, hair = (w: number) => (rule ? `<rect x="0" y="0" width="${n(w)}" height="1" class="track"/>` : '')
-  const body = (failed ? `<rect x="0" y="0" width="${n(W)}" height="${h}" rx="8" class="needTint"/>` : hair(BW)) + lead + withTip(r.tip, cut, text(TITLE_X, 19, 'fg', 12, title)) + track + reading
+    ? `<rect x="${TITLE_X}" y="24" width="${n(titleW)}" height="2" rx="1" class="track"/><rect x="${TITLE_X}" y="24" width="${n(titleW * trackShare(now, r.startedAt, r.nextAt))}" height="2" rx="1" class="muted"/>` : ''
+  const BW = W - BG_STOP, hair = (w: number) => (rule ? `<rect x="0" y="0" width="${n(w)}" height="1" class="track"/>` : '')
+  // A failed row's tint spans both images: each runs 8 px past the seam, clipped there, so the row reads as one.
+  const tint = `<rect x="0" y="0" width="${n(BW + 8)}" height="${h}" rx="8" class="needTint"/>`
+  const body = (failed ? tint : hair(BW)) + lead + withTip(r.tip, cut, text(TITLE_X, 19, 'fg', 12, title)) + track + reading
   const row = image(`bg-${r.h}`, { source: doc(BW, h, body), alt: `${r.title}, ${r.kind}, ${said.said}${cut ? `: ${r.tip}` : ''}`, width: n(BW), height: h }, false)
-  // The failed row's Stop slot is drawn empty, inside its own image.
-  if (failed) return row
-  // A button: a 20 px wash box, radius 6, the filled square at its centre; the press is the whole 24 px image.
-  const stop = image(`stop-${r.h}`, { source: doc(BG_STOP, h, `${hair(BG_STOP)}<rect x="0" y="5" width="20" height="20" rx="6" class="wash"/><g transform="translate(4 9)">${stopSquare('muted')}</g>`),
+  if (failed) return { type: 'Box', props: { flexDirection: 'row' }, children: [row,
+    image(`slot-${r.h}`, { source: doc(BG_STOP, h, `<rect x="-8" y="0" width="${BG_STOP + 8}" height="${h}" rx="8" class="needTint"/>`), alt: 'Failed, no Stop', width: BG_STOP, height: h }, false)] }
+  // A button: a 20 px wash box, radius 6, the filled square at its centre, at the chevron's centre; the press is the whole slot.
+  const stop = image(`stop-${r.h}`, { source: doc(BG_STOP, h, `${hair(BG_STOP)}<rect x="2" y="5" width="20" height="20" rx="6" class="wash"/><g transform="translate(6 9)">${stopSquare('muted')}</g>`),
     alt: `Stop ${r.title}`, width: BG_STOP, height: h, press: `stop:${r.h}`, hover: true }, false)
   return { type: 'Box', props: { flexDirection: 'row' }, children: [row, stop] }
 }
