@@ -9,7 +9,7 @@ export const maxColumns = (bodyColumns: number): number => Math.min(6, Math.max(
 export const candidates = (stats: Stats, crew: Crew, size: Size, busy: boolean): Column[] => {
   const cols: Column[] = [{ key: 'context', priority: 100 }, { key: 'session', priority: 93 }]
   const folded = size !== 'full'
-  if (folded && (crew.agents.length || crew.sessionNeed)) cols.push({ key: 'agents', priority: 99 })
+  if (folded && (crew.agents.length || crew.sessionNeed || crew.background)) cols.push({ key: 'agents', priority: 99 })
   if (folded && crew.plan) cols.push({ key: 'plan', priority: 97 })
   const five = stats.limits.find(l => l.kind === 'five_hour'), seven = stats.limits.find(l => l.kind === 'seven_day')
   if (five) cols.push({ key: '5h', priority: 96 })
@@ -34,6 +34,6 @@ export const lineParts = (stats: Stats, crew: Crew): ('context' | '5h' | '7d' | 
     ...(hot('five_hour') ? ['5h' as const] : []),
     ...(hot('seven_day') ? ['7d' as const] : []),
     crew.plan ? 'plan' as const : 'session' as const,
-    ...(crew.agents.length || crew.sessionNeed ? ['agents' as const] : []),
+    ...(crew.agents.length || crew.sessionNeed || crew.background ? ['agents' as const] : []),
   ]
 }

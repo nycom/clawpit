@@ -91,3 +91,9 @@ test('columns: tokens is never pushed out by this turn or tests', () => {
   expect(fit(candidates({ ...busyDay, limits: [] }, crew(), 'full', true), 3)).toEqual(['context', 'tokens', 'session'])
   expect(fit(candidates(busyDay, crew(), 'full', true), 4)).toEqual(['context', '5h', '7d', 'tokens'])
 })
+test('columns: background work alone brings the folded agents column and the one-line agents part', () => {
+  const bg = crew({ background: { running: 0, waiting: 2, failed: 0, lead: 'cron' } })
+  expect(prio(candidates(stats(), bg, 'gauges', false)).agents).toBe(99)
+  expect(prio(candidates(stats(), bg, 'full', false)).agents).toBeUndefined()
+  expect(lineParts(stats(), bg)).toEqual(['context', 'session', 'agents'])
+})

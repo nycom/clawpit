@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import type { CrewAgent, PlanTask } from '../types'
+import type { Crew, CrewAgent, PlanTask } from '../types'
 import { image, panelTree, type El } from '../hooks/panel/draw'
 import { contrast, FONT, SURFACE, TOKENS } from '../hooks/tokens'
 import { icon } from '../hooks/icons'
@@ -743,4 +743,68 @@ test('panel: the session chip is not an agent, so "+N more agents" counts only t
   // The alert chip holds the session and e2e (as "1 more need you"); the three running agents are the ones left.
   expect(propsOf(find(t, 'chips-alert')!).alt).toBe(`Claude needs you: ${SESSION_Q}; 1 more need you`)
   expect(propsOf(find(t, 'chip-more')!).alt).toBe(`${v.crew.agents.filter(a => a.state === 'running').length} more agents`)
+})
+
+// Background work: the folded agents column and, at full size, one muted chip; neither is an agent.
+type BgCrew = NonNullable<Crew['background']>
+const SAMPLE: BgCrew = { running: 2, waiting: 2, failed: 1, next: { kind: 'wakeup', nextAt: NOW + 7 * 60_000 }, lead: 'wakeup' }
+const bgOnly = (size: 'full' | 'gauges' | 'line', background: BgCrew = SAMPLE, bodyColumns = 96) => {
+  const v = viewOf('idle'); return viewOf('idle', { crew: { ...v.crew, background }, ui: { ...v.ui, size }, bodyColumns })
+}
+test('panel: with background work alone, the folded column reads its lead icon, the active count, then failed and next', () => {
+  const t = panelTree(bgOnly('gauges')), m = propsOf(find(t, 'mascot')!)
+  expect(cols(t)).toContain('col-agents'); expect(m.press).toBe('open')
+  expect(words(m.source)).toBe('background41 failed · next 7m'); expect(m.source).toContain(icon('wakeup', 12, 's-muted'))
+  expect(m.alt).toBe('Agents: show them all. 4 background tasks running or waiting, 1 failed, next: wakeup in 7m')
+  expect(m.source).not.toMatch(/animation|infinite/); expect(m.source).not.toContain('class="red"'); expect(m.source).not.toContain('crispEdges')
+  const failedOnly = propsOf(find(panelTree(bgOnly('gauges', { running: 0, waiting: 0, failed: 1, lead: 'failed' })), 'mascot')!)
+  expect(words(failedOnly.source)).toBe('background11 failed'); expect(failedOnly.source).toContain(icon('cross', 12, 's-er'))
+  expect(failedOnly.alt).toBe('Agents: show them all. 1 failed background task')
+  const cron = propsOf(find(panelTree(bgOnly('gauges', { running: 0, waiting: 1, failed: 0, lead: 'cron' })), 'mascot')!)
+  expect(words(cron.source)).toBe('background1running or waiting'); expect(cron.source).toContain(icon('cron', 12, 's-muted'))
+  expect(panelLoopCount(bgOnly('gauges'))).toBe(0)
+})
+test('panel: at one line, background work alone shows its lead icon and "4 · next 7m · 1 failed", the failed clause last', () => {
+  const m = propsOf(find(panelTree(bgOnly('line')), 'mascot')!)
+  expect(words(m.source)).toBe('4 · next 7m · 1 failed'); expect(m.press).toBe('open'); expect(m.source).toContain(icon('wakeup', 12, 's-muted'))
+})
+test('panel: at full size, background work alone draws one muted chip: running, what fires next, failed; an agent chip or a session need replaces it', () => {
+  const chipOf = (b: BgCrew, now = NOW, bodyColumns = 96) => propsOf(find(panelTree({ ...bgOnly('full', b, bodyColumns), now }), 'chip-background')!)
+  const chip = chipOf(SAMPLE)
+  expect(chip.press).toBe('open'); expect(words(chip.source)).toBe('2 running · wakeup in 7m · 1 failed'); expect(chip.alt).toBe('2 running, wakeup in 7m, 1 failed')
+  expect(chip.source).toContain('class="wash"'); expect(chip.source).not.toMatch(/class="red"|pulse/)
+  expect(words(chipOf(SAMPLE, NOW + 8 * 60_000).source)).toBe('2 running · wakeup due · 1 failed')
+  expect(words(chipOf({ running: 0, waiting: 1, failed: 0, lead: 'cron' }).source)).toBe('1 waiting')
+  expect(words(chipOf({ running: 0, waiting: 0, failed: 1, lead: 'failed' }).source)).toBe('1 failed')
+  expect(words(chipOf({ running: 3, waiting: 0, failed: 0, lead: 'shell' }).source)).toBe('3 running')
+  const crewed = viewOf('hydra')
+  expect(find(panelTree({ ...crewed, crew: { ...crewed.crew, background: SAMPLE } }), 'chip-background')).toBeUndefined()
+  const s = viewOf('sessionNeed')
+  expect(find(panelTree({ ...s, crew: { ...s.crew, background: SAMPLE } }), 'chip-background')).toBeUndefined()
+  expect(find(panelTree(viewOf('idle')), 'chip-background')).toBeUndefined()
+})
+test('panel: narrow, background words drop whole from the right and the failed clause stays; at one line the icon stands bare last', () => {
+  const line = ['4 · next 7m · 1 failed', '4 · 1 failed', '1 failed', ''], chip = ['2 running · wakeup in 7m · 1 failed', '2 running · 1 failed', '2 · 1 failed']
+  const seen = new Set<string>()
+  for (let bodyColumns = 28; bodyColumns <= 120; bodyColumns++) {
+    const l = words(propsOf(find(panelTree(bgOnly('line', SAMPLE, bodyColumns)), 'mascot')!).source)
+    expect(`${bodyColumns}: ${line.includes(l)}`).toBe(`${bodyColumns}: true`); seen.add(l)
+    const c = words(propsOf(find(panelTree(bgOnly('full', SAMPLE, bodyColumns)), 'chip-background')!).source)
+    expect(`${bodyColumns}: ${chip.includes(c)}`).toBe(`${bodyColumns}: true`)
+  }
+  expect(seen.size).toBeGreaterThan(1)
+  for (const bodyColumns of [60, 96]) {
+    const g = words(propsOf(find(panelTree(bgOnly('gauges', SAMPLE, bodyColumns)), 'mascot')!).source)
+    expect(g).toMatch(/1 failed/)
+  }
+})
+test('panel: from 40 to 120 cells the folded column draws its "background" label whole', () => {
+  const states: [string, BgCrew][] = [['a wakeup alone', { running: 0, waiting: 1, failed: 0, next: { kind: 'wakeup', nextAt: NOW + 7 * 60_000 }, lead: 'wakeup' }],
+    ['failed only', { running: 0, waiting: 0, failed: 1, lead: 'failed' }], ['2 running, 1 failed', { running: 2, waiting: 0, failed: 1, lead: 'shell' }]]
+  const cut: string[] = []
+  for (const [name, b] of states) for (let bodyColumns = 40; bodyColumns <= 120; bodyColumns++) {
+    const m = find(panelTree(bgOnly('gauges', b, bodyColumns)), 'mascot')
+    if (!m || !propsOf(m).source.includes('>background</text>')) cut.push(`${name} ${bodyColumns}`)
+  }
+  expect(cut).toEqual([])
 })

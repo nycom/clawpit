@@ -1,8 +1,10 @@
 // The crew: savvy-progress's runs plus clawpit's own trackers, as the rows and chips read them.
-import type { Activity, ActivityKind, Crew, CrewAgent, CrewState, Eta, LogLine, Plan, PlanTask, Prop, Role, SavvyFlow, SavvyNeed, SavvyRun } from '../types'
+import type { Activity, ActivityKind, BgKind, BgRow, Crew, CrewAgent, CrewState, Eta, LogLine, Plan, PlanTask, Prop, Role, SavvyFlow, SavvyNeed, SavvyRun } from '../types'
+import { clip, oneLine, TIP_MAX } from './text'
 
+// background: the rows the pane shows (bgVisible's), counted for the folded column and the chip only.
 export type CrewInput = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>; logs: Record<string, LogLine[]>
-  etaOf: (run: SavvyRun, elapsedMs: number) => Eta; usuallyOf: (run: SavvyRun) => number | null; now: number; need?: SavvyNeed | null }
+  etaOf: (run: SavvyRun, elapsedMs: number) => Eta; usuallyOf: (run: SavvyRun) => number | null; now: number; need?: SavvyNeed | null; background?: BgRow[] }
 
 const ROLE_OF_TYPE = new Map<string, Role>([['implementer', 'implement'], ['reviewer', 'review'], ['validator', 'test'], ['designer', 'design'], ['Plan', 'design'],
   ['architect-reviewer', 'design'], ['Explore', 'explore'], ['researcher', 'explore'], ['dev-researcher', 'explore']])
@@ -81,13 +83,57 @@ export const crewOf = (i: CrewInput): Crew => {
   const minutes = all.flatMap(a => (a.state === 'running' && a.eta.kind === 'left' ? [a.eta.minutes] : []))
   const plan = planOf(i.flow, all)
   const need = needOf(i.need)
+  const bg = i.background ?? [], running = bg.filter(r => r.state === 'running'), waits = bg.filter(r => r.state === 'scheduled')
+  const failed = bg.filter(r => r.state === 'failed').length, timed = waits.filter(r => r.nextAt !== undefined).sort((a, b) => a.nextAt! - b.nextAt!)[0]
+  // The panel's icon: what fires next, else the newest running row, else the first waiting one; only failed rows: the cross.
+  const lead = timed?.kind ?? [...running].sort((a, b) => b.startedAt - a.startedAt)[0]?.kind ?? waits[0]?.kind ?? 'failed'
   return {
     title: plan ? plan.title : 'Subagents', agents, ended,
     counts: { need: count('need'), failed: count('failed'), running: count('running'), done: ended.length },
     costUsd: all.reduce((sum, a) => sum + a.costUsd, 0), leftMin: minutes.length ? Math.max(...minutes) : null, plan,
     ...(need ? { sessionNeed: need } : {}),
+    ...(bg.length ? { background: { running: running.length, waiting: waits.length, failed, ...(timed ? { next: { kind: timed.kind, nextAt: timed.nextAt! } } : {}), lead } } : {}),
   }
 }
+
+// ---------- background work: savvy's shells, monitors, crons and wakeups ----------
+const BG_KINDS: readonly BgKind[] = ['shell', 'monitor', 'cron', 'wakeup']
+const BG_RANK: Record<BgRow['state'], number> = { failed: 0, running: 1, scheduled: 2, ended: 3 }
+const finite = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+export const isActiveBg = (r: BgRow) => r.state === 'running' || r.state === 'scheduled'
+
+// FNV-1a over the id's UTF-16 units, base36: a key and a press stay short whatever the id holds.
+export const bgHash = (id: string): string => {
+  let x = 0x811c9dc5
+  for (let i = 0; i < id.length; i++) x = Math.imul(x ^ id.charCodeAt(i), 0x01000193)
+  return (x >>> 0).toString(36)
+}
+
+// Another plugin's atom: entries without a string id, a known kind or a finite start are skipped; the last entry per id wins.
+// Failed rows first, newest ended first; then running ones newest started first; then waiting ones soonest due first, those
+// with no time after them by title; then the ended.
+export const backgroundOf = (list: unknown): BgRow[] => {
+  const byId = new Map<string, BgRow>()
+  for (const t of Array.isArray(list) ? list : []) {
+    const o = (t ?? {}) as Record<string, unknown>, kind = o.kind as BgKind, startedAt = finite(o.startedAt)
+    if (typeof o.id !== 'string' || !o.id || !BG_KINDS.includes(kind) || startedAt === undefined) continue
+    const state = o.status === 'running' || o.status === 'scheduled' || o.status === 'failed' ? o.status : 'ended'
+    const endedAt = finite(o.endedAt), nextAt = finite(o.nextAt), schedule = clip(oneLine(o.schedule), 60)
+    byId.delete(o.id)
+    byId.set(o.id, { id: o.id, h: bgHash(o.id), kind, title: clip(oneLine(o.text), 60) || kind, tip: clip(oneLine(o.text), TIP_MAX), state, startedAt,
+      ...(endedAt === undefined ? {} : { endedAt }), ...(schedule ? { schedule } : {}), ...(nextAt === undefined ? {} : { nextAt }) })
+  }
+  const at = (r: BgRow) => (r.state === 'failed' || r.state === 'ended' ? r.endedAt ?? r.startedAt : r.startedAt)
+  const due = (r: BgRow) => r.nextAt ?? Infinity
+  const order = (a: BgRow, b: BgRow) => a.state !== 'scheduled' ? at(b) - at(a)
+    : due(a) - due(b) || (a.title < b.title ? -1 : a.title > b.title ? 1 : a.id < b.id ? -1 : 1)
+  return [...byId.values()].sort((a, b) => BG_RANK[a.state] - BG_RANK[b.state] || order(a, b))
+}
+
+// What the pane shows: active rows not stopped from clawpit (a stop counts only for the start it stopped), and failed rows
+// that ended after the person's last prompt. Done and stopped rows hide; savvy's /agents-info keeps their history.
+export const bgVisible = (rows: BgRow[], stopped: ReadonlyMap<string, number>, promptAt: number): BgRow[] =>
+  rows.filter(r => (isActiveBg(r) ? stopped.get(r.id) !== r.startedAt : r.state === 'failed' && (r.endedAt ?? r.startedAt) > promptAt))
 
 // Every helper under an agent, nested ones included, in pane order.
 export const helpersOf = (a: CrewAgent): CrewAgent[] => (a.helpers ?? []).flatMap(h => [h, ...helpersOf(h)])

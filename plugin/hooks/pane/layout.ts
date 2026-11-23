@@ -1,17 +1,18 @@
 // What the Agents pane draws, top to bottom, cut to the host's and the engine's size bounds.
-import type { Crew, CrewAgent, LoopPlan, Offer, Ui } from '../../types'
+import type { BgRow, Crew, CrewAgent, LoopPlan, Offer, Ui } from '../../types'
 import { alertsOf, helpersOf, sessionFirst } from '../model'
 
-type SectionName = 'need' | 'failed' | 'running' | 'ended'
+type SectionName = 'need' | 'failed' | 'running' | 'background' | 'ended'
 export type PaneItem =
   | { kind: 'head'; crew: Crew }
-  | { kind: 'section'; name: SectionName; count: number; shut?: boolean }
+  | { kind: 'section'; name: SectionName; count: number; shut?: boolean; failed?: number }   // background: count is the active rows, failed apart
   | { kind: 'row'; agent: CrewAgent; walk: boolean; ring: boolean; open: boolean }
   | { kind: 'session'; question: string; since: number; ring: boolean }
   | { kind: 'drawer'; agent: CrewAgent }
   | { kind: 'helper'; agent: CrewAgent; walk: boolean; depth: 1 | 2 }
   | { kind: 'kids'; parentId: string; count: number; failed: number; need?: number; shut: boolean }
   | { kind: 'ended'; agent: CrewAgent }
+  | { kind: 'bg'; row: BgRow; rule?: true }   // rule: the hairline over the first waiting row, under rows that run or failed
   | { kind: 'more'; section: SectionName; count: number }
   | { kind: 'offer'; offer: Offer }
   | { kind: 'empty' }
@@ -20,14 +21,15 @@ export type PaneItem =
 export const HOST_MAX = 200_000, ENGINE_MAX = 90_000
 
 type Size = { host: number; engine: number }
-// `agents`: how many agents the item shows, counted into `+N more` when it is cut.
+// `agents`: how many agents (or background rows) the item shows, counted into `+N more` when it is cut.
 type Part = { item: PaneItem; fixed: boolean; agents: number }
 type Group = { head: PaneItem; name: SectionName; count: number; body: Part[] }
 
-export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: PaneItem) => Size, offer?: Offer | null): PaneItem[] => {
+// `background`: the rows to show (bgVisible's); not agents, so in no count, but they keep the pane off its empty state.
+export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: PaneItem) => Size, offer?: Offer | null, background: BgRow[] = []): PaneItem[] => {
   // A setup question waits while anything needs you or has failed; it is never cut.
   const alerts = alertsOf(crew), ask: PaneItem[] = offer && !alerts.need && !alerts.failed ? [{ kind: 'offer', offer }] : []
-  if (!crew.agents.length && !crew.ended.length && !crew.sessionNeed) return [...ask, { kind: 'empty' }]
+  if (!crew.agents.length && !crew.ended.length && !crew.sessionNeed && !background.length) return [...ask, { kind: 'empty' }]
   const walk = (a: CrewAgent) => loops.walkers.includes(a.id)
   const rowParts = (a: CrewAgent): Part[] => {
     const shut = ui.shut.includes(a.id), hs = helpersOf(a), need = hs.filter(h => h.state === 'need').length
@@ -49,6 +51,9 @@ export const paneLayout = (crew: Crew, ui: Ui, loops: LoopPlan, cost: (item: Pan
     if (name === 'need' && sn) { const at = list.findIndex(a => sessionFirst(crew, a.waitingSince)); parts.splice(at < 0 ? list.length : at, 0, session) }
     return parts.length ? [{ head: { kind: 'section', name, count: list.length } as PaneItem, name, count: list.length, body: parts.flat() }] : []
   })
+  const bgFailed = background.filter(r => r.state === 'failed').length, firstWait = background.findIndex(r => r.state === 'scheduled')
+  if (background.length) groups.push({ head: { kind: 'section', name: 'background', count: background.length - bgFailed, ...(bgFailed ? { failed: bgFailed } : {}) }, name: 'background', count: background.length,
+    body: background.map((row, i) => ({ item: { kind: 'bg', row, ...(i === firstWait && i > 0 ? { rule: true as const } : {}) }, fixed: false, agents: 1 })) })
   if (crew.ended.length) {
     const shut = ui.shut.includes('ended')
     groups.push({ head: { kind: 'section', name: 'ended', count: crew.ended.length, shut }, name: 'ended', count: crew.ended.length,
