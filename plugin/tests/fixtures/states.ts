@@ -2,7 +2,7 @@
 // (seed() and ST in design/mockups-all.html); the flow's task titles equal the run descriptions they match,
 // as savvy-progress's contract asks of real data.
 import type { ConfigRow } from 'claude-code'
-import type { Activity, Eta, LogLine, SavvyFlow, SavvyNeed, SavvyRun, Stats, Ui } from '../../types'
+import type { Activity, Eta, LogLine, SavvyBackground, SavvyFlow, SavvyNeed, SavvyRun, Stats, Ui } from '../../types'
 
 export const NOW = 1_800_000_000_000
 
@@ -11,9 +11,11 @@ export type StateName = 'idle' | 'busy' | 'hydra' | 'needsYou' | 'failed' | 'bot
   | 'sessionNeed' | 'sessionNeedCrew'
   | 'filePlan' | 'planOutOfOrder'
   | 'offer' | 'offerCrew'
+  | 'background' | 'backgroundCrew'
 export type Fixture = { flow: SavvyFlow | null; runs: SavvyRun[]; parents: Record<string, string>; activity: Record<string, Activity>
   logs: Record<string, LogLine[]>; stats: Stats; ui: Ui; busy: boolean; armed: boolean; need?: SavvyNeed | null
-  config?: ConfigRow[] }   // config: the `/config` rows, as $.config.list() returns them
+  config?: ConfigRow[]   // config: the `/config` rows, as $.config.list() returns them
+  bgTasks?: SavvyBackground[] }   // savvy's background atom
 
 const MAX = 200_000
 const run = (id: string, type: string, description: string, model: string, ago: number, o: Partial<SavvyRun>): SavvyRun =>
@@ -110,6 +112,18 @@ const SESSION_NEED: SavvyNeed = { text: 'Ship the schema change behind a flag, o
 const UNASKED: ConfigRow[] = [{ key: 'savvy-progress.sessionNeed', label: 'Session needs you', description: 'Light Needs you when this session asks you a question?',
   kind: 'choice', value: 'unasked', options: ['unasked', 'off', 'both', 'ask', 'tool'], provider: { plugin: 'savvy-progress', tier: 'user' }, isLocked: false }]
 
+// savvy's background atom: two that run, a cron and a wakeup that wait, one that failed, one done (hidden).
+const bg = (id: string, kind: string, text: string, status: string, ago: number, o: Partial<SavvyBackground> = {}): SavvyBackground =>
+  ({ id, kind, text, status, startedAt: NOW - ago, ...o })
+export const BG_TASKS: SavvyBackground[] = [
+  bg('b1', 'shell', 'npm run dev -- --port 5173', 'running', 3 * 60_000),
+  bg('m1', 'monitor', 'watch the deploy logs', 'running', 12 * 60_000),
+  bg('c1', 'cron', 'check the CI queue', 'scheduled', 20 * 60_000, { schedule: 'every 10 minutes' }),
+  bg('wake:resume the release check', 'wakeup', 'resume the release check', 'scheduled', 60_000, { nextAt: NOW + 5 * 60_000 }),
+  bg('b2', 'shell', 'npm run build:docs', 'failed', 8 * 60_000, { endedAt: NOW - 6 * 60_000 }),
+  bg('b0', 'shell', 'npm ci', 'done', 30 * 60_000, { endedAt: NOW - 29 * 60_000 }),
+]
+
 export const STATES: Record<StateName, Fixture> = {
   idle: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, stats: IDLE_STATS, busy: false, armed: false }),
   busy: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {} }),
@@ -137,6 +151,9 @@ export const STATES: Record<StateName, Fixture> = {
   // The one-time setup row, in an empty pane and over two running agents.
   offer: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, stats: IDLE_STATS, busy: false, armed: false, config: UNASKED }),
   offerCrew: base({ flow: null, runs: HYDRA_RUNS.filter(r => r.id === 'imp' || r.id === 'pln'), parents: {}, config: UNASKED }),
+  // Background work alone, then beside the running crew; no flow, so no plan line changes these pictures.
+  background: base({ flow: null, runs: [], parents: {}, activity: {}, logs: {}, stats: IDLE_STATS, busy: false, armed: false, bgTasks: BG_TASKS }),
+  backgroundCrew: base({ flow: null, bgTasks: BG_TASKS }),
   planOutOfOrder: base({ flow: OUT_OF_ORDER_FLOW, runs: HYDRA_RUNS.filter(r => r.id === 'imp').map(r => ({ ...r, description: 'schema' })), parents: {} }),
   manyAgents: base({
     flow: null, parents: {}, activity: {}, logs: {},

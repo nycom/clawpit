@@ -35,6 +35,7 @@ export type Crew = {
   costUsd: number; leftMin: number | null
   plan: Plan | null
   sessionNeed?: { question: string; since: number }   // the main session waits on you; not an agent, so in no count but alertsOf's
+  background?: { active: number; failed: number }      // background rows shown in the pane; only the folded column and the chip read it
 }
 
 export type ContextStat = { pct: number; msgsPct: number | null; turnsLeft: number | null; autoPct: number | null; alarm: boolean }
@@ -66,13 +67,19 @@ export type SavvyRun = { /* the fields of savvy's AgentRun that clawpit reads */
 export type PonytailBand = { reused: string[]; created: string[]; openCallers: string[] }
 /** savvy's `need` atom: the main session waits on the person. */
 export type SavvyNeed = { text: string; since: number }
+/** The fields of savvy's `background` atom that clawpit reads; `status` stays a string, so a value savvy adds later reads as ended. */
+export type SavvyBackground = { id: string; kind: string; text: string; status: string; startedAt: number; endedAt?: number; schedule?: string; nextAt?: number }
+export type BgKind = 'shell' | 'monitor' | 'cron' | 'wakeup'
+/** A background row: `h` is a short stable hash of the id, for keys and presses; `tip` the full text, for a cut title. */
+export type BgRow = { id: string; h: string; kind: BgKind; title: string; tip: string; state: 'running' | 'scheduled' | 'failed' | 'ended'
+  startedAt: number; endedAt?: number; schedule?: string; nextAt?: number }
 export type SavvyFlow = { title: string; total: number; done: number; phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'; isFinished: boolean; tasks: { title: string }[]
   doneTitles?: string[] }  // savvy's norm()-normalised titles of the tasks known done; older savvy leaves it out
 
 declare module 'claude-code' {
   interface PluginState {
     clawpit: { takeover: boolean; stats: Stats; ui: Ui; tick: number; idleSince: number | null }
-    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[]; need?: SavvyNeed | null; stages?: string[] }
+    'savvy-progress': { flow: SavvyFlow | null; agents: SavvyRun[]; need?: SavvyNeed | null; stages?: string[]; background?: SavvyBackground[] }
     ponytail: { band: PonytailBand }
   }
 }

@@ -39,6 +39,9 @@ export const wrap = (s: string, widthPx: number, sizePx: number, lines: number, 
 const pad = (n: number) => String(n).padStart(2, '0')
 export const fmtClock = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${pad(t % 60)}` }
 export const fmtAge = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return t < 60 ? `${t}s` : `${Math.floor(t / 60)}m` }
+// Ages read in whole minutes, so an image changes only when one crosses a minute.
+export const minutes = (ms: number): string => (ms < 60_000 ? '<1m' : fmtAge(ms))
+export const TIP_MAX = 300   // a tooltip's characters at most
 export const fmtLeft = (minutes: number): string => (minutes < 1 ? '<1m left' : `~${Math.round(minutes)}m left`)
 export const fmtCost = (usd: number): string => (Math.round(usd * 100) >= 10000 ? `$${Math.round(usd)}` : `≈$${usd.toFixed(2)}`)
 export const fmtTokens = (n: number): string =>
