@@ -425,6 +425,18 @@ export const register: Register = (on, options) => {
     return { text: bench ? `Bench: ${count} ${bench.eased ? 'eased' : 'stepped'} crabs in the Agents pane.` : 'Bench off: the Agents pane is back.' }
   })
 
+  // One Agents pane on the desktop: savvy-progress's /agents-info opens this pane there; `/agents-info savvy` opens
+  // savvy's own (its ended background history, planned rows and /status line). No desktop attached: savvy's, as before.
+  on('command.run', { command: 'agents-info' }, async ($, e, next) => {
+    const args = (e.args ?? '').trim()
+    let desktop = false
+    try { desktop = (await $.session.surfaces()).includes('desktop') } catch { errors += 1 }
+    if (!desktop || (args !== '' && args !== 'open' && args !== 'savvy')) return next(e)
+    if (args === 'savvy') return next({ ...e, args: 'open' })
+    await openPane($)
+    return { text: 'opened' }
+  })
+
   // `/clawpit-setup`: one engine dialog per boolean or choice row, no model call. Answers are written at the end.
   on('command.run', { command: 'clawpit-setup' }, async ($, e, next) => {
     const newer = { text: 'Setup needs a newer Claude Code; use /config.' }
