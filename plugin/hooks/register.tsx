@@ -63,6 +63,8 @@ let needShown = false                           // savvy's need atom holds a nee
 let bgShown = false                             // a background row reads a clock in minutes: running, or a wakeup's countdown
 let stopped = new Map<string, number>()         // background ids stopped from the pane, with the start they were stopped at
 let promptAt = 0                                // the person's last prompt: a failed background row shows until the next one
+let stopping = new Set<string>()                // background row hashes whose Stop call is running
+let bgLatest: BgRow[] = []                      // savvy's background rows as its last write, from the observer or boot
 let errors = 0
 let ticker: Timer | null = null
 let period = 0
@@ -84,7 +86,7 @@ const BENCH_MAX = 48
 const reset = () => {
   facts = emptyFacts(); logs = {}; seen = []; parents = {}; spawns = {}; history = {}; recorded = new Set()
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
-  bgShown = false; stopped = new Map(); promptAt = 0
+  bgShown = false; stopped = new Map(); promptAt = 0; stopping = new Set(); bgLatest = []
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; setupReg = null; bench = null
   offers = []; refused = new Set(); showCost = true
 }
@@ -185,6 +187,7 @@ const bgRows = async ($: EngineInterface): Promise<BgRow[]> => {
 // From an observer or a press, never a render: a stop counts only while its row lives at the start it was stopped at, and
 // the minute tick runs while a shown row reads a clock (a cron shows its schedule, no clock).
 const takeBackground = (rows: BgRow[]) => {
+  bgLatest = rows
   stopped = new Map([...stopped].filter(([id, at]) => rows.some(r => r.id === id && isActiveBg(r) && r.startedAt === at)))
   bgShown = bgVisible(rows, stopped, promptAt).some(r => r.state === 'running' || (r.state === 'scheduled' && r.nextAt !== undefined))
 }
@@ -192,9 +195,14 @@ const takeBackground = (rows: BgRow[]) => {
 // One press stops it, no confirmation, as savvy's own Stop does: TaskStop for a shell or a monitor, CronDelete for a cron,
 // ScheduleWakeup's stop for a wakeup (which ends every wakeup). The hash is matched against the rows shown now, so a list
 // that moved since the drawing can never stop another task. An error is toasted and the row stays. On success the row hides
-// here at once: savvy marks a shell, monitor or cron ended only at its own reconcile.
+// here at once: savvy marks a shell, monitor or cron ended only at its own reconcile. A press while its stop runs does nothing.
 const stopBackground = async ($: EngineInterface, h: string) => {
-  const rows = await bgRows($), t = bgVisible(rows, stopped, promptAt).find(r => r.h === h && isActiveBg(r))
+  if (stopping.has(h)) return
+  stopping.add(h)
+  try { await stopOne($, h) } finally { stopping.delete(h) }
+}
+const stopOne = async ($: EngineInterface, h: string) => {
+  const t = bgVisible(await bgRows($), stopped, promptAt).find(r => r.h === h && isActiveBg(r))
   if (!t) return
   const consent = `The user pressed Stop on the background ${t.kind} "${clip(t.title, 80)}" in the Agents pane.`
   const call = t.kind === 'cron' ? { tool: 'CronDelete', id: t.id } : t.kind === 'wakeup' ? { tool: 'ScheduleWakeup', stop: true } : { tool: 'TaskStop', task_id: t.id }
@@ -205,7 +213,11 @@ const stopBackground = async ($: EngineInterface, h: string) => {
     $.ui.toast(`Couldn't stop ${t.title}: ${clip(oneLine(err instanceof Error ? err.message : String(err)), 200)}`)
     return
   }
-  for (const r of rows) if (t.kind === 'wakeup' ? r.kind === 'wakeup' && isActiveBg(r) : r.id === t.id) stopped.set(r.id, r.startedAt)
+  // The rows as savvy last wrote them, from the observer: it may have written while the call ran, and a read here still
+  // can return the list from before the call (seen under the test engine).
+  const rows = bgLatest
+  stopped.set(t.id, t.startedAt)
+  if (t.kind === 'wakeup') for (const r of rows) if (r.kind === 'wakeup' && isActiveBg(r)) stopped.set(r.id, r.startedAt)
   takeBackground(rows)
   await writeTick($)
 }

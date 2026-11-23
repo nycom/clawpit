@@ -12,7 +12,7 @@ const PANE_PROPS = { title: 'Agents', isFocused: false, bodyColumns: 52, placeme
 
 // The engine beneath clawpit: a frozen clock, a store in memory, every tick written, every toast, and the stop tools,
 // answering as `answer` says (a deny, an error, or a result).
-const setup = (on: OnT, answer: (e: Record<string, unknown>) => unknown = () => ({ result: {} })) => {
+const setup = (on: OnT, answer: ($: $T, e: Record<string, unknown>) => unknown = () => ({ result: {} })) => {
   const clock = mock.clock(on, { now: T0 })
   const store = new Map<string, unknown>()
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
@@ -26,7 +26,7 @@ const setup = (on: OnT, answer: (e: Record<string, unknown>) => unknown = () => 
   on('state.set', (_$, e, next) => { if (e.plugin === 'clawpit' && e.key === 'tick') ticks.push(e.value); return next(e) })
   on('ui.toast', (_$, e) => { toasts.push(e.text); return { value: undefined } as never })
   for (const tool of ['TaskStop', 'CronDelete', 'ScheduleWakeup'])
-    on('tool.call', { tool } as never, ((_$: unknown, e: Record<string, unknown>) => { calls.push(e); return answer(e) }) as never)
+    on('tool.call', { tool } as never, (($: $T, e: Record<string, unknown>) => { calls.push(e); return answer($, e) }) as never)
   return { clock, ticks, toasts, calls }
 }
 
@@ -154,5 +154,56 @@ test('background hook: a failed row shows until the next composer or bridge prom
   expect(await alts(ui)).toContain('build 2000, shell, failed after <1m')
   await prompt($, 'bridge')
   expect(await alts(ui)).toEqual(['No agents yet. Agents you start show up here'])
+  await ui.unmount()
+})
+
+test('background hook: a second press while a Stop is in flight calls the tool once', { plugins: [savvy] }, async ($, on) => {
+  let release = () => {}
+  const w = setup(on, () => new Promise(done => { release = () => done({ result: {} }) }))
+  await start($)
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
+  const ui = await pane($)
+  const first = stop(ui, 'b1'), second = stop(ui, 'b1')
+  await new Promise(r => setTimeout(r, 20))
+  release()
+  await Promise.all([first, second])
+  expect(w.calls.length).toBe(1)
+  // The guard clears once the call ends: a later press reaches the tool again.
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running', { startedAt: T0 + 1 })])
+  const third = stop(ui, 'b1')
+  await new Promise(r => setTimeout(r, 20))
+  release()
+  await third
+  expect(w.calls.length).toBe(2)
+  await ui.unmount()
+})
+
+// savvy, and a new shell it records while TaskStop runs.
+const savvyStartsMore = {
+  name: 'savvy-progress',
+  register(on: OnT) {
+    const ref = { plugin: 'savvy-progress', key: 'background' } as const
+    on('tool.call', { tool: 'savvy-bg' }, async ($, e) => {
+      await $.state.set(ref as never, (e as unknown as { list: never }).list)
+      return { result: {} } as never
+    })
+    on('tool.call', { tool: 'TaskStop' } as never, (async ($: $T, e: never, next: (e: never) => unknown) => {
+      const at = Date.UTC(2026, 10, 23, 12, 0, 0)
+      await $.state.set(ref as never, [{ id: 'b1', kind: 'shell', text: 'npm run dev', status: 'running', startedAt: at },
+        { id: 'b2', kind: 'shell', text: 'npm test -- --watch', status: 'running', startedAt: at }] as never)
+      return next(e)
+    }) as never)
+  },
+}
+test('background hook: after a Stop, the rows savvy wrote meanwhile decide the minute tick', { plugins: [savvyStartsMore] }, async ($, on) => {
+  const w = setup(on)
+  await start($)
+  await setBg($, [task('b1', 'shell', 'npm run dev', 'running')])
+  const ui = await pane($)
+  await stop(ui, 'b1')
+  expect(await alts(ui)).toContain('npm test -- --watch, shell, running <1m')
+  const at = w.ticks.length
+  await w.clock.advance(60_000)
+  expect(w.ticks.length).toBe(at + 1)
   await ui.unmount()
 })
