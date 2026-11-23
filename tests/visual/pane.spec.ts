@@ -26,6 +26,14 @@ for (const s of OFFER) for (const theme of ['dark', 'light'] as const) for (cons
     await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })
   })
 
+// Background work alone, then beside the running crew, at 41 cells as well.
+const BACKGROUND = ['background', 'backgroundCrew'] as const
+for (const s of BACKGROUND) for (const theme of ['dark', 'light'] as const) for (const w of [28, 30, 36, 41, 52] as const)
+  test(`pane: ${s}, ${theme}, ${w} cells @shot`, async ({ page }) => {
+    await show(page, paneTree(paneViewOf(s, { columns: w })), { surface: 'pane', widthCells: w, theme })
+    await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })
+  })
+
 test('pane: nothing animates while idle', async ({ page }) => {
   await show(page, paneTree(paneViewOf('emptyPane')), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
   expect(await loops(page)).toEqual({ drawings: 0, eased: 0 })
@@ -69,5 +77,13 @@ for (const s of OFFER)
   test(`pane: ${s} adds no loop, and every image has an alt`, async ({ page }) => {
     const v = paneViewOf(s); await show(page, paneTree(v), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
     expect((await loops(page)).drawings).toBe(paneLoopCount(v)); expect(paneLoopCount(v)).toBe(paneLoopCount({ ...v, offer: null }))
+    expect(alts(paneTree(v)).every(x => x.trim().length > 0)).toBe(true)
+  })
+
+// The Background section adds no loop, and each of its images, every Stop included, has an alt.
+for (const s of BACKGROUND)
+  test(`pane: ${s} adds no loop, and every image has an alt`, async ({ page }) => {
+    const v = paneViewOf(s); await show(page, paneTree(v), { surface: 'pane', widthCells: 52, theme: 'dark', motion: true })
+    expect((await loops(page)).drawings).toBe(paneLoopCount(v)); expect(paneLoopCount(v)).toBe(paneLoopCount({ ...v, background: [] }))
     expect(alts(paneTree(v)).every(x => x.trim().length > 0)).toBe(true)
   })

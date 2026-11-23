@@ -24,6 +24,13 @@ for (const size of ['full', 'gauges', 'line'] as const) for (const theme of ['da
     await show(page, panelTree({ ...v, ui: { ...v.ui, size } }), { surface: 'panel', widthCells: w, theme })
     await expect(page).toHaveScreenshot(`panel-sessionNeed-${size}-${theme}-${w}.png`, { fullPage: true })
   })
+// Background work alone: one muted chip at full size, the folded agents column, the one-line crab.
+for (const size of ['full', 'gauges', 'line'] as const) for (const theme of ['dark', 'light'] as const) for (const w of [60, 96] as const)
+  test(`panel: background, ${size}, ${theme}, ${w} cells @shot`, async ({ page }) => {
+    const v = viewOf('background', { bodyColumns: w })
+    await show(page, panelTree({ ...v, ui: { ...v.ui, size } }), { surface: 'panel', widthCells: w, theme })
+    await expect(page).toHaveScreenshot(`panel-background-${size}-${theme}-${w}.png`, { fullPage: true })
+  })
 test('panel: nothing animates while idle', async ({ page }) => {
   await show(page, panelTree(viewOf('idle')), { surface: 'panel', widthCells: 96, theme: 'dark', motion: true }); expect(await loops(page)).toEqual({ drawings: 0, eased: 0 })
 })
@@ -38,5 +45,12 @@ for (const size of ['full', 'gauges', 'line'] as const)
     const f = viewOf('sessionNeed'), v = viewOf('sessionNeed', { ui: { ...f.ui, size } })
     await show(page, panelTree(v), { surface: 'panel', widthCells: 96, theme: 'dark', motion: true })
     const l = await loops(page); expect(l.eased).toBe(0); expect(l.drawings).toBe(panelLoopCount(v)); expect(l.drawings).toBe(1)
+    expect(alts(panelTree(v)).every(a => a.trim().length > 0)).toBe(true)
+  })
+for (const size of ['full', 'gauges', 'line'] as const)
+  test(`panel: background, ${size}, adds no loop, and every image has an alt`, async ({ page }) => {
+    const f = viewOf('background'), v = viewOf('background', { ui: { ...f.ui, size } })
+    await show(page, panelTree(v), { surface: 'panel', widthCells: 96, theme: 'dark', motion: true })
+    expect(await loops(page)).toEqual({ drawings: 0, eased: 0 }); expect(panelLoopCount(v)).toBe(0)
     expect(alts(panelTree(v)).every(a => a.trim().length > 0)).toBe(true)
   })
