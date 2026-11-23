@@ -83,19 +83,22 @@ export const crewOf = (i: CrewInput): Crew => {
   const minutes = all.flatMap(a => (a.state === 'running' && a.eta.kind === 'left' ? [a.eta.minutes] : []))
   const plan = planOf(i.flow, all)
   const need = needOf(i.need)
-  const bg = i.background ?? [], active = bg.filter(isActiveBg).length, failed = bg.filter(r => r.state === 'failed').length
+  const bg = i.background ?? [], running = bg.filter(r => r.state === 'running'), waits = bg.filter(r => r.state === 'scheduled')
+  const failed = bg.filter(r => r.state === 'failed').length, timed = waits.filter(r => r.nextAt !== undefined).sort((a, b) => a.nextAt! - b.nextAt!)[0]
+  // The panel's icon: what fires next, else the newest running row, else the first waiting one; only failed rows: the cross.
+  const lead = timed?.kind ?? [...running].sort((a, b) => b.startedAt - a.startedAt)[0]?.kind ?? waits[0]?.kind ?? 'failed'
   return {
     title: plan ? plan.title : 'Subagents', agents, ended,
     counts: { need: count('need'), failed: count('failed'), running: count('running'), done: ended.length },
     costUsd: all.reduce((sum, a) => sum + a.costUsd, 0), leftMin: minutes.length ? Math.max(...minutes) : null, plan,
     ...(need ? { sessionNeed: need } : {}),
-    ...(active || failed ? { background: { active, failed } } : {}),
+    ...(bg.length ? { background: { running: running.length, waiting: waits.length, failed, ...(timed ? { next: { kind: timed.kind, nextAt: timed.nextAt! } } : {}), lead } } : {}),
   }
 }
 
 // ---------- background work: savvy's shells, monitors, crons and wakeups ----------
 const BG_KINDS: readonly BgKind[] = ['shell', 'monitor', 'cron', 'wakeup']
-const BG_RANK: Record<BgRow['state'], number> = { running: 0, scheduled: 0, failed: 1, ended: 2 }
+const BG_RANK: Record<BgRow['state'], number> = { failed: 0, running: 1, scheduled: 2, ended: 3 }
 const finite = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 export const isActiveBg = (r: BgRow) => r.state === 'running' || r.state === 'scheduled'
 
@@ -107,7 +110,8 @@ export const bgHash = (id: string): string => {
 }
 
 // Another plugin's atom: entries without a string id, a known kind or a finite start are skipped; the last entry per id wins.
-// Active rows newest started first, then failed ones newest ended first, then the ended.
+// Failed rows first, newest ended first; then running ones newest started first; then waiting ones soonest due first, those
+// with no time after them by title; then the ended.
 export const backgroundOf = (list: unknown): BgRow[] => {
   const byId = new Map<string, BgRow>()
   for (const t of Array.isArray(list) ? list : []) {
@@ -120,7 +124,10 @@ export const backgroundOf = (list: unknown): BgRow[] => {
       ...(endedAt === undefined ? {} : { endedAt }), ...(schedule ? { schedule } : {}), ...(nextAt === undefined ? {} : { nextAt }) })
   }
   const at = (r: BgRow) => (r.state === 'failed' || r.state === 'ended' ? r.endedAt ?? r.startedAt : r.startedAt)
-  return [...byId.values()].sort((a, b) => BG_RANK[a.state] - BG_RANK[b.state] || at(b) - at(a))
+  const due = (r: BgRow) => r.nextAt ?? Infinity
+  const order = (a: BgRow, b: BgRow) => a.state !== 'scheduled' ? at(b) - at(a)
+    : due(a) - due(b) || (a.title < b.title ? -1 : a.title > b.title ? 1 : a.id < b.id ? -1 : 1)
+  return [...byId.values()].sort((a, b) => BG_RANK[a.state] - BG_RANK[b.state] || order(a, b))
 }
 
 // What the pane shows: active rows not stopped from clawpit (a stop counts only for the start it stopped), and failed rows

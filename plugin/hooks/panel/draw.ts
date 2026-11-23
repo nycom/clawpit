@@ -212,28 +212,45 @@ const mascotArt = (crew: Crew, loops: LoopPlan, size: 'S' | 'M') => {
 }
 
 // ---------- background work: not agents; with no agent and no session need, it alone reaches the pane ----------
-type Bg = { active: number; failed: number }
+type Bg = NonNullable<Crew['background']>
 const bgOnly = (crew: Crew): Bg | null => (!crew.agents.length && !crew.sessionNeed && crew.background) || null
-// What background work says, longest first; the failed part is a word in er, so colour is never the only signal. Narrow,
-// the failed clause stays: the active part shortens to its number, then goes.
-const bgSays = (b: Bg): Run[][] => (b.active
-  ? b.failed ? [[[`${b.active} background`, 'muted'], [` · ${b.failed} failed`, 'er']], [[`${b.active}`, 'muted'], [` · ${b.failed} failed`, 'er']], [[`${b.failed} failed`, 'er']]]
-    : [[[`${b.active} background`, 'muted']]]
-  : [[[`${b.failed} failed background`, 'er']], [[`${b.failed} failed`, 'er']]])
-const bgRuns = (b: Bg): Run[] => bgSays(b)[0]
+const activeOf = (b: Bg) => b.running + b.waiting
+// What fires next, in whole minutes rounded up: "in 7m", or "due".
+const nextIn = (b: Bg, now: number) => (!b.next ? '' : b.next.nextAt - now <= 0 ? 'due' : `in ${Math.ceil((b.next.nextAt - now) / 60_000)}m`)
+// Clauses joined by " · "; a separator takes the colour of the clause after it, so the failed one reads whole in er.
+const clauses = (...parts: (Run | null)[]): Run[] => parts.filter((r): r is Run => !!r).flatMap((r, i) => (i ? [[' · ', r[1]] as Run, r] : [r]))
+const failedRun = (b: Bg): Run | null => (b.failed ? [`${b.failed} failed`, 'er'] : null)
+// Longest first, whole clauses only; the failed clause never drops while another stays.
+const firstFit = (says: Run[][], max: number, size: number) => says.find(x => runsWidth(x, size) <= max) ?? []
+// The chip: "[R running] · [next] · [F failed]", each part left out at zero; [next] names the soonest timed row, else counts the
+// waiting ones. Narrow, [next] goes first, then R shortens to its number.
+const chipSays = (b: Bg, now: number): Run[][] => {
+  const r: Run | null = b.running ? [`${b.running} running`, 'muted'] : null, rn: Run | null = b.running ? [`${b.running}`, 'muted'] : null
+  const nx: Run | null = b.next ? [`${b.next.kind} ${nextIn(b, now)}`, 'muted'] : b.waiting ? [`${b.waiting} waiting`, 'muted'] : null
+  return [clauses(r, nx, failedRun(b)), clauses(r, failedRun(b)), clauses(rn, failedRun(b))].filter(x => x.length)
+}
+// The one-line row: "4 · next 7m · 1 failed", the failed clause last; next drops first, then the count, then the icon stands bare.
+const lineSays = (b: Bg, now: number): Run[][] => {
+  const a: Run | null = activeOf(b) ? [`${activeOf(b)}`, 'muted'] : null, nx: Run | null = b.next ? [`next ${nextIn(b, now).replace(/^in /, '')}`, 'muted'] : null
+  return [clauses(a, nx, failedRun(b)), clauses(a, failedRun(b)), clauses(failedRun(b))].filter(x => x.length)
+}
+// The folded column's line under the count: "1 failed · next 7m", dropping whole from the right.
+const underSays = (b: Bg, now: number): Run[][] => {
+  const nx: Run | null = b.next ? [`next ${nextIn(b, now).replace(/^in /, '')}`, 'muted'] : null
+  return b.failed || nx ? [clauses(failedRun(b), nx), clauses(failedRun(b))].filter(x => x.length) : [[['running or waiting', 'muted']]]
+}
 const tasks = (k: number) => (k === 1 ? 'task' : 'tasks')
-const bgAlt = (b: Bg) => (b.active ? `${b.active} background ${tasks(b.active)}${b.failed ? `, ${b.failed} failed` : ''}` : `${b.failed} failed background ${tasks(b.failed)}`)
-const stillCrab = (size: 'S' | 'M') => crab({ role: 'explore', prop: 'none', walk: false, size })
-// The folded agents column: a still crab with no badge, the count in the value slot, its words under it. Where both clauses
-// will not fit, the failed one stays and the active word goes; nothing is cut.
-const bgColumn = (b: Bg, w: number): El => {
-  const x0 = 12, max = w - x0 - 4, vx = x0 + SIZE.crab.M[0] + 7 + 6
-  // The label names the work, so the line under the count only has to name the failed part.
-  const under: Run[][] = b.failed ? [[[`${b.failed} failed`, 'er']], [['failed', 'er']]] : [[['running or waiting', 'muted']], []]
-  const say = under.find(x => runsWidth(x, 11) <= max) ?? []
-  const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'background', 11, 'muted', { max }) + at(x0, 15, stillCrab('M'))
-    + text(vx, 35, String(b.active || b.failed), 16, b.active ? 'fg' : 'er', { w: 600 }) + runs(x0, 54, 11, say, max + 1)
-  return image('mascot', { source: doc(w, COL_H, body), alt: `Agents: show them all. ${bgAlt(b)}`, width: w, height: COL_H, press: 'open' }, false)
+const bgAlt = (b: Bg, now: number) => (activeOf(b)
+  ? `${activeOf(b)} background ${tasks(activeOf(b))} running or waiting${b.failed ? `, ${b.failed} failed` : ''}${b.next ? `, next: ${b.next.kind} ${nextIn(b, now)}` : ''}`
+  : `${b.failed} failed background ${tasks(b.failed)}`)
+// The lead icon where the crab stands for agents: the kind of what fires next, or runs newest; the cross in er when only failed rows show.
+const leadIcon = (b: Bg) => (b.lead === 'failed' ? icon('cross', 12, 's-er') : icon(b.lead, 12, 's-muted'))
+// The folded agents column: the lead icon in the crab's slot, the active count in the value slot, failed and next under it.
+const bgColumn = (b: Bg, w: number, now: number): El => {
+  const x0 = 12, max = w - x0 - 4, vx = x0 + SIZE.crab.M[0] + 7 + 6, say = firstFit(underSays(b, now), max, 11)
+  const body = `<rect class="track" x="0" y="0" width="1" height="${COL_H}"/>` + text(x0, 11, 'background', 11, 'muted', { max }) + at(x0 + 11, 23, leadIcon(b))
+    + text(vx, 35, String(activeOf(b) || b.failed), 16, activeOf(b) ? 'fg' : 'er', { w: 600 }) + runs(x0, 54, 11, say, max + 1)
+  return image('mascot', { source: doc(w, COL_H, body), alt: `Agents: show them all. ${bgAlt(b, now)}`, width: w, height: COL_H, press: 'open' }, false)
 }
 
 // Who the value slot names, up to one agent: the lone agent, or with no agents the main session's need, so a count of 0
@@ -241,7 +258,7 @@ const bgColumn = (b: Bg, w: number): El => {
 const soloOf = (crew: Crew, f: Face): CrewAgent | null => crew.agents.length > 1 ? null : crew.agents[0] ?? (f.a.id === 'session' ? f.a : null)
 const agentsColumn = (v: PanelView, w: number): El => {
   const bg = bgOnly(v.crew)
-  if (bg) return bgColumn(bg, w)
+  if (bg) return bgColumn(bg, w, v.now)
   const m = mascotArt(v.crew, v.loops, 'M'), x0 = 12, max = w - x0 - 4, n = v.crew.agents.length, vx = x0 + m.w + 6, ux = vx + widthOf(String(n), 16, 600) + 4
   // One agent: its name in the value slot and only its state under it; a count of 1 says nothing (maintainer, 2026-11-21).
   const solo = soloOf(v.crew, m.f), own = solo && m.f.a === solo
@@ -392,8 +409,9 @@ const chipRows = (v: PanelView, W: number): El | null => {
   const bg = bgOnly(crew)
   if (bg) {
     // One muted chip, plain art: no crab, no pulse, no red; it opens the pane as "+N more" does.
-    const rs = bgRuns(bg), w = +(runsWidth(rs, 12) + 20).toFixed(2)
-    const chip = chipImage('chip-background', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + runs(10, 17, 12, rs, w - 20 + 1), alt: bgAlt(bg), press: 'open' }], false)
+    const says = chipSays(bg, v.now), rs = firstFit(says, W - 2 * CHIP_PAD - 20, 12), shown = rs.length ? rs : says[says.length - 1], w = +(runsWidth(shown, 12) + 20).toFixed(2)
+    const chip = chipImage('chip-background', [{ w, body: `<rect x="0" y="0" width="${w}" height="${CHIP_H}" rx="8" class="wash"/>` + runs(10, 17, 12, shown, w - 20 + 1),
+      alt: says[0].filter(r => r[0] !== ' · ').map(r => r[0]).join(', '), press: 'open' }], false)
     return { type: 'Box', props: { key: 'chips', flexDirection: 'column' }, children: [{ type: 'Box', props: { key: 'chips-row-1', flexDirection: 'row' }, children: [chip] }] }
   }
   if (!crew.agents.length && !session) return null
@@ -458,11 +476,9 @@ const oneLineRow = (v: PanelView): El => {
   }
   const children: El[] = [...items, spacer], used = items.reduce((s, e) => s + width(e) + LINE_CELL_PX, 0) + 24 + 2 * LINE_CELL_PX, bg = bgOnly(crew)
   if (bg) {
-    // The whole words, then the active part as its number, then the failed clause alone, then the bare crab.
-    const cw = SIZE.crab.S[0] + 7, room = W - used - cw - 6, rs = bgSays(bg).find(x => runsWidth(x, 13) <= room) ?? []
-    const sayW = runsWidth(rs, 13), w = +(cw + (rs.length ? 6 + sayW : 0)).toFixed(2)
-    const body = at(0, 1, stillCrab('S')) + (rs.length ? runs(cw + 6, 18, 13, rs, sayW + 1) : '')
-    children.push(image('mascot', { source: doc(w, LINE_H, body), alt: `Agents: show them all. ${bgAlt(bg)}`, width: w, height: LINE_H, press: 'open' }, false))
+    const iw = 14, rs = firstFit(lineSays(bg, v.now), W - used - iw - 6, 13), sayW = runsWidth(rs, 13), w = +(iw + (rs.length ? 6 + sayW : 0)).toFixed(2)
+    const body = at(1, 8, leadIcon(bg)) + (rs.length ? runs(iw + 6, 18, 13, rs, sayW + 1) : '')
+    children.push(image('mascot', { source: doc(w, LINE_H, body), alt: `Agents: show them all. ${bgAlt(bg, v.now)}`, width: w, height: LINE_H, press: 'open' }, false))
   } else if (crew.agents.length || crew.sessionNeed) {
     const m = mascotArt(crew, v.loops, 'S')
     const room = W - used - m.w - 6, say = room >= 40 ? sayFit(m.f, room, 13) : '', w = +(m.w + (say ? 6 + widthOf(say, 13, m.f.w) : 0)).toFixed(2)
@@ -492,7 +508,7 @@ const needOf = (c: Cell | null, first: boolean, priority: number): Need => {
 const agentsNeed = (v: PanelView, priority: number): Need => {
   // Background work alone claims the cells for its whole words, as a lone agent does for its name.
   const bg = bgOnly(v.crew)
-  if (bg) return { cells: Math.ceil((12 + 4 + runsWidth(bgRuns(bg), 11)) / CELL_PX), floor: Infinity, head: 0, claims: true, warn: false, priority }
+  if (bg) return { cells: Math.ceil((12 + 4 + runsWidth(underSays(bg, v.now)[0], 11)) / CELL_PX), floor: Infinity, head: 0, claims: true, warn: false, priority }
   const f = faceOf(v.crew), solo = soloOf(v.crew, f)
   // The state line under the name counts too, so a short title never leaves its note to be cut.
   const cells = solo ? Math.ceil(Math.max(12 + SIZE.crab.M[0] + 7 + 6 + widthOf(clean(solo.title, 60), 14, 600), 12 + widthOf(f.say, 11, f.w)) / CELL_PX + 4 / CELL_PX) : Infinity

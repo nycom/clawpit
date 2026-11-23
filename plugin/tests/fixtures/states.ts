@@ -112,14 +112,14 @@ const SESSION_NEED: SavvyNeed = { text: 'Ship the schema change behind a flag, o
 const UNASKED: ConfigRow[] = [{ key: 'savvy-progress.sessionNeed', label: 'Session needs you', description: 'Light Needs you when this session asks you a question?',
   kind: 'choice', value: 'unasked', options: ['unasked', 'off', 'both', 'ask', 'tool'], provider: { plugin: 'savvy-progress', tier: 'user' }, isLocked: false }]
 
-// savvy's background atom: two that run, a cron and a wakeup that wait, one that failed, one done (hidden).
+// savvy's background atom: two that run, a cron and a wakeup that wait (the wakeup set 10 minutes ago, due in 7), one that failed, one done (hidden).
 const bg = (id: string, kind: string, text: string, status: string, ago: number, o: Partial<SavvyBackground> = {}): SavvyBackground =>
   ({ id, kind, text, status, startedAt: NOW - ago, ...o })
 export const BG_TASKS: SavvyBackground[] = [
   bg('b1', 'shell', 'npm run dev -- --port 5173', 'running', 3 * 60_000),
   bg('m1', 'monitor', 'watch the deploy logs', 'running', 12 * 60_000),
   bg('c1', 'cron', 'check the CI queue', 'scheduled', 20 * 60_000, { schedule: 'every 10 minutes' }),
-  bg('wake:resume the release check', 'wakeup', 'resume the release check', 'scheduled', 60_000, { nextAt: NOW + 5 * 60_000 }),
+  bg('wake:resume the release check', 'wakeup', 'resume the release check', 'scheduled', 10 * 60_000, { nextAt: NOW + 7 * 60_000 }),
   bg('b2', 'shell', 'npm run build:docs', 'failed', 8 * 60_000, { endedAt: NOW - 6 * 60_000 }),
   bg('b0', 'shell', 'npm ci', 'done', 30 * 60_000, { endedAt: NOW - 29 * 60_000 }),
 ]

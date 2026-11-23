@@ -2,8 +2,8 @@ import { test, expect } from 'claude-code/testing'
 import type { BgRow, LoopPlan, SavvyRun } from '../types'
 import { backgroundOf, bgHash, bgVisible, crewOf, alertsOf } from '../hooks/model'
 import { paneLayout, ENGINE_MAX, HOST_MAX, type PaneItem } from '../hooks/pane/layout'
-import { paneTree, shortSchedule, type El } from '../hooks/pane/draw'
-import { minutes, textWidth } from '../hooks/text'
+import { paneTree, shortSchedule, trackShare, type El } from '../hooks/pane/draw'
+import { clockOf, minutes, textWidth } from '../hooks/text'
 import { icon, stopSquare } from '../hooks/icons'
 import { pickLoops } from '../hooks/loops'
 import { BG_TASKS, ETA, NOW, STATES, USUALLY } from './fixtures/states'
@@ -32,9 +32,12 @@ test('background: a missing or malformed atom reads as no rows', () => {
     expect(backgroundOf(v)).toEqual([])
 })
 
-test('background: active rows newest started first, then failed, then ended; titles fall back to the kind word', () => {
+test('background: failed rows first, then running newest first, then waiting soonest due, a cron with no time last; titles fall back to the kind word', () => {
   const rows = rowsOf()
-  expect(rows.map(r => `${r.id}:${r.state}`)).toEqual(['wake:resume the release check:scheduled', 'b1:running', 'm1:running', 'c1:scheduled', 'b2:failed', 'b0:ended'])
+  expect(rows.map(r => `${r.id}:${r.state}`)).toEqual(['b2:failed', 'b1:running', 'm1:running', 'wake:resume the release check:scheduled', 'c1:scheduled', 'b0:ended'])
+  const waits = backgroundOf([{ id: 'z', kind: 'cron', text: 'zeta', status: 'scheduled', startedAt: 1 }, { id: 'a', kind: 'cron', text: 'alpha', status: 'scheduled', startedAt: 2 },
+    { id: 'w2', kind: 'wakeup', text: 'later', status: 'scheduled', startedAt: 1, nextAt: 900 }, { id: 'w1', kind: 'wakeup', text: 'sooner', status: 'scheduled', startedAt: 1, nextAt: 500 }])
+  expect(waits.map(r => r.id)).toEqual(['w1', 'w2', 'a', 'z'])
   expect(backgroundOf([{ id: 'x', kind: 'monitor', text: '', status: 'running', startedAt: 1 }])[0].title).toBe('monitor')
   // An unknown status (savvy's "killed", or a word it adds later) reads as ended.
   expect(backgroundOf([{ id: 'x', kind: 'shell', text: 'a', status: 'killed', startedAt: 1 }])[0].state).toBe('ended')
@@ -57,7 +60,7 @@ test('background: the hash is short, stable and differs per id', () => {
 
 test('background: shown rows are the active ones not stopped, and failed ones that ended after the last prompt', () => {
   const rows = rowsOf()
-  expect(bgVisible(rows, new Map(), 0).map(r => r.id)).toEqual(['wake:resume the release check', 'b1', 'm1', 'c1', 'b2'])
+  expect(bgVisible(rows, new Map(), 0).map(r => r.id)).toEqual(['b2', 'b1', 'm1', 'wake:resume the release check', 'c1'])
   expect(bgVisible(rows, new Map(), NOW - 5 * 60_000).map(r => r.id)).not.toContain('b2')
   // Stopped at its startedAt: hidden; the same id re-created with a new startedAt shows again.
   const stopped = new Map([['b1', NOW - 3 * 60_000]])
@@ -65,14 +68,38 @@ test('background: shown rows are the active ones not stopped, and failed ones th
   expect(bgVisible(rows, new Map([['b1', NOW - 99]]), 0).map(r => r.id)).toContain('b1')
 })
 
-test('background: the crew carries the active and failed counts and nothing else moves', () => {
+test('background: the crew carries the running, waiting and failed counts, the next timed row and the lead kind; nothing else moves', () => {
   const plain = crewWith('hydra', []), crew = crewWith('hydra', shown())
-  expect(crew.background).toEqual({ active: 4, failed: 1 })
+  expect(crew.background).toEqual({ running: 2, waiting: 2, failed: 1, next: { kind: 'wakeup', nextAt: NOW + 7 * 60_000 }, lead: 'wakeup' })
   expect(plain.background).toBeUndefined()
   const { background, ...rest } = crew
   expect(rest).toEqual(plain); expect(alertsOf(crew)).toEqual(alertsOf(plain))
   expect(pickLoops(crew, STATES.hydra.ui, true, true)).toEqual(pickLoops(plain, STATES.hydra.ui, true, true))
   expect(crewWith('idle', []).background).toBeUndefined()
+})
+
+test('background: the lead icon is the next timed row\'s kind, else the newest running row\'s, else the first waiting row\'s, else failed', () => {
+  const lead = (list: unknown[]) => crewWith('idle', bgVisible(backgroundOf(list), new Map(), 0)).background?.lead
+  const run = (id: string, kind: string, startedAt: number) => ({ id, kind, text: id, status: 'running', startedAt })
+  expect(lead([run('a', 'shell', 1), { id: 'c', kind: 'cron', text: 'c', status: 'scheduled', startedAt: 1, nextAt: 9 }])).toBe('cron')
+  expect(lead([run('a', 'shell', 1), run('b', 'monitor', 2), { id: 'c', kind: 'cron', text: 'c', status: 'scheduled', startedAt: 1 }])).toBe('monitor')
+  expect(lead([{ id: 'c', kind: 'cron', text: 'c', status: 'scheduled', startedAt: 1 }])).toBe('cron')
+  expect(lead([{ id: 'f', kind: 'shell', text: 'f', status: 'failed', startedAt: 1, endedAt: 2 }])).toBe('failed')
+  expect(crewWith('idle', bgVisible(backgroundOf([{ id: 'c', kind: 'cron', text: 'c', status: 'scheduled', startedAt: 1 }]), new Map(), 0)).background)
+    .toEqual({ running: 0, waiting: 1, failed: 0, lead: 'cron' })
+})
+
+test('background: clock times read 24 h or 12 h with AM and PM, in ASCII, at a given offset', () => {
+  const at = Date.UTC(2027, 0, 15, 14, 20)
+  expect(clockOf(at, false, 0)).toBe('14:20'); expect(clockOf(at, true, 0)).toBe('2:20 PM')
+  expect(clockOf(at, false, 120)).toBe('16:20'); expect(clockOf(at, false, -15 * 60)).toBe('23:20')
+  expect(clockOf(Date.UTC(2027, 0, 15, 0, 5), true, 0)).toBe('12:05 AM'); expect(clockOf(Date.UTC(2027, 0, 15, 12, 59), true, 0)).toBe('12:59 PM')
+  expect(clockOf(Date.UTC(2027, 0, 15, 9, 3), false, 0)).toBe('09:03'); expect(clockOf(NaN, false, 0)).toBe('')
+})
+
+test('background: a wakeup\'s track share is the wait used, clamped, and a share that is not a number counts as full', () => {
+  expect(trackShare(5, 0, 10)).toBe(0.5); expect(trackShare(-5, 0, 10)).toBe(0); expect(trackShare(50, 0, 10)).toBe(1)
+  expect(trackShare(5, 10, 10)).toBe(1); expect(trackShare(NaN, 0, 10)).toBe(1)
 })
 
 test('background: minutes read "<1m" under a minute, then whole minutes', () => {
@@ -85,9 +112,14 @@ const line = (i: PaneItem) => `${i.kind}${i.kind === 'section' ? `:${i.name}` : 
 test('paneLayout: Background sits after Running and before Ended, with its count', () => {
   const items = paneLayout(crewWith('hydra', shown()), STATES.hydra.ui, noLoops, unit, null, shown())
   const l = items.map(line)
-  expect(l.slice(l.indexOf('section:background'))).toEqual(['section:background', 'bg:wake:resume the release check', 'bg:b1', 'bg:m1', 'bg:c1', 'bg:b2', 'section:ended'])
+  expect(l.slice(l.indexOf('section:background'))).toEqual(['section:background', 'bg:b2', 'bg:b1', 'bg:m1', 'bg:wake:resume the release check', 'bg:c1', 'section:ended'])
   expect(l.indexOf('section:running')).toBeLessThan(l.indexOf('section:background'))
-  expect(items.find(i => i.kind === 'section' && i.name === 'background')).toEqual({ kind: 'section', name: 'background', count: 5, failed: 1 })
+  // The header counts the active rows and names the failed apart.
+  expect(items.find(i => i.kind === 'section' && i.name === 'background')).toEqual({ kind: 'section', name: 'background', count: 4, failed: 1 })
+  // The hairline goes with the first waiting row, under rows that run or failed; with none above it, there is no line.
+  expect(items.filter(i => i.kind === 'bg' && i.rule).map(line)).toEqual(['bg:wake:resume the release check'])
+  const waiting = shown().filter(r => r.state === 'scheduled')
+  expect(paneLayout(crewWith('idle', waiting), STATES.idle.ui, noLoops, unit, null, waiting).some(i => i.kind === 'bg' && i.rule)).toBe(false)
 })
 
 test('paneLayout: background alone draws the head and its section, not the empty state', () => {
@@ -116,62 +148,90 @@ test('pane: an older savvy with no background atom draws the same tree', () => {
   for (const s of ['hydra', 'emptyPane', 'sessionNeed'] as const) expect(paneTree(paneViewOf(s, { background: [] }))).toEqual(paneTree(paneViewOf(s)))
 })
 
-test('pane: the Background section header reads its count, muted, and is not pressable', () => {
-  const t = paneTree(bgView()), sec = find(t, 'sec-background')!
-  expect(words(sec)).toBe('Background 5'); expect(sec.type).toBe('Svg'); expect(src(sec)).toContain('class="muted"')
+const W52 = 52 * 8.5
+const wake = h('wake:resume the release check')
+const texts = (e: El | undefined) => [...src(e).replace(/<title>.*?<\/title>/g, '').matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m => unescape(m[1]))
+
+test('pane: the header reads the active count and names the failed apart in er; with only failed rows it has no count', () => {
+  const sec = find(paneTree(bgView()), 'sec-background')!
+  expect(words(sec)).toBe('Background 4 · 1 failed'); expect(sec.type).toBe('Svg'); expect(src(sec)).toMatch(/class="er"[^>]*> · 1 failed</)
+  expect(alt(sec)).toBe('Background: 4 running or waiting, 1 failed')
+  const failedOnly = shown().filter(r => r.state === 'failed'), only = find(paneTree({ ...bgView(), background: failedOnly }), 'sec-background')
+  expect(words(only)).toBe('Background · 1 failed'); expect(alt(only)).toBe('Background: 1 failed')
+  expect(alt(find(paneTree({ ...bgView(), background: shown().filter(r => r.state === 'running') }), 'sec-background'))).toBe('Background: 2 running or waiting')
 })
 
-test('pane: row alts read the title, the kind and the reading', () => {
+test('pane: running rows read back (age, since), waiting rows read forward (in, at), a cron its short schedule, a failed row after', () => {
   const t = paneTree(bgView())
-  expect(alt(find(t, `bg-${h('b1')}`))).toBe('npm run dev -- --port 5173, shell, running 3m')
-  expect(alt(find(t, `bg-${h('m1')}`))).toBe('watch the deploy logs, monitor, running 12m')
-  expect(alt(find(t, `bg-${h('c1')}`))).toBe('check the CI queue, cron, every 10 minutes')
-  expect(alt(find(t, `bg-${h('wake:resume the release check')}`))).toBe('resume the release check, wakeup, next in 5m')
-  expect(alt(find(t, `bg-${h('b2')}`))).toBe('npm run build:docs, shell, failed after 2m')
-})
-
-test('pane: readings: minutes since start, a countdown that ceils and reads due, the schedule', () => {
-  const t = paneTree(bgView())
-  expect(words(find(t, `bg-${h('b1')}`))).toBe('npm run dev -- --port 5173 3m shell')
-  // savvy's "every 10 minutes" is wider than the 88 px reading column: the reading is its short form, the tooltip and the alt keep it whole.
-  expect(words(find(t, `bg-${h('c1')}`))).toBe('check the CI queue every 10m cron')
+  expect(texts(find(t, `bg-${h('b1')}`))).toEqual(['npm run dev -- --port 5173', '3m', 'since 07:57'])
+  expect(alt(find(t, `bg-${h('b1')}`))).toBe('npm run dev -- --port 5173, shell, running 3m, since 07:57')
+  expect(alt(find(t, `bg-${h('m1')}`))).toBe('watch the deploy logs, monitor, running 12m, since 07:48')
+  expect(texts(find(t, `bg-${wake}`))).toEqual(['resume the release check', 'in 7m', 'at 08:07'])
+  expect(alt(find(t, `bg-${wake}`))).toBe('resume the release check, wakeup, in 7m, at 08:07')
+  // savvy's "every 10 minutes" reads its short form, whole in the tooltip and the alt; line 2 is empty.
+  expect(texts(find(t, `bg-${h('c1')}`))).toEqual(['check the CI queue', 'every 10m'])
   expect(src(find(t, `bg-${h('c1')}`))).toContain('<title>every 10 minutes</title>'); expect(alt(find(t, `bg-${h('c1')}`))).toBe('check the CI queue, cron, every 10 minutes')
-  const short = backgroundOf([{ id: 'c', kind: 'cron', text: 'poll', status: 'scheduled', startedAt: NOW, schedule: 'hourly' }])
-  expect(words(find(paneTree({ ...bgView(), background: short }), `bg-${h('c')}`))).toBe('poll hourly cron')
-  expect(src(find(paneTree({ ...bgView(), background: short }), `bg-${h('c')}`))).not.toContain('<title>')
-  expect(words(find(t, `bg-${h('wake:resume the release check')}`))).toBe('resume the release check in 5m wakeup')
-  const due = paneTree({ ...bgView(), now: NOW + 5 * 60_000 }), soon = paneTree({ ...bgView(), now: NOW + 4 * 60_000 + 30_000 })
-  expect(words(find(due, `bg-${h('wake:resume the release check')}`))).toContain(' due ')
-  expect(words(find(soon, `bg-${h('wake:resume the release check')}`))).toContain(' in 1m ')
+  expect(texts(find(t, `bg-${h('b2')}`))).toEqual(['npm run build:docs', 'failed', 'after 2m'])
+  expect(alt(find(t, `bg-${h('b2')}`))).toBe('npm run build:docs, shell, failed after 2m')
+  // The kind word is gone from every row.
+  for (const r of shown()) expect(texts(find(t, `bg-${r.h}`))).not.toContain(r.kind)
+  // A wakeup that is due, a countdown that ceils, a 12-hour clock, a zone offset.
+  const due = paneTree({ ...bgView(), now: NOW + 7 * 60_000 }), soon = paneTree({ ...bgView(), now: NOW + 6 * 60_000 + 30_000 })
+  expect(texts(find(due, `bg-${wake}`)).slice(1)).toEqual(['due', 'at 08:07']); expect(texts(find(soon, `bg-${wake}`))[1]).toBe('in 1m')
+  expect(texts(find(paneTree({ ...bgView(), hour12: true, offsetMin: 120 }), `bg-${wake}`))[2]).toBe('at 10:07 AM')
 })
 
-test('pane: a failed row says failed in words beside its cross, has no Stop, and its row is still', () => {
+test('pane: a cron with a next time reads like a wakeup over its schedule, with no track', () => {
+  const rows = backgroundOf([{ id: 'c', kind: 'cron', text: 'poll', status: 'scheduled', startedAt: NOW - 6 * 60_000, nextAt: NOW + 4 * 60_000, schedule: 'every 10 minutes' }])
+  const row = find(paneTree({ ...bgView(), background: rows }), `bg-${h('c')}`)!
+  expect(texts(row)).toEqual(['poll', 'in 4m', 'every 10m']); expect(alt(row)).toBe('poll, cron, in 4m, every 10 minutes')
+  expect(src(row)).not.toContain('height="2"')
+  const hourly = backgroundOf([{ id: 'c', kind: 'cron', text: 'poll', status: 'scheduled', startedAt: NOW, schedule: 'hourly' }])
+  const plain = find(paneTree({ ...bgView(), background: hourly }), `bg-${h('c')}`)!
+  expect(texts(plain)).toEqual(['poll', 'hourly']); expect(src(plain)).not.toContain('<title>')
+})
+
+test('pane: a wakeup draws a still 2 px track under its title, filled in accent by the wait used', () => {
+  const t = paneTree(bgView()), s0 = src(find(t, `bg-${wake}`))
+  const track = /<rect x="48" y="24" width="([\d.]+)" height="2" rx="1" class="track"\/>/.exec(s0), fill = /<rect x="48" y="24" width="([\d.]+)" height="2" rx="1" class="accent"\/>/.exec(s0)
+  expect(track).not.toBeNull(); expect(fill).not.toBeNull()
+  // Set 10 minutes ago, due in 7: 10 of 17 used.
+  expect(Math.abs(+fill![1] - +track![1] * 10 / 17)).toBeLessThan(0.02)
+  expect(s0).not.toMatch(/animation|transition/)
+  for (const id of ['b1', 'm1', 'c1', 'b2']) expect(src(find(t, `bg-${h(id)}`))).not.toContain('height="2"')
+})
+
+test('pane: a failed row is one full-width image on the needs-you tint, with a cross, the word failed, an empty Stop slot and no Stop', () => {
   const t = paneTree(bgView()), row = find(t, `bg-${h('b2')}`)!
-  expect(words(row)).toBe('npm run build:docs failed shell'); expect(src(row)).toContain(icon('cross', 12, 's-er').slice(0, 30))
-  expect(find(t, `stop-${h('b2')}`)).toBeUndefined()
-  expect(row.type).toBe('Svg'); expect(inner(row).width).toBe(52 * 8.5 - 24)
-  // The alert row's title reads in fg, as the active rows' do.
+  expect(row.type).toBe('Svg'); expect(inner(row).width).toBe(W52)
+  expect(src(row)).toContain(`<rect x="0" y="0" width="${W52}" height="30" rx="8" class="needTint"/>`)
+  expect(src(row)).toContain(icon('cross', 12, 's-er')); expect(find(t, `stop-${h('b2')}`)).toBeUndefined()
   expect(src(row)).toContain('<text x="48" y="19" class="fg" font-size="12">npm run build:docs</text>')
+  expect(src(row)).toContain(`<text x="${W52 - 34}" y="13" class="er" font-size="12" font-weight="600" text-anchor="end">failed</text>`)
 })
 
-test('pane: an active row is a row Box: a plain image beside its own Stop image', () => {
+test('pane: an active row is a plain image beside its Stop: a 20 px wash box with radius 6 and the filled square, in a 24 px press', () => {
   const t = paneTree(bgView()), box = all(t).find(e => e.type === 'Box' && (e.children ?? []).some(c => typeof c !== 'string' && c.props?.key === `bg-${h('b1')}`))!
   const [row, stop] = box.children as El[]
   expect(box.props?.flexDirection).toBe('row')
-  expect(row.type).toBe('Svg'); expect(inner(row).press).toBeUndefined(); expect(inner(row).width).toBe(52 * 8.5 - 24)
+  expect(row.type).toBe('Svg'); expect(inner(row).press).toBeUndefined(); expect(inner(row).width).toBe(W52 - 24)
   expect(stop.type).toBe('Client'); expect(stop.props?.key).toBe(`stop-${h('b1')}`)
-  // 24 px, the PAD and chevron slot: the square's centre is the chevron's, W - 16.
   expect(inner(stop)).toMatchObject({ press: `stop:${h('b1')}`, hover: true, alt: 'Stop npm run dev -- --port 5173', width: 24, height: 30 })
-  expect(src(stop)).toContain(`<g transform="translate(2 9)">${stopSquare('muted')}</g>`)
-  // The title sits on the agents' title x, CRAB + GAP.
+  expect(src(stop)).toContain('<rect x="0" y="5" width="20" height="20" rx="6" class="wash"/>'); expect(src(stop)).toContain(`<g transform="translate(4 9)">${stopSquare('muted')}</g>`)
   expect(src(row)).toContain('<text x="48" y="19" class="fg" font-size="12">npm run dev -- --port 5173</text>')
 })
 
-test('pane: kind icons are SVG paths, muted on active rows', () => {
+test('pane: the hairline spans the first waiting row\'s image and its Stop, at their top edge', () => {
+  const t = paneTree(bgView())
+  expect(src(find(t, `bg-${wake}`))).toContain(`<rect x="0" y="0" width="${W52 - 24}" height="1" class="track"/>`)
+  expect(src(find(t, `stop-${wake}`))).toContain('<rect x="0" y="0" width="24" height="1" class="track"/>')
+  for (const id of ['b1', 'm1', 'c1']) expect(src(find(t, `stop-${h(id)}`))).not.toContain('height="1"')
+})
+
+test('pane: kind icons are SVG paths, muted: a repeat cycle for a cron, an hourglass for a wakeup', () => {
   const t = paneTree(bgView())
   for (const [id, kind] of [['b1', 'shell'], ['m1', 'monitor'], ['c1', 'cron'], ['wake:resume the release check', 'wakeup']] as const)
     expect(src(find(t, `bg-${h(id)}`))).toContain(icon(kind, 12, 's-muted'))
-  expect(src(find(t, `stop-${h('b1')}`))).toContain(stopSquare('muted'))
 })
 
 test('pane: a cut title carries its full text in a <title> and in the alt; an uncut one has none', () => {
@@ -189,23 +249,27 @@ test('pane: background rows draw no animation and add no loop', () => {
   }
 })
 
-test('pane: at 28 to 64 cells a row\'s title and reading fit, the title never drops, and no lone ellipsis is drawn', () => {
-  const long = backgroundOf([...BG_TASKS, { id: 'L', kind: 'cron', text: 'rebuild the search index for every docs page', status: 'scheduled', startedAt: NOW - 1, schedule: 'at 09:00 on weekdays except public holidays' }])
-  const bad: string[] = []
-  for (let columns = 28; columns <= 64; columns++) {
-    const W = columns * 8.5, t = paneTree({ ...paneViewOf('background', { columns }), background: bgVisible(long, new Map(), 0) })
-    for (const r of bgVisible(long, new Map(), 0)) {
-      const e = find(t, `bg-${h(r.id)}`)!, texts = [...src(e).matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m => unescape(m[1]))
-      const title = texts[0]
+test('pane: at 28 to 64 cells a row\'s title and both reading lines fit, line 2 drops first, the title never drops, and no lone ellipsis is drawn', () => {
+  const long = backgroundOf([...BG_TASKS, { id: 'L', kind: 'cron', text: 'rebuild the search index for every docs page', status: 'scheduled', startedAt: NOW - 1, schedule: 'at 09:00 on weekdays except public holidays' },
+    { id: 'T', kind: 'wakeup', text: 'resume the long release check for every package in the repo', status: 'scheduled', startedAt: NOW - 60_000, nextAt: NOW + 50 * 60_000 }])
+  const rows = bgVisible(long, new Map(), 0), bad: string[] = []
+  for (let columns = 28; columns <= 64; columns++) for (const hour12 of [false, true]) {
+    const W = columns * 8.5, t = paneTree({ ...paneViewOf('background', { columns }), background: rows, hour12 })
+    for (const r of rows) {
+      const e = find(t, `bg-${h(r.id)}`)!, [title, l1 = '', l2 = ''] = texts(e)
       if (!title || title === '…' || (title.endsWith('…') && [...title.slice(0, -1).trim()].length < 8)) bad.push(`${columns} ${r.id}: title ${JSON.stringify(title)}`)
-      for (const x of texts) if (x.endsWith('…') && [...x.slice(0, -1).trim()].length < 8) bad.push(`${columns} ${r.id}: ${JSON.stringify(x)}`)
-      const reading = texts[1] ?? ''
-      if (48 + textWidth(title, 12) + 10 + textWidth(reading, 12) > W - 34 + 0.5) bad.push(`${columns} ${r.id}: overflow ${JSON.stringify([title, reading])}`)
+      for (const x of texts(e)) if (x.endsWith('…') && [...x.slice(0, -1).trim()].length < 8) bad.push(`${columns} ${r.id}: ${JSON.stringify(x)}`)
+      if (l2 && !l1) bad.push(`${columns} ${r.id}: line 2 without line 1`)
+      if (l1 && 48 + textWidth(title, 12) + 10 + Math.max(textWidth(l1, 12, r.state === 'failed' ? 600 : 400), textWidth(l2, 10)) > W - 34 + 0.5) bad.push(`${columns} ${r.id}: overflow ${JSON.stringify([title, l1, l2])}`)
+      // The track ends where the reading starts.
+      const tr = /<rect x="48" y="24" width="([\d.]+)" height="2" rx="1" class="track"\/>/.exec(src(e))
+      if (tr && l1 && 48 + +tr[1] > W - 34 - Math.max(textWidth(l1, 12), textWidth(l2, 10)) - 10 + 0.5) bad.push(`${columns} ${r.id}: track runs under the reading`)
+      if (tr && !l1) bad.push(`${columns} ${r.id}: a track under a title that runs over its reading`)
     }
   }
   expect(bad).toEqual([])
-  // A schedule too long for the reading edge goes to the alt only; the reading shows the kind word.
-  const t = paneTree({ ...paneViewOf('background', { columns: 28 }), background: bgVisible(long, new Map(), 0) }), row = find(t, `bg-${h('L')}`)!
+  // A schedule too long for the reading edge goes to the alt and the tooltip only; the reading shows the kind word.
+  const t = paneTree({ ...paneViewOf('background', { columns: 28 }), background: rows }), row = find(t, `bg-${h('L')}`)!
   expect(words(row)).not.toContain('public holidays'); expect(alt(row)).toContain('at 09:00 on weekdays except public holidays')
   expect(src(row)).toContain('<title>at 09:00 on weekdays except public holidays</title>')
 })
@@ -232,11 +296,5 @@ test('pane: a cron schedule reads its short form; an unknown one is kept as it i
 test('pane: a row with no text reads its kind word with no tooltip and no trailing colon', () => {
   const rows = backgroundOf([{ id: 'e', kind: 'monitor', text: '', status: 'running', startedAt: NOW - 60_000 }])
   const row = find(paneTree({ ...bgView(), background: rows }), `bg-${h('e')}`)!
-  expect(src(row)).not.toContain('<title>'); expect(alt(row)).toBe('monitor, monitor, running 1m')
-})
-
-test('pane: the Background header counts every shown row, and its alt names the active and the failed', () => {
-  const sec = find(paneTree(bgView()), 'sec-background')!
-  expect(words(sec)).toBe('Background 5'); expect(alt(sec)).toBe('Background 5: 4 running or waiting, 1 failed')
-  expect(alt(find(paneTree({ ...bgView(), background: shown().slice(0, 1) }), 'sec-background'))).toBe('Background 1')
+  expect(src(row)).not.toContain('<title>'); expect(alt(row)).toBe('monitor, monitor, running 1m, since 07:59')
 })

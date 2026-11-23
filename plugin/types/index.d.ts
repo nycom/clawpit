@@ -35,7 +35,9 @@ export type Crew = {
   costUsd: number; leftMin: number | null
   plan: Plan | null
   sessionNeed?: { question: string; since: number }   // the main session waits on you; not an agent, so in no count but alertsOf's
-  background?: { active: number; failed: number }      // background rows shown in the pane; only the folded column and the chip read it
+  // Background rows shown in the pane; only the folded column and the chip read it. next: the soonest row with a time;
+  // lead: the kind the panel draws, the failed cross when only failed rows show.
+  background?: { running: number; waiting: number; failed: number; next?: { kind: BgKind; nextAt: number }; lead: BgKind | 'failed' }
 }
 
 export type ContextStat = { pct: number; msgsPct: number | null; turnsLeft: number | null; autoPct: number | null; alarm: boolean }

@@ -37,6 +37,12 @@ export const wrap = (s: string, widthPx: number, sizePx: number, lines: number, 
   return out
 }
 const pad = (n: number) => String(n).padStart(2, '0')
+// A time of day, from a UTC instant and the zone's offset in minutes: "14:20", or "2:20 PM" in 12 h. ASCII; '' for a bad time.
+export const clockOf = (ms: number, hour12: boolean, offsetMin: number): string => {
+  if (!Number.isFinite(ms) || !Number.isFinite(offsetMin)) return ''
+  const day = (((Math.floor(ms / 60_000) + Math.round(offsetMin)) % 1440) + 1440) % 1440, h = Math.floor(day / 60), m = pad(day % 60)
+  return hour12 ? `${h % 12 || 12}:${m} ${h < 12 ? 'AM' : 'PM'}` : `${pad(h)}:${m}`
+}
 export const fmtClock = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${pad(t % 60)}` }
 export const fmtAge = (ms: number): string => { const t = Math.max(0, Math.floor(ms / 1000)); return t < 60 ? `${t}s` : `${Math.floor(t / 60)}m` }
 // Ages read in whole minutes, so an image changes only when one crosses a minute.

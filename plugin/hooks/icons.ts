@@ -5,9 +5,10 @@ import { MOTION } from './tokens'
 const PATHS = { chev: 'M4.5 2.5 8 6l-3.5 3.5', check: 'M2.5 6.3 5 8.8l4.5-5.3', cross: 'M3 3l6 6M9 3 3 9',
   ask: 'M4.2 4.4a1.8 1.8 0 1 1 2.6 1.6c-.5.3-.8.7-.8 1.2v.5M6 9.6v.01',
   squeeze: 'M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5M2 6h8',
-  // Background kinds: a prompt chevron over an underscore, a pulse line, a clock, a circular arrow.
+  // Background kinds: a prompt chevron over an underscore, a pulse line, a repeat cycle (a cron comes back), an hourglass (a wakeup runs out once).
   shell: 'M2 3.5 4.8 6 2 8.5M6.5 9h3.5', monitor: 'M1 6h2.4l1.4-3 2.4 6 1.4-3H11',
-  cron: 'M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M6 3.8V6l1.6 1.1', wakeup: 'M10 6a4 4 0 1 1-1.2-2.85M9.2 1.4v1.9H7.3' } as const
+  cron: 'M2.4 6A3.6 3.6 0 0 1 8.6 3.5M8.9 1.4v2.3H6.6M9.6 6A3.6 3.6 0 0 1 3.4 8.5M3.1 10.6V8.3h2.3',
+  wakeup: 'M3 1.5h6M3 10.5h6M3.7 1.5v1.3c0 1.5 2.3 2 2.3 3.2S3.7 7.7 3.7 9.2v1.3M8.3 1.5v1.3C8.3 4.3 6 4.8 6 6s2.3 1.7 2.3 3.2v1.3' } as const
 const n = (v: number) => +v.toFixed(2)
 
 // `cls` is a stroke class, for example "s-muted".
