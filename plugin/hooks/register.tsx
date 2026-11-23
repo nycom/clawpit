@@ -202,8 +202,12 @@ const takeBackground = (rows: BgRow[]) => {
 
 // One press stops it, no confirmation, as savvy's own Stop does: TaskStop for a shell or a monitor, CronDelete for a cron,
 // ScheduleWakeup's stop for a wakeup (which ends every wakeup). The hash is matched against the rows shown now, so a list
-// that moved since the drawing can never stop another task. An error is toasted and the row stays. On success the row hides
-// here at once: savvy marks a shell, monitor or cron ended only at its own reconcile. A press while its stop runs does nothing.
+// that moved since the drawing can never stop another task. A deny or an error is toasted and the row stays, except the
+// engine's answer that the task is already gone, which counts as stopped. On success the row hides here at once: savvy marks a
+// shell, monitor or cron ended only at its own reconcile. A press while its stop runs does nothing.
+// Already gone, in Claude Code 2.1.330's words: TaskStop "No task found with ID: …" (hints may follow) or "Task … is not running
+// (status: completed|failed|killed)", CronDelete "No scheduled job with id '…'".
+const GONE = /^(No (task found|scheduled job) with id\b|Task .+ is not running \(status: (completed|failed|killed)\))/i
 const stopBackground = async ($: EngineInterface, h: string) => {
   if (stopping.has(h)) return
   stopping.add(h)
@@ -216,10 +220,12 @@ const stopOne = async ($: EngineInterface, h: string) => {
   const call = t.kind === 'cron' ? { tool: 'CronDelete', id: t.id } : t.kind === 'wakeup' ? { tool: 'ScheduleWakeup', stop: true } : { tool: 'TaskStop', task_id: t.id }
   try {
     const r = await $.tool.call({ ...call, consent } as never)
-    if (r.deny !== undefined || r.isError) throw new Error(r.deny ?? r.text ?? str(r.result))
+    if (r.deny !== undefined) { $.ui.toast(`Couldn't stop ${t.title}: ${clip(oneLine(r.deny), 200)}`); return }
+    if (r.isError) throw new Error(r.text ?? str(r.result))
   } catch (err) {
-    $.ui.toast(`Couldn't stop ${t.title}: ${clip(oneLine(err instanceof Error ? err.message : String(err)), 200)}`)
-    return
+    const why = oneLine(err instanceof Error ? err.message : String(err))
+    // Already gone (it ended, or was stopped elsewhere) is the result Stop wanted: the row hides, no toast.
+    if (!GONE.test(why)) { $.ui.toast(`Couldn't stop ${t.title}: ${clip(why, 200)}`); return }
   }
   // The rows as savvy last wrote them, from the observer: it may have written while the call ran, and a read here still
   // can return the list from before the call (seen under the test engine).
