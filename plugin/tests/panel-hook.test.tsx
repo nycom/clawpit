@@ -86,8 +86,11 @@ test('panel hook: desktop draws the panel root; terminal and a survey pass throu
   setup(on)
   await start($)
   const desk = await band($)
-  expect((await desk.find({ key: 'clawpit-panel' }))?.type).toBe('Box')
-  expect(await desk.find({ key: 'beneath' })).toBeUndefined()
+  const panel = await desk.find({ key: 'clawpit-panel' })
+  expect(panel?.type).toBe('Box')
+  // Since engine 2.1.325 each plugin answers its own AbovePrompt ask and the engine stacks the rows, so this test's own
+  // row (plugin `test`) sits beside clawpit's panel; clawpit can't hide it, it only must not draw it inside its own.
+  expect(JSON.stringify(panel)).not.toContain('"beneath"')
   await desk.unmount()
   for (const ui of [await band($, 'terminal'), await band($, 'desktop', { hasSurvey: true })]) {
     expect(await ui.find({ key: 'clawpit-panel' })).toBeUndefined()
