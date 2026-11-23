@@ -13,7 +13,7 @@ The skins upgrade plans to remove skins' usage band ("The usage band leaves skin
 `gauges/` beside `plugin/`, with a second entry in `.claude-plugin/marketplace.json`.
 
 - **Why not its own repo:** the plugin is mostly copies of clawpit files (section 3). In one repository a test can hold every copy to its original on every push. Across two repositories nothing would see drift.
-- **Merge clash with the Background section work:** that work edits `plugin/hooks/register.tsx`, the pane, previews and the README. This change adds new files (`gauges/`, a sync script and its test, new Playwright baselines) and touches only these existing ones: `plugin/hooks/panel/draw.ts`, `plugin/hooks/model.ts` and `plugin/hooks/loops.ts` (section 2), `plugin/tests/build.ts`, `plugin/tests/model.test.ts`, `plugin/tests/panel-draw.test.ts`, `tests/visual/panel.spec.ts`, `.claude-plugin/marketplace.json`, `README.md`, `AGENTS.md`, `docs/decisions/LOCKED.md` and `design/mockups-all.html`. It leaves `register.tsx` and the pane alone.
+- **Merge clash with the Background section work:** that work edits `plugin/hooks/register.tsx`, the pane, previews and the README. This change adds new files (`gauges/`, a sync script and its test, new Playwright baselines) and touches only these existing ones: `plugin/hooks/panel/draw.ts`, `plugin/hooks/panel/columns.ts`, `plugin/hooks/icons.ts`, `plugin/hooks/text.ts`, `plugin/hooks/track/pace.ts`, `plugin/hooks/model.ts`, `plugin/types/index.d.ts` (sections 2 and 12), `plugin/tests/fixtures/states.ts`, `plugin/tests/model.test.ts`, `plugin/tests/panel-draw.test.ts` and the other unit tests of those files, `playwright.config.ts`, `package.json`, `tests/visual/panel.spec.ts`, `tests/visual/panel.spec.ts`, `.claude-plugin/marketplace.json`, `README.md`, `AGENTS.md`, `docs/decisions/LOCKED.md` and `design/mockups-all.html`. It leaves `register.tsx` and the pane alone.
 - **Image conflicts:** the critique's fixes (section 12) change clawpit's own panel drawing, so existing baselines and both preview PNGs change in this PR. The second PR to merge takes main's PNGs and baselines, then regenerates them (`npm run refresh:visual`) and looks at every changed one.
 - **Second to merge:** `git merge main` into the branch (merge commits only, AGENTS.md), resolve the text files by hand, then run `bash scripts/sync-gauges.sh`, `claude plugin test gauges`, `claude plugin validate gauges`, `claude plugin test plugin` and `npm run test:visual`. The gauges test and validate are local gates (CI does not run `claude plugin test`), and they are what catches a `PanelView`, `Stats`, `Ui` or `Crew` change that the byte check cannot.
 
@@ -23,7 +23,7 @@ The gauges plugin draws with clawpit's own `panelTree`, given a crew with no age
 
 One thing in that drawing still points at the Agents pane: the session column and the one-line session item press `costs`, which opens the pane's cost list. `PanelView` gains one optional flag, `alone?: true`, which only the gauges plugin sets; with it, both carry no press. Without the flag nothing in clawpit's drawing changes. clawpit's tests pin that, and a new test pins the change.
 
-The empty crew and the still loop plan are exported once, from `plugin/hooks/model.ts` (`EMPTY_CREW`, `STILL`), so the gauges register, `plugin/tests/build.ts` and the visual suite all pass the same values, and a new `Crew` field changes all three at once. A test in `plugin/tests/model.test.ts` pins that `crewOf` with no runs, no flow and no need equals `EMPTY_CREW`, so a field added in `crewOf` cannot leave it stale.
+The empty crew and the still loop plan are exported once, from `plugin/hooks/model.ts` (`EMPTY_CREW`, `STILL`), so the gauges register, the unit tests and the visual suite (through `viewOf`'s overrides) all pass the same values, and a new `Crew` field changes all three at once. A test in `plugin/tests/model.test.ts` pins that `crewOf` with no runs, no flow and no need equals `EMPTY_CREW`, so a field added in `crewOf` cannot leave it stale.
 
 The toggle stays clawpit's (maintainer, 2026-11-23): three sizes, the same icon and alt text, the same `nextSize` and `parseSize`. With no crew, "everything" and "agents folded" draw the same columns.
 
@@ -48,7 +48,7 @@ track/activity.ts  track/context.ts  track/pace.ts  track/turn.ts  track/tests.t
 ```ts
 declare module 'claude-code' {
   interface PluginState {
-    'clawpit-gauges': { stats: Stats; size: Size; tick: number }
+    'clawpit-gauges': { stats: Stats; ui: Ui; tick: number }
     ponytail: { band: PonytailBand }
   }
 }
@@ -92,7 +92,7 @@ savvy-progress is not touched. The gauges plugin writes no `takeover`, so savvy'
 A cut-down, hand-made copy of clawpit's usage wiring, about 150 lines. Unlike section 3 this copy is **not** held in sync by any test: a fix to clawpit's usage wiring (`statsOf`, `takeUsage`, the tick, `liveOf`, the `tool.call`, `turn.start`, `turn.complete` and `session.measure` bodies, the await-ordering in `tool.call`) does not reach the gauges plugin by itself. Moving that wiring into a copied module would edit `register.tsx`, which the Background section work is changing now, so it is a follow-up after both merge (see "Not covered"). Until then, a change to those parts of clawpit's register says in its PR whether the gauges register needs the same.
 
 The wiring:
-- **Atoms** (its own, plugin `clawpit-gauges`): `stats`, `size`, `tick`.
+- **Atoms** (its own, plugin `clawpit-gauges`): `stats`, `ui` (clawpit's `Ui`, of which only `size` changes), `tick`.
 - **Reads:** `$.session.usage({ breakdown: 'summary' })` at boot and on `session.measure`, and the cost on `tool.call`, `turn.start` and `turn.complete`, as clawpit does. Tests and lines changed from `tool.call`. ponytail's `band` atom for reuse and callers, missing read as none.
 - **Tick:** 1 Hz while a main turn runs; once a minute while a tests reading or a limit is shown; else none. Nothing loops while idle.
 - **Render:** desktop only, and passes while a survey holds the band, as clawpit's panel does. It builds the `PanelView` with the empty crew, `alone: true`, a fixed loop plan with nothing moving, `armed: false`, and `settles` and `still` from the `animations` setting.
@@ -112,7 +112,7 @@ Terminal, VS Code and mobile get no row: the panel is SVG drawn for the desktop,
 
 ### 7. LOCKED rulings that follow the panel
 
-They hold for the gauges plugin as they stand, because it draws with the same code: "Panel above the prompt" (dynamic columns, the core five), "Stable column order", "Column widths follow need", "Slack counts from the floor", "So-whats drop whole clauses", "Cuts keep meaning", "Compact chip", "First column inset", "Context column runs /context", "Limit columns run /usage", "Failed tests named", "Colours", "Animation", "Animations switch", and the AGENTS.md design guardrails.
+They hold for the gauges plugin because it draws with the same code: "Panel above the prompt" (dynamic columns, the core five), "Stable column order" (as updated in section 12), "Column widths follow need", "Slack counts from the floor", "So-whats drop whole clauses", "Cuts keep meaning", "Compact chip", "First column inset", "Context column runs /context", "Limit columns run /usage", "Failed tests named", "Colours", "Animation", "Animations switch", and the AGENTS.md design guardrails.
 
 They do not apply (they are about the crew or the pane): the Agents pane, Hydra plan, agents section, chips, crab costume, failed chip, session need, session cost board, "Session column opens the cost list", setup, takeover.
 

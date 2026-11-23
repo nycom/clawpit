@@ -41,7 +41,7 @@ Plan writing is deferred: the maintainer asked to do the panel above the prompt 
 **Three sizes,** stepped by one state-showing icon at the top-right. The icon is a tiny picture of the panel, and it gets a red dot while folded if an agent needs you. Only user presses change the size, and the choice is remembered.
 1. **Everything:** columns, then the plan, then chips.
 2. **Agents folded:** the gauges stay. The plan becomes a column (mini bar, "N/M", phase). The agents become the right-most column: one animated crab with a count badge.
-3. **One line:** context dial, any hot limit, the plan's mini bar (or session cost), and the agents crab at the far right.
+3. **One line:** context dial, any hot limit, the plan's mini bar (or session cost), and the agents crab at the far right. (Updated 2026-11-23 by "One line keeps alarm and ahead in words and shape": the compact chip's icon in alarm, an up arrow on a limit ahead of pace.)
 
 **Agents crab costume, in order:**
 1. the agent that needs you (its "?", hopping, red badge);
@@ -138,4 +138,4 @@ Taken by the maintainer after a design review and a design critique of the gauge
 - **Session before tokens:** the core order is context, 5h, 7d, session, tokens, and a narrow row drops tokens before session: the cost outlives the token count. At 60 cells the four columns are context, 5h, 7d, session, so in alarm the compact chip shows its icon alone there.
 - **One line keeps alarm and ahead in words and shape:** in alarm the one-line row keeps the compact chip, its icon alone, after the context item; a limit ahead of pace carries an up arrow (a new 12-grid icon, `ahead`) after its label, in amber. Both alts carry the so-what. Colour is never the only signal.
 - **Alts name the action:** a pressable column's alt ends with what a press does: "Runs /context", "Runs /usage", "Opens the cost list". Plain columns name none.
-- **State words whole or not at all:** at the one-line size, an agent's state ("needs you", "~2m left") is never cut; a row too narrow for it drops it whole and the crab stands alone (Cuts keep meaning).
+- **State words whole or not at all:** at the one-line size only an agent's name is ever cut, never its state ("needs you", "~2m left", "3 failed tries"). A row too narrow for the name and the state keeps the state alone, whole, or nothing; with two or more agents ("next: …") the time drops first and the name stays, cut to no fewer than 6 characters (Cuts keep meaning).
