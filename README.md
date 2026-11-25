@@ -2,6 +2,8 @@
 
 An instrument panel above the prompt and a crew pane beside it, for the Claude Code desktop app.
 
+**Requirements:** the Claude Code desktop app, on Claude Code 2.1.330 or later (the version CI runs; older ones are untested), and savvy-progress, which the first install line below brings with it. The terminal, VS Code and mobile get no panel and no pane.
+
 - **The panel** shows what matters right now: context left and when it auto-compacts, the 5-hour and 7-day limits against pace and when each resets (a calm limit says when it resets first, one ahead of pace its pace first), this turn's clock, lines changed and cost, the session's cost and tokens, tests, and the Hydra plan's phase and tasks. Columns appear only when they have something to say and fit the width.
 - **The Agents pane** is a roster of every subagent and crew: who needs you, who has failed, who is running, what runs in the background, who has ended. Each agent is a pixel crab holding the tool it's using, with time left, its steps, and a log that opens with a click.
 - **One Agents pane:** on the desktop, savvy-progress's `/agents-info` opens this pane (it opens; it no longer toggles), so there is one tab named Agents. `/agents-info savvy` opens savvy-progress's own pane, the way to its ended background history, planned rows and `/status` line. `/agents-info demo` (or `demo fun`) plays savvy-progress's scripted demo in this pane; `/agents-info demo stop` ends it. In a terminal attached to a desktop session the redirected pane draws nothing there; use `/agents-info savvy`. Sessions with no desktop attached keep savvy-progress's pane.
@@ -17,26 +19,37 @@ An instrument panel above the prompt and a crew pane beside it, for the Claude C
 
 The ETA is kept per stage list: a word added to or removed from savvy's stages starts a new ETA key and leaves the old one in the store (nothing prunes `eta:` keys).
 
-> **Status:** in development, not released. The preview below is the design mockup.
+The picture below is the design mockup.
 
 <!-- preview: refreshed after every visual change, see AGENTS.md -->
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="design/preview-light.png">
-  <img alt="clawpit mockup: the panel above the prompt with gauges, the Hydra plan and agent chips, beside the Agents pane of pixel crabs" src="design/preview-dark.png">
+  <img alt="clawpit mockup: the panel above the prompt with gauges, the plan and agent chips, beside the Agents pane of pixel crabs" src="design/preview-dark.png">
 </picture>
 
 ## Install
 
 ```
-/plugin marketplace add nycom/clawpit
-/plugin install clawpit@clawpit
+/plugin install clawpit --marketplace nycom/claude-kit
 ```
 
-clawpit needs savvy-progress installed: it reads savvy's crew data, and savvy's own band stands down while clawpit runs on the desktop.
+This adds the claude-kit marketplace and installs clawpit with savvy-progress, which it reads its crew data from. While clawpit runs on the desktop, savvy-progress's own band stands down.
+
+Or from clawpit's own marketplace, with savvy-progress as a line of its own:
+
+```
+/plugin marketplace add nycom/clawpit
+/plugin install clawpit@clawpit
+/plugin install savvy-progress --marketplace nycom/claude-kit
+```
+
+**Pick one.** Never enable `clawpit@claude-kit` and `clawpit@clawpit` together: they are the same plugin.
+
+Use the savvy-progress from nycom/claude-kit: it carries the step `reason` and `error` fields clawpit reads. Without savvy-progress there are no agents to show, and the empty Agents pane says so with a command to install it.
 
 skins and ponytail draw the same readings in their own bands; turn those off: `/skin band off` (while skins still has a band) and `/ponytail band off`.
 
-Use savvy-progress from nycom/claude-kit main once its clawpit change has merged (nycom/claude-kit#9): it carries the step `reason` and `error` fields clawpit reads, and stands its band down on the desktop. Update savvy-progress first, then install or update clawpit.
+An installed copy updates only when the plugin's version number changes: run `claude plugin update clawpit@claude-kit` (or `clawpit@clawpit`) in a shell, then start a new session.
 
 ### Gauges only
 
