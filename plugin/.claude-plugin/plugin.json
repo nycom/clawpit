@@ -1,5 +1,6 @@
 {
   "name": "clawpit",
+  "version": "0.1.0",
   "description": "An instrument panel above the prompt and a crew pane beside it, for the Claude Code desktop app.",
   "types": "./types/index.d.ts",
   "license": "MIT",
