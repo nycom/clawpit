@@ -27,6 +27,15 @@ Nothing that lands in the repo or on GitHub says how it was written:
 - `design/`: the mockups.
 - Push a plan or spec only after the maintainer approves it.
 
+## Releases
+- `plugin/.claude-plugin/plugin.json` and `gauges/.claude-plugin/plugin.json` carry one version number, the same in both. `npm run test:scripts` holds them equal.
+- Installs follow `main`, but an installed copy updates only when that number changes: a merge without a bump reaches nobody who already has the plugin, and a new install in between gets newer code under the old number.
+- So every PR that changes what ships (anything under `plugin/` or `gauges/` but their tests) bumps the number in both files: the last part for a fix, the middle one for a feature or a drawn change. A PR that changes only docs, tests, scripts or mockups does not.
+- Two open PRs that both bump conflict on the version line: whichever merges second takes the next number.
+- No `version` in a marketplace entry, here or in nycom/claude-kit: the number in `plugin.json` wins over it.
+- After the merge that changes the number, tag that merge commit `v<number>`. The tag and its GitHub release are made only on the maintainer's go.
+- A plugin loaded in place from a local folder reads its current files whatever the number says.
+
 ## The preview rule
 After every visual change, in the same PR:
 1. Refresh `design/mockups-all.html`.
@@ -52,6 +61,7 @@ The decisions are in [`docs/decisions/`](docs/decisions/). Ask before bending on
 - Off macOS, `npm run test:visual` skips the `@shot` screenshot tests (their baselines are macOS renders) and runs the structural ones.
 - The leak check is clean.
 - The previews are refreshed if anything visual changed.
+- The version number is bumped if what ships changed ("Releases").
 - Every unverified item is listed in the PR.
 
 ## How to work

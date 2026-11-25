@@ -1,5 +1,6 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
+import { INSTALL_SAVVY } from '../hooks/pane/draw'
 
 type $T = Parameters<TestBody>[0]
 type OnT = Parameters<TestBody>[1]
@@ -503,6 +504,33 @@ test('pane hook: with no $.config (an older CLI) the setup row never shows and n
   const ui = await pane($)
   expect(await offerShown(ui)).toBeUndefined()
   expect((await svgAlt(ui, /^No agents yet/))?.alt).toBe('No agents yet. Agents you start show up here')
+  await ui.unmount()
+})
+
+// savvy-progress's boot: it writes its stage words (an empty list when the setting is empty) and nothing else.
+const booting = {
+  name: 'savvy-progress',
+  register(on: OnT) { on('tool.call', { tool: 'savvy-boot' }, async $ => { await $.state.set({ plugin: 'savvy-progress', key: 'stages' }, []); return { result: {} } as never }) },
+}
+const hintOf = async (ui: Pane) => (await svgAlt(ui, /^No agents yet/))?.alt
+const EMPTY = 'No agents yet. Agents you start show up here', MISSING = `No agents yet. savvy-progress is not installed: ${INSTALL_SAVVY}`
+
+test('pane hook: with no savvy-progress atom and no savvy-progress setting the pane says so, until savvy writes one', { plugins: [booting] }, async ($, on) => {
+  setup(on)
+  on('config.list', () => ({ value: [] }) as never)
+  await start($)
+  const ui = await pane($)
+  expect(await hintOf(ui)).toBe(MISSING)
+  await $.tool.call({ tool: 'savvy-boot' } as never)
+  expect(await hintOf(ui)).toBe(EMPTY)
+  await ui.unmount()
+})
+
+test('pane hook: a savvy-progress with settings but no atom yet (an older one) gets no install hint', async ($, on) => {
+  setup(on); configRows(on, ['off', 'both'])
+  await start($)
+  const ui = await pane($)
+  expect(await hintOf(ui)).toBe(EMPTY)
   await ui.unmount()
 })
 

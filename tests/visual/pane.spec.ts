@@ -27,6 +27,13 @@ for (const s of OFFER) for (const theme of ['dark', 'light'] as const) for (cons
     await expect(page).toHaveScreenshot(`pane-${s}-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })
   })
 
+// The empty pane with no savvy-progress to read, at 41 cells as well: the install command on two lines, then on one.
+for (const theme of ['dark', 'light'] as const) for (const w of [28, 30, 36, 41, 52] as const)
+  test(`pane: savvyMissing, ${theme}, ${w} cells @shot`, async ({ page }) => {
+    await show(page, paneTree(paneViewOf('emptyPane', { columns: w, savvyMissing: true })), { surface: 'pane', widthCells: w, theme })
+    await expect(page).toHaveScreenshot(`pane-savvyMissing-${theme}-${w}.png`, { fullPage: true, maxDiffPixels: 0 })
+  })
+
 // Background work alone, then beside the running crew, at 41 cells as well.
 const BACKGROUND = ['background', 'backgroundCrew'] as const
 for (const s of BACKGROUND) for (const theme of ['dark', 'light'] as const) for (const w of [28, 30, 36, 41, 52] as const)

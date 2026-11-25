@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import type { CrewAgent } from '../types'
-import { paneTree, type El } from '../hooks/pane/draw'
+import { INSTALL_SAVVY, paneTree, type El } from '../hooks/pane/draw'
 import { ENGINE_MAX, HOST_MAX } from '../hooks/pane/layout'
 import { pickLoops } from '../hooks/loops'
 import { modelLabel, textWidth } from '../hooks/text'
@@ -277,6 +277,21 @@ test('pane: a reading column with no estimate reads the clock and a muted so far
   const row = find(paneTree(paneViewOf('manyAgents')), 'row-m0')!
   expect(words(row)).toContain('0:10 so far'); expect(src(row)).toMatch(/<tspan class="fg" font-weight="600">0:10<\/tspan><tspan class="muted"> so far</)
   expect(String(inner(row).alt)).toContain('0:10 so far')
+})
+
+test('pane: without savvy-progress the empty state names it and how to install it, the command never cut', () => {
+  const at = (columns: number) => paneTree(paneViewOf('emptyPane', { columns, savvyMissing: true })).children![0] as El
+  for (const columns of [28, 30, 36, 52]) {
+    const e = at(columns), [title, hint, ...cmd] = pieces(e)
+    expect(title).toEqual(['fg', 'No agents yet']); expect(hint).toEqual(['muted', 'savvy-progress is not installed'])
+    expect(cmd.map(([, p]) => p).join(' ')).toBe(INSTALL_SAVVY)
+    // Menlo's 11 px advance is 6.62: every command line fits the body.
+    for (const [cls, p] of cmd) { expect(cls).toBe('fg'); expect(p.length * 6.62).toBeLessThanOrEqual(columns * 8.5) }
+    expect(inner(e).alt).toBe(`No agents yet. savvy-progress is not installed: ${INSTALL_SAVVY}`); expect(src(e)).not.toContain('animation')
+  }
+  expect(pieces(at(28)).length).toBe(4); expect(pieces(at(52)).length).toBe(3)
+  expect(paneTree(paneViewOf('emptyPane', { savvyMissing: false }))).toEqual(paneTree(paneViewOf('emptyPane')))
+  expect(paneTree(paneViewOf('hydra', { savvyMissing: true }))).toEqual(paneTree(paneViewOf('hydra')))
 })
 
 test('pane: the empty state says how agents arrive', () => {
