@@ -12,10 +12,16 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
       - run: npx playwright install chromium
       - run: npm run test:scripts
-      # Screenshot comparisons (@shot) and `claude plugin test` are local gates: baselines depend on the machine's fonts.
+      # Pinned: the plugin API changes between releases. Bump it on purpose.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.330
+      - run: claude plugin validate plugin
+      - run: claude plugin validate gauges
+      - run: claude plugin test plugin
+      - run: claude plugin test gauges
+      # Screenshot comparisons (@shot) are a local gate: baselines depend on the machine's fonts.
       - run: npm run test:visual -- --grep-invert @shot
       - run: bash scripts/leak-check.sh
