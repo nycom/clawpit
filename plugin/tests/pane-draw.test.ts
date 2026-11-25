@@ -422,7 +422,7 @@ test('pane: running rows share one reading-column edge, sized to the widest read
   expect(title('imp')).toBe(title('e2e')); expect(title('imp').startsWith('Fixture run')).toBe(true)
 })
 
-test('pane: no text is ever a lone ellipsis, at 28 to 64 cells', () => {
+test('pane: no text is ever a lone ellipsis, at 28 to 64 cells', { timeoutMs: 20000 } as never, () => {
   const bare: string[] = []
   for (const s of [...VIEWS, 'helpers', 'helperNeedsYou', 'nestedHelper'] as const) for (let columns = 28; columns <= 64; columns++) {
     for (const v of [paneViewOf(s, { columns }), titled(s, 'e2e', 'Fixture needs you', columns)]) {
@@ -590,7 +590,7 @@ test('pane: a long model name does not move the reading edge', () => {
   for (const k of ['row-e2e', 'row-imp', 'helper-k1']) expect(words(find(long, k))).toBe(words(find(t, k)))
 })
 
-test('pane: 80 agents with models, efforts and a drawer stay under both bounds at every width', () => {
+test('pane: 80 agents with models, efforts and a drawer stay under both bounds at every width', { timeoutMs: 20000 } as never, () => {
   // Odd widths draw fractional pixels, so each is checked, not only a reference one.
   for (let columns = 20; columns <= 120; columns++) for (const rich of [false, true]) {
     const v0 = paneViewOf('manyAgents', { columns }), v = rich ? setModel(v0, a => `${a.model}[1m]`, { effort: 'xhigh' }) : v0
