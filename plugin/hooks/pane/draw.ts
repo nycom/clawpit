@@ -11,9 +11,9 @@ import { OFFER_NOTE } from '../setup'
 
 export type { El }
 // background: the rows to show, savvy's shells, monitors, crons and wakeups; hour12 and offsetMin: how their clock times read
-// (absent: 24 h, UTC).
+// (absent: 24 h, UTC). savvyMissing: no savvy-progress to read, so the empty state says how to install it.
 export type PaneView = { crew: Crew; ui: Ui; loops: LoopPlan; columns: number; now: number; session: SessionStat; still?: boolean; offer?: Offer | null; showCost?: boolean
-  background?: BgRow[]; hour12?: boolean; offsetMin?: number }
+  background?: BgRow[]; hour12?: boolean; offsetMin?: number; savvyMissing?: boolean }
 
 // The row's four columns: crab 38, title and activity, the reading column (88px at most, see readEdge), the chevron.
 const CRAB = 38, READ = 88, CHEV = 16, GAP = 10, PAD = 8, HELPER_CRAB = 50, INDENT = 14, READ_GAP = 6, TITLE_X = CRAB + GAP
@@ -447,7 +447,11 @@ const bgRow = (r: BgRow, W: number, now: number, rule: boolean, c: Clock): El =>
   return { type: 'Box', props: { flexDirection: 'row' }, children: [row, stop] }
 }
 
-const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ, cost = true, clock = UTC24): El => {
+// What the empty state says to run without savvy-progress: savvy alone, since installing clawpit again from claude-kit would
+// enable a second clawpit beside clawpit@clawpit.
+export const INSTALL_SAVVY = '/plugin install savvy-progress --marketplace nycom/claude-kit'
+
+const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge = READ, cost = true, clock = UTC24, savvyMissing = false): El => {
   switch (item.kind) {
     case 'head': return head(item.crew, W, cost)
     case 'section': return section(item, W)
@@ -463,8 +467,13 @@ const drawItem = (item: PaneItem, W: number, now: number, still: boolean, edge =
       alt: `${item.count} more ${item.section === 'background' ? 'background tasks' : 'agents'}`, width: n(W), height: 22 }, false)
     case 'empty': {
       const [cw, ch] = SIZE.crab.L, x = (W - cw) / 2
-      const say = text(W / 2, 76, 'fg', 13, 'No agents yet', { anchor: 'middle' }) + text(W / 2, 94, 'muted', 12, 'Agents you start show up here', { anchor: 'middle' })
-      return image('empty', { source: withCrab(doc(W, 104, say), crab({ role: 'explore', prop: 'none', walk: false, size: 'L' }), x, 52 - ch), alt: 'No agents yet. Agents you start show up here', width: n(W), height: 104 }, false)
+      // The command goes to two lines, at its option, where the body is too narrow (6.7 px a character, as the drawer's error line).
+      const cmd = !savvyMissing ? [] : INSTALL_SAVVY.length * 6.7 <= W ? [INSTALL_SAVVY] : INSTALL_SAVVY.split(/ (?=--)/)
+      const hint = savvyMissing ? 'savvy-progress is not installed' : 'Agents you start show up here', h = 104 + cmd.length * 16
+      const say = text(W / 2, 76, 'fg', 13, 'No agents yet', { anchor: 'middle' }) + text(W / 2, 94, 'muted', 12, hint, { anchor: 'middle' })
+        + cmd.map((c, k) => text(W / 2, 112 + k * 16, 'fg', 11, c, { anchor: 'middle', family: MONO })).join('')
+      return image('empty', { source: withCrab(doc(W, h, say), crab({ role: 'explore', prop: 'none', walk: false, size: 'L' }), x, 52 - ch),
+        alt: `No agents yet. ${hint}${cmd.length ? `: ${INSTALL_SAVVY}` : ''}`, width: n(W), height: h }, false)
     }
   }
 }
@@ -504,7 +513,7 @@ export const paneTree = (v: PaneView): El => {
   if (v.ui.view === 'costs') return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: costsView(v.session, W) }
   const items = paneLayout(v.crew, v.ui, v.loops, itemCost, v.offer, v.background), edge = readEdge(items, W, v.now)
   const clock: Clock = { hour12: !!v.hour12, offsetMin: Number.isFinite(v.offsetMin) ? v.offsetMin! : 0 }
-  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge, v.showCost !== false, clock)) }
+  return { type: 'Box', props: { key: 'clawpit-pane', flexDirection: 'column' }, children: items.map(i => drawItem(i, W, v.now, !!v.still, edge, v.showCost !== false, clock, v.savvyMissing)) }
 }
 
 // The measuring bench: `count` walking M crabs, past the loop budget. Eased keeps the walk's size and keyframes on an

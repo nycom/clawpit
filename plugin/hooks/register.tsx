@@ -79,6 +79,7 @@ let bench: { count: number; eased: boolean } | null = null
 let offers: Offer[] = []                       // the /config rows still to ask about once; the pane shows the first
 let showCost = true                             // false when the savvy-progress showCost row reads false; a missing row shows
 let hour12 = false                              // clock times in 12 h: Claude Code's timeFormat row, else the OS locale's hour cycle
+let savvyRows = true                            // /config lists a savvy-progress row; true until the list says otherwise
 let refused = new Set<string>()                 // keys a write was refused for, kept in the store as offerRefused:<key>
 
 // The engine blanks Clients past 100,000 characters; one bench crab's props are about 1,750.
@@ -89,7 +90,7 @@ const reset = () => {
   turn = emptyTurn(); tests = null; ctx = {}; ctxHistory = []; limits = []; settles = {}; planSince = null; needShown = false
   bgShown = false; stopped = new Map(); promptAt = 0; stopping = new Set(); bgLatest = []
   ticker?.cancel(); ticker = null; period = 0; wake?.cancel(); wake = null; paneAsked = false; benchReg = null; setupReg = null; bench = null
-  offers = []; refused = new Set(); showCost = true; hour12 = false
+  offers = []; refused = new Set(); showCost = true; hour12 = false; savvyRows = true
 }
 
 const usdOf = (u: { cost?: { usd: number } }) => u.cost?.usd ?? null
@@ -154,10 +155,11 @@ const readOffers = async ($: EngineInterface) => {
   try {
     const rows = await $.config.list()
     showCost = rows.find(r => r.key === 'savvy-progress.showCost')?.value !== false
+    savvyRows = rows.some(r => r.key.startsWith('savvy-progress.'))
     const tf = rows.find(r => r.key === 'timeFormat')?.value
     hour12 = tf === '12-hour' ? true : tf === '24-hour' ? false : localeHour12()
     offers = offersOf(rows.filter(r => !refused.has(r.key)))
-  } catch { errors += 1; offers = []; showCost = true; hour12 = localeHour12() }
+  } catch { errors += 1; offers = []; showCost = true; hour12 = localeHour12(); savvyRows = true }
 }
 
 // A Yes or No press on the offer shown: written as if in /config. A refused or rejected write is said once and not asked again.
@@ -593,6 +595,12 @@ const zoneOf = (now: number) => {
   try { const m = -new Date(now).getTimezoneOffset(); return Number.isFinite(m) ? m : 0 } catch { return 0 }
 }
 
+// savvy-progress writes its stage words at boot, an empty list included, so one never written means no savvy ran; an older
+// one that writes none still lists its settings. An unreadable atom or list says nothing is missing.
+const savvyMissing = async ($: EngineInterface) => {
+  try { return !savvyRows && (await $.state.get({ plugin: 'savvy-progress', key: 'stages' } as const)).version === 0 } catch { errors += 1; return false }
+}
+
 // Both surfaces from one read of the atoms and module memory, and one crew.
 export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ panel: PanelView; pane: PaneView }> => {
   const u = await read($, ui), f = await read($, flow), runs = await read($, agents)
@@ -616,6 +624,6 @@ export const view = async ($: EngineInterface, bodyColumns: number): Promise<{ p
   return {
     panel: { stats: s, crew, ui: u, loops, busy, armed, bodyColumns, now, settles: animations ? moving(settles, now) : {}, still: !animations,
       planGrow: animations && planSince !== null && now - planSince < MOTION.fillMs },
-    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost, background: shownBg, hour12, offsetMin: zoneOf(now) },
+    pane: { crew, ui: u, loops, columns: bodyColumns, now, session: s.session, still: !animations, offer: offers[0] ?? null, showCost, background: shownBg, hour12, offsetMin: zoneOf(now), savvyMissing: await savvyMissing($) },
   }
 }
